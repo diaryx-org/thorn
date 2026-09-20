@@ -371,6 +371,11 @@ void uniffi_thorn_svg_ffi_fn_method_drawing_resize(void*_Nonnull ptr, RustBuffer
 void uniffi_thorn_svg_ffi_fn_method_drawing_set_text(void*_Nonnull ptr, RustBuffer id, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WIDTH
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WIDTH
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_width(void*_Nonnull ptr, RustBuffer id, RustBuffer width, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SHAPES
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SHAPES
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_shapes(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -827,6 +832,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_resize(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_TEXT
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_text(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_WIDTH
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_WIDTH
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_width(void
     
 );
 #endif

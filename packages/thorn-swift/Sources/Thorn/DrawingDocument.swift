@@ -112,6 +112,18 @@ public final class DrawingDocument {
         try changed { try inner.setText(id: id, text: text) }
     }
 
+    /// Wrap a label to a width in user units, its words flowed into lines;
+    /// or, with `nil`, put them back on one line. One undo step. A resize
+    /// by the handles does this too.
+    public func setWidth(id: String, _ width: CGFloat?) throws {
+        try changed { try inner.setWidth(id: id, width: width.map(Double.init)) }
+    }
+
+    /// The width a label wraps to, if it does.
+    public func width(id: String) -> CGFloat? {
+        shape(id: id)?.attrs.first { $0.name == "data-width" }?.value.flatMap { Double($0) }.map { CGFloat($0) }
+    }
+
     /// Delete the shape with this `data-id`.
     public func delete(id: String) throws {
         try changed { try inner.delete(id: id) }

@@ -69,7 +69,8 @@ impl ShapeKind {
             Self::Ellipse => &["cx", "cy", "rx", "ry"],
             Self::Circle => &["cx", "cy", "r"],
             Self::Line => &["x1", "y1", "x2", "y2"],
-            Self::Text => &["x", "y"],
+            // `data-width` is the width a label wraps to.
+            Self::Text => &["x", "y", "data-width"],
             // `points` and `d` are lists, checked as such; a group has none.
             Self::Polyline | Self::Polygon | Self::Path | Self::Group => &[],
         }
@@ -181,7 +182,13 @@ fn gather(nodes: &[FlatNode], parent: NodeId, out: &mut String) {
         next = node.next_sibling;
         match node.kind {
             Kind::Str => out.push_str(node.text.as_deref().unwrap_or("")),
-            Kind::Container => gather(nodes, id, out),
+            // A `<tspan>` is a run of its own — a wrapped label's line —
+            // so a word does not run into the next one's.
+            Kind::Container => {
+                out.push(' ');
+                gather(nodes, id, out);
+                out.push(' ');
+            }
             _ => {}
         }
     }

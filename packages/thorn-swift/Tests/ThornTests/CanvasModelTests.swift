@@ -228,4 +228,44 @@ final class CanvasModelTests: XCTestCase {
         model.doubleClick(at: CGPoint(x: 40, y: 40))
         XCTAssertEqual(edits.count, 2)
     }
+
+    func testALabelWrapsToTheWidthItsHandleIsDraggedTo() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let context = makeContext()
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        let t = try doc.addText("the quick brown fox jumps over the lazy dog", at: CGPoint(x: 20, y: 60))
+        let one = try XCTUnwrap(doc.bounds(id: t))
+        XCTAssertNil(doc.width(id: t))
+
+        // Drag the right-hand handle in to half the width: the label wraps.
+        model.select(t)
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        let right = model.viewPoint(CGPoint(x: one.maxX, y: one.midY))
+        model.beginPointer(at: right)
+        model.pointerDragged(to: CGPoint(x: right.x - one.width, y: right.y)) // half, in view points
+        model.pointerUp()
+        let width = try XCTUnwrap(doc.width(id: t))
+        XCTAssertEqual(width, one.width / 2, accuracy: 0.01)
+        XCTAssertGreaterThanOrEqual(doc.source.components(separatedBy: "<tspan").count - 1, 2)
+        let wrapped = try XCTUnwrap(doc.bounds(id: t))
+        XCTAssertLessThanOrEqual(wrapped.width, width + 0.5)
+        XCTAssertGreaterThan(wrapped.height, one.height * 1.8)
+        XCTAssertEqual(doc.shape(id: t)?.text, "the quick brown fox jumps over the lazy dog")
+
+        // Editing opens a wrapping field the label's width.
+        var edits: [TextEdit] = []
+        model.onTextEdit = { edits.append($0) }
+        model.editText(id: t)
+        let edit = try XCTUnwrap(edits.last)
+        XCTAssertTrue(edit.wraps)
+        XCTAssertEqual(edit.frame.width, width * 2, "user units at 2 points each")
+        model.commitTextEdit(edit, text: "short")
+        XCTAssertTrue(doc.source.contains("<tspan x=\"20\">short</tspan></text>"))
+
+        XCTAssertTrue(try doc.undo()) // re-word
+        XCTAssertTrue(try doc.undo()) // wrap
+        XCTAssertNil(doc.width(id: t))
+        XCTAssertEqual(doc.bounds(id: t), one)
+    }
 }

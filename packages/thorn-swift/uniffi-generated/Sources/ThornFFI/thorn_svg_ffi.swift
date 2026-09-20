@@ -616,6 +616,12 @@ public protocol DrawingProtocol : AnyObject {
     func setText(id: String, text: String) throws 
     
     /**
+     * Wrap a label to `width` user units, its words flowed into `<tspan>`
+     * lines; or, with `None`, put them back on one line. One undo step.
+     */
+    func setWidth(id: String, width: Double?) throws 
+    
+    /**
      * The shapes, in paint order.
      */
     func shapes()  -> [Shape]
@@ -951,6 +957,18 @@ open func setText(id: String, text: String)throws  {try rustCallWithError(FfiCon
     uniffi_thorn_svg_ffi_fn_method_drawing_set_text(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterString.lower(text),$0
+    )
+}
+}
+    
+    /**
+     * Wrap a label to `width` user units, its words flowed into `<tspan>`
+     * lines; or, with `None`, put them back on one line. One undo step.
+     */
+open func setWidth(id: String, width: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_width(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionDouble.lower(width),$0
     )
 }
 }
@@ -2035,6 +2053,30 @@ extension ShapeKind: Equatable, Hashable {}
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionDouble: FfiConverterRustBuffer {
+    typealias SwiftType = Double?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterDouble.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterDouble.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
     typealias SwiftType = String?
 
@@ -2374,6 +2416,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_width() != 1447) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_shapes() != 26790) {

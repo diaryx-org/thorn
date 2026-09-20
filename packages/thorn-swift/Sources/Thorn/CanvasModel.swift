@@ -25,13 +25,15 @@ public enum Tool: Equatable {
 
 /// A label being typed: what the view puts a text field over. `id` is
 /// the label being re-worded, or `nil` for a new one at `anchor`; `frame`
-/// and `fontSize` are in view points, where the field goes.
+/// and `fontSize` are in view points, where the field goes. `wraps` says
+/// the label has a width and the field should wrap at the frame's.
 public struct TextEdit: Equatable {
     public let id: String?
     public let anchor: CGPoint
     public let text: String
     public let frame: CGRect
     public let fontSize: CGFloat
+    public let wraps: Bool
 }
 
 /// The canvas as a value: everything a view needs to draw and to answer a
@@ -179,10 +181,11 @@ public final class CanvasModel {
     }
 
     /// Whether a lone selected shape can be resized by its box handles: a
-    /// label is moved, a line is dragged by its ends.
+    /// line is dragged by its ends instead. A label's handles set the
+    /// width it wraps to.
     private var resizable: String? {
         guard selection.count == 1, let id = selection.first,
-              let shape = document.shape(id: id), shape.kind != .text, shape.kind != .line else { return nil }
+              let shape = document.shape(id: id), shape.kind != .line else { return nil }
         return id
     }
 
@@ -237,7 +240,7 @@ public final class CanvasModel {
                 selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
             } else {
                 selection = []
-                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: defaultFontSize * fit.a))
+                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: defaultFontSize * fit.a, wraps: false))
             }
             tool = .select
         case .rect, .ellipse, .line:
@@ -310,10 +313,18 @@ public final class CanvasModel {
         guard let shape = document.shape(id: id), shape.kind == .text, let bounds = document.bounds(id: id) else { return }
         selection = [id]
         let size = shape.attrs.first { $0.name == "font-size" }?.value.flatMap { Double($0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "px", with: "")) }
-        let fontSize = CGFloat(size ?? Double(bounds.height / 1.2)) * fit.a
+        let width = document.width(id: id)
+        // A one-line box is a font's height and a bit; a wrapped one is
+        // several lines', so its size is guessed at the default.
+        let fontSize = CGFloat(size ?? Double(width == nil ? bounds.height / 1.2 : defaultFontSize)) * fit.a
         var frame = viewRect(bounds)
-        frame.size.width = max(frame.width + fontSize, fontSize * 4)
-        onTextEdit?(TextEdit(id: id, anchor: bounds.origin, text: shape.text ?? "", frame: frame, fontSize: fontSize))
+        if let width {
+            frame.size.width = width * fit.a
+            frame.size.height += fontSize * 1.3
+        } else {
+            frame.size.width = max(frame.width + fontSize, fontSize * 4)
+        }
+        onTextEdit?(TextEdit(id: id, anchor: bounds.origin, text: shape.text ?? "", frame: frame, fontSize: fontSize, wraps: width != nil))
     }
 
     /// What was typed: a new label at the edit's anchor, or the label's

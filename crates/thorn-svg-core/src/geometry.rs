@@ -91,7 +91,16 @@ fn nominal_text(shape: &Shape) -> Bounds {
         .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
         .unwrap_or(DEFAULT_FONT_SIZE);
     let chars = shape.text.as_deref().map_or(0, |t| t.chars().count());
-    let width = 0.6 * size * chars as f64;
+    let mut width = 0.6 * size * chars as f64;
+    // Wrapped to `data-width`: as many lines as that takes, 1.2 sizes apart.
+    let mut lines = 1.0;
+    if let Some(wrap) = shape
+        .number("data-width")
+        .filter(|w| *w > 0.0 && *w < width)
+    {
+        lines = (width / wrap).ceil();
+        width = wrap;
+    }
     let left = match shape.attr("text-anchor").map(str::trim) {
         Some("middle") => x - width / 2.0,
         Some("end") => x - width,
@@ -101,9 +110,13 @@ fn nominal_text(shape: &Shape) -> Bounds {
         x: left,
         y: y - 0.8 * size,
         width,
-        height: size,
+        height: size + (lines - 1.0) * LINE_HEIGHT * size,
     }
 }
+
+/// A wrapped label's line pitch, in font sizes — what its `<tspan>`s'
+/// `dy` is written as.
+pub const LINE_HEIGHT: f64 = 1.2;
 
 impl Bounds {
     /// The smallest box around the points; `None` for none.

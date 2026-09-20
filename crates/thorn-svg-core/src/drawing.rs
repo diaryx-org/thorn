@@ -378,8 +378,16 @@ impl Drawing {
     /// A label's box by the host's layout, in the label's own coordinates.
     /// `None` without a measurer, or when it lays out nothing.
     fn measured_label(&self, shape: &Shape) -> Option<Bounds> {
+        let content = self.node(shape.node).content_span.clone()?;
+        let interior = self.source[content].to_string();
+        self.measured_interior(shape, &interior)
+    }
+
+    /// The box of `shape` with `interior` as its markup, by the host's
+    /// layout; `None` without one, or when it lays out nothing.
+    fn measured_interior(&self, shape: &Shape, interior: &str) -> Option<Bounds> {
         let measure = self.measure.as_ref()?;
-        let doc = self.label_document(shape)?;
+        let doc = self.label_document(shape, interior);
         let at_origin = *self
             .measured
             .borrow_mut()
@@ -393,9 +401,9 @@ impl Drawing {
     }
 
     /// The document a measurer is asked about (see [`Measure::measure`]):
-    /// the label at the origin under everything that styles it.
-    fn label_document(&self, shape: &Shape) -> Option<String> {
-        let content = self.node(shape.node).content_span.clone()?;
+    /// the label at the origin under everything that styles it, with
+    /// `interior` as its markup.
+    fn label_document(&self, shape: &Shape, interior: &str) -> String {
         let mut doc =
             String::from("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"");
         let skip_root = ["xmlns", "width", "height", "viewBox", "preserveAspectRatio"];
@@ -423,13 +431,67 @@ impl Drawing {
         doc.push_str("<text");
         write_attributes(&mut doc, &shape.attrs, &["x", "y", "transform"]);
         doc.push('>');
-        doc.push_str(&self.source[content]);
+        doc.push_str(interior);
         doc.push_str("</text>");
         for _ in &chain {
             doc.push_str("</g>");
         }
         doc.push_str("</svg>");
-        Some(doc)
+        doc
+    }
+
+    /// How wide a line of `shape`'s label would lay out — measured, or by
+    /// the nominal six tenths of a font size per character.
+    fn line_width(&self, shape: &Shape, line: &str) -> f64 {
+        if let Some(b) = self.measured_interior(shape, &escape(line)) {
+            return b.width;
+        }
+        let size = shape
+            .attr("font-size")
+            .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
+            .unwrap_or(12.0);
+        0.6 * size * line.chars().count() as f64
+    }
+
+    /// A label's interior for `text`: one escaped run, or, when the label
+    /// carries `data-width`, its words flowed into that width as one
+    /// `<tspan>` per line — each at the anchor's `x`, each after the first
+    /// a line down (`dy="1.2em"`) — the longest word a line of its own
+    /// when nothing shorter fits.
+    fn flowed(&self, shape: &Shape, text: &str) -> String {
+        let Some(width) = shape.number("data-width").filter(|w| *w > 0.0) else {
+            return escape(text);
+        };
+        let x = number::fmt(shape.number("x").unwrap_or(0.0));
+        let mut lines: Vec<String> = Vec::new();
+        let mut line = String::new();
+        for word in text.split_whitespace() {
+            let candidate = if line.is_empty() {
+                word.to_string()
+            } else {
+                format!("{line} {word}")
+            };
+            if line.is_empty() || self.line_width(shape, &candidate) <= width {
+                line = candidate;
+            } else {
+                lines.push(std::mem::replace(&mut line, word.to_string()));
+            }
+        }
+        if !line.is_empty() {
+            lines.push(line);
+        }
+        lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let dy = if i == 0 {
+                    String::new()
+                } else {
+                    format!(" dy=\"{}em\"", number::fmt(geometry::LINE_HEIGHT))
+                };
+                format!("<tspan x=\"{x}\"{dy}>{}</tspan>", escape(l))
+            })
+            .collect()
     }
 
     /// The topmost shape within `tolerance` user units of `(x, y)`, in paint
@@ -552,7 +614,8 @@ impl Drawing {
 
     /// Fit a shape to `to`, in the root's user units: one `set_node_attrs`,
     /// one undo step. A line keeps its direction, a circle takes the smaller
-    /// side, a label keeps its size and goes where the box's corner went;
+    /// side, a label goes where the box's corner went and wraps to the
+    /// box's width if that changed;
     /// a `<path>` or a `<g>` is scaled by its `transform`, strokes and all.
     /// A shape under a rotation or a skew has no box to fit and is
     /// `Unsupported`. An arrow bound to the shape follows, in the same step.
@@ -565,8 +628,15 @@ impl Drawing {
             kind: shape.kind,
         };
         if shape.kind == ShapeKind::Text {
+            // A label goes where its box's corner went, and a box of a
+            // different width wraps it to that width.
             let from = self.bounds_of(shape).ok_or_else(unsupported)?;
-            return self.move_by(id, to.x - from.x, to.y - from.y);
+            self.move_by(id, to.x - from.x, to.y - from.y)?;
+            if (to.width - from.width).abs() > 1e-9 {
+                let mut steps = 1;
+                self.rewrap(id, Some(to.width), &mut steps)?;
+            }
+            return Ok(());
         }
         let updates: Vec<Update> = match shape.kind {
             ShapeKind::Path | ShapeKind::Group => {
@@ -601,34 +671,69 @@ impl Drawing {
 
     /// Replace a `<text>`'s characters: one `edit_range` over its interior,
     /// one undo step, the attributes untouched. `text` is plain text,
-    /// written escaped; whatever markup the interior held — a `<tspan>`
-    /// — is replaced with it. A self-closed `<text/>` is opened. Since the
-    /// measured box is keyed by the interior, the label measures afresh.
-    /// `Unsupported` for what is not a `<text>`.
+    /// written escaped — as one run, or flowed into `<tspan>` lines when
+    /// the label carries `data-width` (see [`Drawing::set_width`]);
+    /// whatever markup the interior held is replaced. A self-closed
+    /// `<text/>` is opened. Since the measured box is keyed by the
+    /// interior, the label measures afresh. `Unsupported` for what is not
+    /// a `<text>`.
     pub fn set_text(&mut self, id: &str, text: &str) -> Result<(), Error> {
+        let shape = self.label(id, "set text")?;
+        let markup = self.flowed(shape, text);
+        self.write_interior(shape.node, &markup)
+    }
+
+    /// Wrap a label to `width` user units — `data-width` written and its
+    /// words re-flowed into `<tspan>` lines — or, with `None`, take the
+    /// wrapping off and put the words back on one line. One undo step.
+    pub fn set_width(&mut self, id: &str, width: Option<f64>) -> Result<(), Error> {
+        self.label(id, "set width")?;
+        let mut steps = 0;
+        self.rewrap(id, width, &mut steps)
+    }
+
+    fn rewrap(&mut self, id: &str, width: Option<f64>, steps: &mut usize) -> Result<(), Error> {
+        let shape = self.shape(id).expect("a label checked by the caller");
+        let updates = [("data-width", width.map(number::fmt))];
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        self.fold(steps)?;
+        let shape = self.shape(id).expect("still there");
+        if let Some(text) = shape.text.clone() {
+            let markup = self.flowed(shape, &text);
+            self.write_interior(shape.node, &markup)?;
+            self.fold(steps)?;
+        }
+        Ok(())
+    }
+
+    /// The `<text>` with this id, for a label gesture.
+    fn label(&self, id: &str, gesture: &'static str) -> Result<&Shape, Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
         if shape.kind != ShapeKind::Text {
             return Err(Error::Unsupported {
-                gesture: "set text",
+                gesture,
                 kind: shape.kind,
             });
         }
-        let node = self.node(shape.node);
+        Ok(shape)
+    }
+
+    /// Replace an element's interior with `markup`, opening a self-closed
+    /// one: one `edit_range`.
+    fn write_interior(&mut self, node: NodeId, markup: &str) -> Result<(), Error> {
+        let node = self.node(node);
         let (start, end, markup) = match node.content_span.clone() {
-            Some(content) => (content.start, content.end, escape(text)),
+            Some(content) => (content.start, content.end, markup.to_string()),
             None => {
                 // `<text …/>`: the open tag's bytes, less the `/>`.
                 let span = node.span.clone();
                 let open = self.source[span.clone()]
                     .strip_suffix("/>")
                     .expect("a self-closed element ends in />");
-                (
-                    span.start,
-                    span.end,
-                    format!("{open}>{}</text>", escape(text)),
-                )
+                let tag = node.name.clone().unwrap_or_default();
+                (span.start, span.end, format!("{open}>{markup}</{tag}>"))
             }
         };
         self.editor
@@ -2088,6 +2193,96 @@ mod tests {
         );
         d.set_text("t", "").unwrap();
         assert_eq!(d.shape("t").unwrap().text, None);
+    }
+
+    #[test]
+    fn a_label_with_a_width_flows_into_tspan_lines() {
+        // Nominal widths: 12 × 0.6 = 7.2 per character.
+        let mut d = Drawing::open(
+            "<svg viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" data-id=\"t\">one</text>\n</svg>\n",
+        )
+        .unwrap();
+        d.set_width("t", Some(80.0)).unwrap();
+        d.set_text(
+            "t",
+            "the quick brown fox jumps over extraordinarily lazy dogs",
+        )
+        .unwrap();
+        // 80 wide takes eleven characters: "the quick" (9), "brown fox"
+        // (9), "jumps over" (10), then a word too long for any line.
+        assert_eq!(
+            d.source(),
+            "<svg viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" data-id=\"t\" data-width=\"80\"><tspan x=\"10\">the quick</tspan><tspan x=\"10\" dy=\"1.2em\">brown fox</tspan><tspan x=\"10\" dy=\"1.2em\">jumps over</tspan><tspan x=\"10\" dy=\"1.2em\">extraordinarily</tspan><tspan x=\"10\" dy=\"1.2em\">lazy dogs</tspan></text>\n</svg>\n"
+        );
+        assert_eq!(
+            d.shape("t").unwrap().text.as_deref(),
+            Some("the quick brown fox jumps over extraordinarily lazy dogs"),
+            "the words come back as one text"
+        );
+        // The nominal box with no measurer: 56 characters at 7.2 is six
+        // lines' worth of 80 (the greedy flow, above, packs it into five).
+        let b = d.bounds("t").unwrap();
+        assert_eq!((b.width, b.height), (80.0, 12.0 + 5.0 * 1.2 * 12.0));
+        assert_eq!(d.check(), []);
+
+        // Narrower by the handle: re-flowed, the box's corner kept.
+        d.resize(
+            "t",
+            Bounds {
+                x: b.x,
+                y: b.y,
+                width: 40.0,
+                height: b.height,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.shape("t").unwrap().attr("data-width"), Some("40"));
+        assert!(
+            d.source()
+                .contains("<tspan x=\"10\">the</tspan><tspan x=\"10\" dy=\"1.2em\">quick</tspan>")
+        );
+        assert!(d.undo().unwrap(), "one step");
+        assert_eq!(d.shape("t").unwrap().attr("data-width"), Some("80"));
+
+        // Unwrapped: one run again, one step.
+        d.set_width("t", None).unwrap();
+        assert!(d.source().contains(
+            "<text x=\"10\" y=\"20\" data-id=\"t\">the quick brown fox jumps over extraordinarily lazy dogs</text>"
+        ));
+        assert!(d.undo().unwrap());
+        assert!(d.source().contains("data-width=\"80\"><tspan"));
+        assert!(matches!(
+            d.set_width("zz", None),
+            Err(Error::NoSuchShape(_))
+        ));
+    }
+
+    /// The flow measured by resvg's layout: lines fit the width, and the
+    /// `dy="1.2em"` between them lays out as a line each.
+    #[cfg(feature = "usvg")]
+    #[test]
+    fn a_wrapped_label_lays_out_as_lines_in_usvg() {
+        let mut d = Drawing::open(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" font-size=\"10\" data-id=\"t\">one</text>\n</svg>\n",
+        )
+        .unwrap();
+        d.set_measure(Box::new(crate::measure::Usvg));
+        let Some(one) = d.bounds("t") else {
+            eprintln!("no system fonts: nothing to measure");
+            return;
+        };
+        d.set_width("t", Some(60.0)).unwrap();
+        d.set_text("t", "the quick brown fox jumps over the lazy dog")
+            .unwrap();
+        let lines = d.source().matches("<tspan").count();
+        assert!(lines >= 3, "{}", d.source());
+        let b = d.bounds("t").unwrap();
+        assert!(b.width <= 60.5, "every line fits: {b:?}");
+        let pitch = (b.height - one.height) / (lines - 1) as f64;
+        assert!(
+            (pitch - 12.0).abs() < 0.5,
+            "1.2em of 10 between lines: {b:?}, {lines} lines"
+        );
     }
 
     #[test]

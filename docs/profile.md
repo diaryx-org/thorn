@@ -77,7 +77,13 @@ everything that styles it, once per distinct label, and places the box by
 the anchor; the binding lends resvg's own layout over the system's fonts,
 so the box is the one on screen. With no host layout the box is nominal:
 `font-size` tall (12 when unset, usvg's default), six tenths of that per
-character wide, placed by `text-anchor`.
+character wide, placed by `text-anchor`, and as many lines of that as
+`data-width` takes. A label's characters are its text nodes', every
+`<tspan>` a run of its own with a space around it, whitespace collapsed —
+so a wrapped label reads back as its words and re-flows on the next edit.
+SVG `<text>` does not wrap on its own, and `<foreignObject>` is not
+something resvg draws; `<tspan>` lines are the wrapping every viewer
+shows.
 
 Everything else — `<defs>`, `<style>`, `<title>`, `<desc>`, `<metadata>`, a
 comment, a processing instruction, an element the editor has never heard of
@@ -96,6 +102,7 @@ draws.
 | `data-diaryx-drawing` | `<svg>` | rule 1: the profile version |
 | `data-id` | every shape | rule 3 |
 | `data-from`, `data-to` | `<line>`, `<path>` | an arrow bound to a shape at each end: when the shape moves, the arrow's endpoint follows. The value is the shape's `data-id`. The editor binds a `<line>` (`Drawing::bind`, or dropping an endpoint handle on a shape) and keeps a bound end on its shape's edge, facing the other end — it rewrites `x1`/`y1` or `x2`/`y2` whenever the shape moves or resizes, in that gesture's undo step, and takes the binding off when the shape is deleted. A bound `<path>` is honoured as reserved: read, never rewritten. |
+| `data-width` | `<text>` | the width a label wraps to, in user units, in the number format. The editor flows the label's words into one `<tspan>` per line — each at the anchor's `x`, each after the first `dy="1.2em"` down — measured by the host's layout; a word longer than the width has a line to itself. Without it a label is one line. Written by a resize of the label's box; taken off by `Drawing::set_width(None)`. Any viewer draws the `<tspan>`s as they are. |
 | `data-ink` | `<path>` | a freehand stroke: the `d` is an outline the nib computed, filled. *Reserved: see the ink section of the org's proposal.* |
 | `data-centreline`, `data-widths` | `<path>` with `data-ink` | the pen's centreline points and per-point widths the outline was computed from, so a platform with a different nib can recompute it. *Reserved.* |
 

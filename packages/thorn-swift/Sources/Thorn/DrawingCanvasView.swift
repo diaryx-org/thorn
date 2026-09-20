@@ -8,7 +8,7 @@ import ThornFFI
 #if canImport(AppKit)
 import AppKit
 
-public final class DrawingCanvasView: NSView, NSTextFieldDelegate {
+public final class DrawingCanvasView: NSView, NSTextViewDelegate {
     public let model: CanvasModel
 
     public init(model: CanvasModel) {
@@ -21,48 +21,6 @@ public final class DrawingCanvasView: NSView, NSTextFieldDelegate {
         model.onTextEdit = { [weak self] edit in DispatchQueue.main.async { self?.openField(for: edit) } }
     }
 
-    // MARK: Typing a label
-
-    /// The field over a label being typed, and the edit it is for.
-    private var field: (NSTextField, TextEdit)?
-
-    private func openField(for edit: TextEdit) {
-        closeField(commit: true)
-        let f = NSTextField(frame: edit.frame)
-        f.stringValue = edit.text
-        f.font = .systemFont(ofSize: edit.fontSize)
-        f.isBordered = false
-        f.focusRingType = .none
-        f.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.9)
-        f.delegate = self
-        addSubview(f)
-        field = (f, edit)
-        window?.makeFirstResponder(f)
-        f.currentEditor()?.selectAll(nil)
-    }
-
-    /// Take the field down, committing what it holds or leaving the label.
-    private func closeField(commit: Bool) {
-        guard let (f, edit) = field else { return }
-        field = nil
-        f.delegate = nil
-        f.removeFromSuperview()
-        if commit { model.commitTextEdit(edit, text: f.stringValue) }
-        window?.makeFirstResponder(self)
-    }
-
-    /// Return commits and ends editing; focus leaving does the same.
-    public func controlTextDidEndEditing(_ notification: Notification) {
-        closeField(commit: true)
-    }
-
-    /// Escape leaves the label as it was.
-    public func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        guard selector == #selector(cancelOperation(_:)) else { return false }
-        closeField(commit: false)
-        return true
-    }
-
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
@@ -73,6 +31,62 @@ public final class DrawingCanvasView: NSView, NSTextFieldDelegate {
     public override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         model.draw(in: context, rect: bounds, scale: window?.backingScaleFactor ?? 1)
+    }
+
+    // MARK: Typing a label
+
+    /// The field over a label being typed, and the edit it is for. A text
+    /// view rather than a field, so a wrapped label wraps as it is typed
+    /// at the width it will wrap to.
+    private var field: (NSTextView, TextEdit)?
+
+    private func openField(for edit: TextEdit) {
+        closeField(commit: true)
+        let f = NSTextView(frame: edit.frame)
+        f.string = edit.text
+        f.font = .systemFont(ofSize: edit.fontSize)
+        f.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.9)
+        f.isRichText = false
+        f.textContainerInset = .zero
+        f.textContainer?.lineFragmentPadding = 0
+        if edit.wraps {
+            f.textContainer?.widthTracksTextView = true
+        } else {
+            f.isHorizontallyResizable = true
+            f.textContainer?.widthTracksTextView = false
+            f.textContainer?.containerSize = CGSize(width: .greatestFiniteMagnitude, height: edit.frame.height)
+        }
+        f.delegate = self
+        addSubview(f)
+        field = (f, edit)
+        window?.makeFirstResponder(f)
+        f.selectAll(nil)
+    }
+
+    /// Take the field down, committing what it holds or leaving the label.
+    private func closeField(commit: Bool) {
+        guard let (f, edit) = field else { return }
+        field = nil
+        f.delegate = nil
+        f.removeFromSuperview()
+        if commit { model.commitTextEdit(edit, text: f.string) }
+        window?.makeFirstResponder(self)
+    }
+
+    /// Focus leaving commits.
+    public func textDidEndEditing(_ notification: Notification) {
+        closeField(commit: true)
+    }
+
+    /// Return commits; Escape leaves the label as it was. A label is one
+    /// paragraph — it wraps to its width, and has no line breaks of its own.
+    public func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        switch selector {
+        case #selector(insertNewline(_:)): closeField(commit: true)
+        case #selector(cancelOperation(_:)): closeField(commit: false)
+        default: return false
+        }
+        return true
     }
 
     public override func mouseDown(with event: NSEvent) {
@@ -111,7 +125,7 @@ public final class DrawingCanvasView: NSView, NSTextFieldDelegate {
 #elseif canImport(UIKit)
 import UIKit
 
-public final class DrawingCanvasView: UIView, UITextFieldDelegate {
+public final class DrawingCanvasView: UIView, UITextViewDelegate {
     public let model: CanvasModel
 
     public init(model: CanvasModel) {
@@ -128,14 +142,18 @@ public final class DrawingCanvasView: UIView, UITextFieldDelegate {
 
     // MARK: Typing a label
 
-    private var field: (UITextField, TextEdit)?
+    private var field: (UITextView, TextEdit)?
 
     private func openField(for edit: TextEdit) {
         closeField(commit: true)
-        let f = UITextField(frame: edit.frame)
+        let f = UITextView(frame: edit.frame)
         f.text = edit.text
         f.font = .systemFont(ofSize: edit.fontSize)
         f.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
+        f.textContainerInset = .zero
+        f.textContainer.lineFragmentPadding = 0
+        f.isScrollEnabled = edit.wraps
+        f.returnKeyType = .done
         f.delegate = self
         addSubview(f)
         field = (f, edit)
@@ -151,12 +169,14 @@ public final class DrawingCanvasView: UIView, UITextFieldDelegate {
         if commit { model.commitTextEdit(edit, text: f.text ?? "") }
     }
 
-    public func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+    /// Return commits; a label is one paragraph.
+    public func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        guard text == "\n" else { return true }
         closeField(commit: true)
-        return true
+        return false
     }
 
-    public func textFieldDidEndEditing(_ textField: UITextField) {
+    public func textViewDidEndEditing(_ textView: UITextView) {
         closeField(commit: true)
     }
 

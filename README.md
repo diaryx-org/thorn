@@ -74,7 +74,7 @@ history:
 | gesture | twig | status |
 |---------|------|--------|
 | add rect, ellipse, line, label | `insert_after` / `insert_child` | done |
-| re-word a label | `edit_range` over the `<text>`'s interior | done: `set_text`; the canvas opens a field on a double-click, or at the click with the label tool. One line — SVG `<text>` does not wrap |
+| re-word a label, wrap it | `edit_range` over the `<text>`'s interior | done: `set_text`, and `set_width` flowing the words into `<tspan>` lines at `data-width` (measured by the host's layout); the canvas opens a field on a double-click or at the click with the label tool, and a label's box handles set the width it wraps to |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |
 | move, resize | `set_node_attrs` | done: the attributes for rect, ellipse, circle, line, polyline, polygon, text, image, the `d` for a `<path>`; a `transform` only for a `<g>` or under a rotation |

@@ -389,6 +389,12 @@ impl Drawing {
         Ok(self.lock().set_text(&id, &text)?)
     }
 
+    /// Wrap a label to `width` user units, its words flowed into `<tspan>`
+    /// lines; or, with `None`, put them back on one line. One undo step.
+    pub fn set_width(&self, id: String, width: Option<f64>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_width(&id, width)?)
+    }
+
     /// Delete the shape with this `data-id`.
     pub fn delete(&self, id: String) -> Result<(), DrawingError> {
         Ok(self.lock().delete(&id)?)
