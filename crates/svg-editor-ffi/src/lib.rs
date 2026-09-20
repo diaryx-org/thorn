@@ -25,6 +25,8 @@ pub enum DrawingError {
     NotSvg,
     #[error("no shape with data-id {id:?}")]
     NoSuchShape { id: String },
+    #[error("{gesture} is not defined for this kind of shape")]
+    Unsupported { gesture: String, kind: ShapeKind },
     #[error("{message}")]
     Edit { message: String },
 }
@@ -37,6 +39,10 @@ impl From<core::Error> for DrawingError {
             },
             core::Error::NotSvg => Self::NotSvg,
             core::Error::NoSuchShape(id) => Self::NoSuchShape { id },
+            core::Error::Unsupported { gesture, kind } => Self::Unsupported {
+                gesture: gesture.to_string(),
+                kind: kind.into(),
+            },
             core::Error::Edit(inner) => Self::Edit {
                 message: format!("{inner:?}"),
             },
@@ -133,6 +139,57 @@ pub struct Rect {
     pub height: f64,
 }
 
+/// Mirrors `svg_editor_core::Bounds`.
+#[derive(Clone, Copy, Debug, uniffi::Record)]
+pub struct Bounds {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl From<Bounds> for core::Bounds {
+    fn from(b: Bounds) -> Self {
+        Self {
+            x: b.x,
+            y: b.y,
+            width: b.width,
+            height: b.height,
+        }
+    }
+}
+
+impl From<core::Bounds> for Bounds {
+    fn from(b: core::Bounds) -> Self {
+        Self {
+            x: b.x,
+            y: b.y,
+            width: b.width,
+            height: b.height,
+        }
+    }
+}
+
+/// Mirrors `svg_editor_core::Order`.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum Order {
+    Forward,
+    Backward,
+    ToFront,
+    ToBack,
+}
+
+impl From<Order> for core::Order {
+    fn from(o: Order) -> Self {
+        match o {
+            Order::Forward => Self::Forward,
+            Order::Backward => Self::Backward,
+            Order::ToFront => Self::ToFront,
+            Order::ToBack => Self::ToBack,
+        }
+    }
+}
+
 /// A drawing being edited. See `svg_editor_core::Drawing`.
 #[derive(uniffi::Object)]
 pub struct Drawing {
@@ -213,6 +270,27 @@ impl Drawing {
     /// Delete the shape with this `data-id`.
     pub fn delete(&self, id: String) -> Result<(), DrawingError> {
         Ok(self.lock().delete(&id)?)
+    }
+
+    /// The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+    pub fn bounds(&self, id: String) -> Option<Bounds> {
+        self.lock().bounds(&id).map(Into::into)
+    }
+
+    /// Move a shape by `(dx, dy)`.
+    pub fn move_by(&self, id: String, dx: f64, dy: f64) -> Result<(), DrawingError> {
+        Ok(self.lock().move_by(&id, dx, dy)?)
+    }
+
+    /// Fit a shape to `to`.
+    pub fn resize(&self, id: String, to: Bounds) -> Result<(), DrawingError> {
+        Ok(self.lock().resize(&id, to.into())?)
+    }
+
+    /// Change a shape's place in paint order; `false` when it was already
+    /// there.
+    pub fn reorder(&self, id: String, order: Order) -> Result<bool, DrawingError> {
+        Ok(self.lock().reorder(&id, order.into())?)
     }
 
     /// Undo the last gesture; `false` when there was nothing to undo.

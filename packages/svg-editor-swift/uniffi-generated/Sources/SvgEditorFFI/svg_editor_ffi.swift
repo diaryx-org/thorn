@@ -507,6 +507,11 @@ public protocol DrawingProtocol : AnyObject {
     func addRect(rect: Rect) throws  -> String
     
     /**
+     * The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+     */
+    func bounds(id: String)  -> Bounds?
+    
+    /**
      * Hold the drawing to the profile. Empty means it conforms.
      */
     func check()  -> [Finding]
@@ -517,9 +522,25 @@ public protocol DrawingProtocol : AnyObject {
     func delete(id: String) throws 
     
     /**
+     * Move a shape by `(dx, dy)`.
+     */
+    func moveBy(id: String, dx: Double, dy: Double) throws 
+    
+    /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
      */
     func redo() throws  -> Bool
+    
+    /**
+     * Change a shape's place in paint order; `false` when it was already
+     * there.
+     */
+    func reorder(id: String, order: Order) throws  -> Bool
+    
+    /**
+     * Fit a shape to `to`.
+     */
+    func resize(id: String, to: Bounds) throws 
     
     /**
      * The shapes, in paint order.
@@ -614,6 +635,17 @@ open func addRect(rect: Rect)throws  -> String {
 }
     
     /**
+     * The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+     */
+open func bounds(id: String) -> Bounds? {
+    return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
+    uniffi_svg_editor_ffi_fn_method_drawing_bounds(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * Hold the drawing to the profile. Empty means it conforms.
      */
 open func check() -> [Finding] {
@@ -634,6 +666,18 @@ open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawi
 }
     
     /**
+     * Move a shape by `(dx, dy)`.
+     */
+open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_move_by(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterDouble.lower(dx),
+        FfiConverterDouble.lower(dy),$0
+    )
+}
+}
+    
+    /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
      */
 open func redo()throws  -> Bool {
@@ -641,6 +685,30 @@ open func redo()throws  -> Bool {
     uniffi_svg_editor_ffi_fn_method_drawing_redo(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * Change a shape's place in paint order; `false` when it was already
+     * there.
+     */
+open func reorder(id: String, order: Order)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_reorder(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeOrder.lower(order),$0
+    )
+})
+}
+    
+    /**
+     * Fit a shape to `to`.
+     */
+open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_resize(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeBounds.lower(to),$0
+    )
+}
 }
     
     /**
@@ -794,6 +862,91 @@ public func FfiConverterTypeAttribute_lift(_ buf: RustBuffer) throws -> Attribut
 #endif
 public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
     return FfiConverterTypeAttribute.lower(value)
+}
+
+
+/**
+ * Mirrors `svg_editor_core::Bounds`.
+ */
+public struct Bounds {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}
+
+
+
+extension Bounds: Equatable, Hashable {
+    public static func ==(lhs: Bounds, rhs: Bounds) -> Bool {
+        if lhs.x != rhs.x {
+            return false
+        }
+        if lhs.y != rhs.y {
+            return false
+        }
+        if lhs.width != rhs.width {
+            return false
+        }
+        if lhs.height != rhs.height {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(x)
+        hasher.combine(y)
+        hasher.combine(width)
+        hasher.combine(height)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBounds: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Bounds {
+        return
+            try Bounds(
+                x: FfiConverterDouble.read(from: &buf), 
+                y: FfiConverterDouble.read(from: &buf), 
+                width: FfiConverterDouble.read(from: &buf), 
+                height: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Bounds, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.x, into: &buf)
+        FfiConverterDouble.write(value.y, into: &buf)
+        FfiConverterDouble.write(value.width, into: &buf)
+        FfiConverterDouble.write(value.height, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBounds_lift(_ buf: RustBuffer) throws -> Bounds {
+    return try FfiConverterTypeBounds.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBounds_lower(_ value: Bounds) -> RustBuffer {
+    return FfiConverterTypeBounds.lower(value)
 }
 
 
@@ -1065,6 +1218,8 @@ public enum DrawingError {
     case NotSvg
     case NoSuchShape(id: String
     )
+    case Unsupported(gesture: String, kind: ShapeKind
+    )
     case Edit(message: String
     )
 }
@@ -1090,7 +1245,11 @@ public struct FfiConverterTypeDrawingError: FfiConverterRustBuffer {
         case 3: return .NoSuchShape(
             id: try FfiConverterString.read(from: &buf)
             )
-        case 4: return .Edit(
+        case 4: return .Unsupported(
+            gesture: try FfiConverterString.read(from: &buf), 
+            kind: try FfiConverterTypeShapeKind.read(from: &buf)
+            )
+        case 5: return .Edit(
             message: try FfiConverterString.read(from: &buf)
             )
 
@@ -1119,8 +1278,14 @@ public struct FfiConverterTypeDrawingError: FfiConverterRustBuffer {
             FfiConverterString.write(id, into: &buf)
             
         
-        case let .Edit(message):
+        case let .Unsupported(gesture,kind):
             writeInt(&buf, Int32(4))
+            FfiConverterString.write(gesture, into: &buf)
+            FfiConverterTypeShapeKind.write(kind, into: &buf)
+            
+        
+        case let .Edit(message):
+            writeInt(&buf, Int32(5))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -1135,6 +1300,87 @@ extension DrawingError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Mirrors `svg_editor_core::Order`.
+ */
+
+public enum Order {
+    
+    case forward
+    case backward
+    case toFront
+    case toBack
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeOrder: FfiConverterRustBuffer {
+    typealias SwiftType = Order
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Order {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .forward
+        
+        case 2: return .backward
+        
+        case 3: return .toFront
+        
+        case 4: return .toBack
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Order, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .forward:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .backward:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .toFront:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .toBack:
+            writeInt(&buf, Int32(4))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOrder_lift(_ buf: RustBuffer) throws -> Order {
+    return try FfiConverterTypeOrder.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeOrder_lower(_ value: Order) -> RustBuffer {
+    return FfiConverterTypeOrder.lower(value)
+}
+
+
+
+extension Order: Equatable, Hashable {}
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -1286,6 +1532,30 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeBounds: FfiConverterRustBuffer {
+    typealias SwiftType = Bounds?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeBounds.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeBounds.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeAttribute: FfiConverterRustBuffer {
     typealias SwiftType = [Attribute]
 
@@ -1376,13 +1646,25 @@ private var initializationResult: InitializationResult = {
     if (uniffi_svg_editor_ffi_checksum_method_drawing_add_rect() != 65495) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_bounds() != 20576) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_check() != 31079) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_delete() != 21561) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_move_by() != 16964) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_redo() != 46984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_reorder() != 46752) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_resize() != 38008) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_shapes() != 56928) {

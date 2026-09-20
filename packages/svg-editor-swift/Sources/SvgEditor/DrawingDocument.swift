@@ -44,6 +44,30 @@ public final class DrawingDocument {
     /// Delete the shape with this `data-id`.
     public func delete(id: String) throws { try inner.delete(id: id) }
 
+    /// The bounds a shape's attributes state; `nil` for a `<path>` or `<g>`.
+    public func bounds(id: String) -> CGRect? {
+        inner.bounds(id: id).map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
+    }
+
+    /// Move a shape by a vector.
+    public func move(id: String, by delta: CGVector) throws {
+        try inner.moveBy(id: id, dx: Double(delta.dx), dy: Double(delta.dy))
+    }
+
+    /// Fit a shape to a box.
+    public func resize(id: String, to rect: CGRect) throws {
+        try inner.resize(id: id, to: Bounds(
+            x: Double(rect.origin.x), y: Double(rect.origin.y),
+            width: Double(rect.size.width), height: Double(rect.size.height)))
+    }
+
+    /// Change a shape's place in paint order; `false` when it was already
+    /// there.
+    @discardableResult
+    public func reorder(id: String, _ order: Order) throws -> Bool {
+        try inner.reorder(id: id, order: order)
+    }
+
     /// Undo the last gesture; `false` when there was nothing to undo.
     @discardableResult
     public func undo() throws -> Bool { try inner.undo() }

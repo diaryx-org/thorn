@@ -4,7 +4,7 @@ description: What is under the pointer, which handle of the selection it grabbed
 author: adammharris
 status: open
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # Hit-testing and selection in the core
@@ -13,8 +13,8 @@ The core knows what a rectangle is; it should also know whether a point is
 inside one. Pure geometry over the shape list, so the Mac, iOS and the
 composer share one answer and it is tested against fixtures with no screen:
 
-- `Drawing::bounds(id) -> Option<Bounds>` for every kind, a `<path>`
-  included (its `d` parsed for its extent; a `<text>` needs a font metric
+- `Drawing::bounds(id)` for a `<path>` and a `<g>` (the attribute-stated
+  kinds have it) (its `d` parsed for its extent; a `<text>` needs a font metric
   the host supplies, so its bounds are an estimate the host may override).
 - `Drawing::hit(point) -> Option<&Shape>`: the topmost shape whose
   silhouette contains the point, groups resolving to the group.
@@ -22,5 +22,9 @@ composer share one answer and it is tested against fixtures with no screen:
 - A bound arrow (`data-from` / `data-to`) follows its target: when the
   target moves, the arrow's endpoint is recomputed to the target's edge.
 
-Depends on the move and resize gestures (`gestures-need-twig.md`) for the
-half that writes back.
+Also here, because it is the same geometry: **moving a `<path>` or a `<g>`.**
+Neither has a position in its attributes, so `Drawing::move_by` reports
+`Unsupported` for them. The gesture is a `transform="translate(dx dy)"` —
+composed onto whatever `transform` is already there, which means parsing
+the transform list — and `bounds` for a `<path>` is its `d` parsed for its
+extent, with the transform applied.

@@ -3,7 +3,7 @@ title: Tasks
 description: Deferred work on svg-editor, one file each — a commitment with a done state
 author: adammharris
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 contents:
 - '[First release](first-release.md)'
 - '[Move, resize and reorder wait on twig''s drawing branch](gestures-need-twig.md)'

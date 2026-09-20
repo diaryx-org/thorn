@@ -25,10 +25,12 @@ each end in one twig splice and one undo step.
 > ([docs/tasks/first-release.md](docs/tasks/first-release.md)).
 
 ```rust
-use svg_editor_core::{Drawing, Rect};
+use svg_editor_core::{Drawing, Order, Rect};
 
 let mut drawing = Drawing::open(&std::fs::read_to_string("diagram.svg")?)?;
 let id = drawing.add_rect(Rect { x: 10.0, y: 10.0, width: 80.0, height: 40.0 })?;
+drawing.move_by(&id, 5.0, 0.0)?;       // one set_node_attrs: x="15", nothing else touched
+drawing.reorder(&id, Order::ToBack)?;  // one move_before, the whitespace kept
 drawing.delete(&id)?;
 drawing.undo()?;                       // twig's undo: one step, the same bytes
 assert!(drawing.check().is_empty());   // holds to the profile
@@ -48,16 +50,17 @@ know — survive exactly.
 
 The line held throughout: **how SVG is spelled is twig's; what a rectangle is
 is ours.** twig learns nothing from this repository, ever. Where twig lacks a
-gesture (move, resize and reorder wait on its drawing branch —
-[docs/tasks/gestures-need-twig.md](docs/tasks/gestures-need-twig.md)) the
-editor waits rather than re-deriving format knowledge over the raw splice.
+gesture the editor waits rather than re-deriving format knowledge over the
+raw splice — move, resize and reorder waited on twig 3.8.1's
+`set_node_attrs` and `move_before`/`move_after`, and a deleted shape's
+blank line still does ([docs/tasks/delete-leaves-its-line.md](docs/tasks/delete-leaves-its-line.md)).
 
 ## Layout
 
 | part | what it is |
 |------|------------|
 | [`docs/profile.md`](docs/profile.md) | **What a Diaryx drawing SVG is.** The marker, `data-id` on every shape, the `data-` vocabulary, the number format that makes a re-export byte-stable. Held to by `svg-editor check` and the core's fixture tests. |
-| [`crates/svg-editor-core`](crates/svg-editor-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, and the gestures. No UI, no filesystem, no rendering. |
+| [`crates/svg-editor-core`](crates/svg-editor-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
 | [`crates/svg-editor-ffi`](crates/svg-editor-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
 | [`packages/svg-editor-swift`](packages/svg-editor-swift) | **The Swift package.** `SvgEditorFFI` is the committed generated binding; `SvgEditor` is `DrawingDocument`, the gestures with Foundation types at the edges. The canvas view is [a task](docs/tasks/swift-canvas.md). `Package.swift` sits at the repo root because SwiftPM needs it there. |
 | [`apps/svg-editor`](apps/svg-editor) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
@@ -72,8 +75,8 @@ history:
 | add | `insert_after` / `insert_child` | done |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |
-| move, resize | `setNodeAttrs` | [waits on twig](docs/tasks/gestures-need-twig.md) |
-| forward, back, to front, to back | `moveNode` | waits on twig |
+| move, resize | `set_node_attrs` | done for rect, ellipse, circle, line, polyline, polygon, text, image; a `<path>` or `<g>` moves by `transform`, [not yet](docs/tasks/hit-testing.md) |
+| forward, back, to front, to back | `move_before` / `move_after` | done, among sibling shapes |
 | group, ungroup | `insert_child` with a `<g>` / `unwrap_node` | not yet |
 | arrow bindings, freehand ink | — | reserved in the profile |
 

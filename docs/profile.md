@@ -78,7 +78,12 @@ draws.
 `svg_editor_core::Drawing` writes an added shape as one element on its own
 line, indented two spaces under `<svg>`, attributes in the order geometry,
 then `data-id`, with a self-closing tag — `<rect x="10" y="10.5" width="80"
-height="40" data-id="s1"/>`. It does not write a `<style>`; the app's proposal
+height="40" data-id="s1"/>`. A move or resize rewrites only the geometry
+attributes it changes, each in its existing place among the element's
+attributes, and appends one the element lacked; every other attribute keeps
+its bytes. A `points` list is written as `x,y` pairs separated by one space.
+A reorder moves the element and the line break and indentation ahead of it,
+and nothing else. It does not write a `<style>`; the app's proposal
 puts one in the file it creates so a viewer with no theme shows a marker as a
 marker, and that template is the app's to settle (docs/tasks/style-template.md).
 

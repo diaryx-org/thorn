@@ -10,9 +10,10 @@ use std::fmt::Write as _;
 
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
+use crate::geometry::{self, Bounds};
 use crate::number;
 use crate::profile::{self, Finding};
-use crate::shape::{self, Shape};
+use crate::shape::{self, Shape, ShapeKind};
 
 /// Why a gesture or an open refused.
 #[derive(Debug, thiserror::Error)]
@@ -26,6 +27,13 @@ pub enum Error {
     /// No shape carries this `data-id`.
     #[error("no shape with data-id {0:?}")]
     NoSuchShape(String),
+    /// The gesture is not defined for this kind of shape: a `<path>` or a
+    /// `<g>` has no position in its attributes to move or resize by.
+    #[error("{gesture} is not defined for a <{}>", kind.tag())]
+    Unsupported {
+        gesture: &'static str,
+        kind: ShapeKind,
+    },
     /// twig refused the edit: the target's span is not editable — a
     /// self-closed `<svg/>` has no interior to insert into — or the edit
     /// would have produced a document that no longer parses and was rolled
@@ -42,6 +50,20 @@ pub struct Rect {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+/// Where a reorder sends a shape among its sibling shapes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Order {
+    /// One step up in paint order.
+    Forward,
+    /// One step down in paint order.
+    Backward,
+    /// Above every sibling shape.
+    ToFront,
+    /// Below every sibling shape — but after `<defs>`, `<style>` and
+    /// whatever else is not a shape, which stay where they are.
+    ToBack,
 }
 
 /// A drawing being edited.
@@ -69,7 +91,7 @@ impl Drawing {
     /// still opens — [`Drawing::check`] says how — because a drawing a hand
     /// wrote is still a drawing.
     pub fn open(source: &str) -> Result<Self, Error> {
-        let editor = Editor::new_str(source, Format::Xml).map_err(Error::Parse)?;
+        let editor = Editor::new_str(source, Format::Svg).map_err(Error::Parse)?;
         let mut drawing = Self {
             editor,
             nodes: Vec::new(),
@@ -134,6 +156,74 @@ impl Drawing {
         let locator = self.locator(node);
         self.editor.delete(&locator).map_err(Error::Edit)?;
         self.reload()
+    }
+
+    /// The bounds a shape's attributes state, or `None` for a kind whose
+    /// extent is not in its attributes (a `<path>`, a `<g>`).
+    pub fn bounds(&self, id: &str) -> Option<Bounds> {
+        self.shape(id).and_then(geometry::bounds)
+    }
+
+    /// Move a shape by `(dx, dy)`: one `set_node_attrs`, one undo step,
+    /// every other attribute left in place and in order.
+    pub fn move_by(&mut self, id: &str, dx: f64, dy: f64) -> Result<(), Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        let updates = geometry::moved(shape, dx, dy).ok_or(Error::Unsupported {
+            gesture: "move",
+            kind: shape.kind,
+        })?;
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)
+    }
+
+    /// Fit a shape to `to`: one `set_node_attrs`, one undo step. A line
+    /// keeps its direction, a circle takes the smaller side, a label moves
+    /// its anchor.
+    pub fn resize(&mut self, id: &str, to: Bounds) -> Result<(), Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        let updates = geometry::resized(shape, to).ok_or(Error::Unsupported {
+            gesture: "resize",
+            kind: shape.kind,
+        })?;
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)
+    }
+
+    /// Change a shape's place in paint order among its sibling shapes: one
+    /// `move_before`/`move_after`, one undo step, the whitespace between
+    /// siblings kept. `Ok(false)` when it is already there, and nothing was
+    /// written.
+    pub fn reorder(&mut self, id: &str, order: Order) -> Result<bool, Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        let node = shape.node;
+        let siblings = self.sibling_shapes(node);
+        let at = siblings
+            .iter()
+            .position(|&n| n == node)
+            .expect("a shape is its own sibling");
+        let (anchor, after) = match order {
+            Order::Forward if at + 1 < siblings.len() => (siblings[at + 1], true),
+            Order::Backward if at > 0 => (siblings[at - 1], false),
+            Order::ToFront if at + 1 < siblings.len() => (siblings[siblings.len() - 1], true),
+            Order::ToBack if at > 0 => (siblings[0], false),
+            _ => return Ok(false),
+        };
+        let (locator, anchor) = (self.locator(node), self.locator(anchor));
+        if after {
+            self.editor
+                .move_after(&locator, &anchor)
+                .map_err(Error::Edit)?;
+        } else {
+            self.editor
+                .move_before(&locator, &anchor)
+                .map_err(Error::Edit)?;
+        }
+        self.reload()?;
+        Ok(true)
     }
 
     /// Undo the last gesture. `Ok(false)` when there is nothing to undo.
@@ -254,6 +344,49 @@ impl Drawing {
             }
         }
         self.reload()
+    }
+
+    /// Write `updates` over `attrs` — replacing a value in place, appending
+    /// a name not yet present — through one `set_node_attrs`.
+    fn write_attrs(
+        &mut self,
+        node: NodeId,
+        attrs: &[(String, Option<String>)],
+        updates: &[(&str, String)],
+    ) -> Result<(), Error> {
+        let mut merged: Vec<(String, Option<String>)> = attrs.to_vec();
+        for (name, value) in updates {
+            match merged.iter_mut().find(|(k, _)| k == name) {
+                Some(slot) => slot.1 = Some(value.clone()),
+                None => merged.push((name.to_string(), Some(value.clone()))),
+            }
+        }
+        let borrowed: Vec<(&str, Option<&str>)> = merged
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_deref()))
+            .collect();
+        self.editor
+            .set_node_attrs(node, &borrowed)
+            .map_err(Error::Edit)?;
+        self.reload()
+    }
+
+    /// The shape elements among a node's siblings (itself included), in
+    /// source order — what a reorder moves among.
+    fn sibling_shapes(&self, node: NodeId) -> Vec<NodeId> {
+        let parent = self.node(node).parent.expect("a shape has a parent");
+        let mut out = Vec::new();
+        let mut next = self.node(parent).first_child;
+        while let Some(id) = next {
+            let n = self.node(id);
+            next = n.next_sibling;
+            if n.kind == Kind::Container
+                && n.name.as_deref().and_then(ShapeKind::from_tag).is_some()
+            {
+                out.push(id);
+            }
+        }
+        out
     }
 
     /// The next free `s<n>` id: one past the largest such id in the file.
@@ -377,6 +510,111 @@ mod tests {
         assert!(!d.undo().unwrap());
         assert!(d.redo().unwrap());
         assert!(d.shape("s1").is_none());
+    }
+
+    const SCENE: &str = "<svg viewBox=\"0 0 100 100\" data-diaryx-drawing=\"1\">\n  <defs><marker id=\"m\"/></defs>\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>\n  <circle cx=\"50\" cy=\"50\" r=\"5\" data-id=\"s2\"/>\n  <line x1=\"30\" y1=\"15\" x2=\"45\" y2=\"50\" data-id=\"s3\"/>\n</svg>\n";
+
+    fn ids(d: &Drawing) -> Vec<String> {
+        d.shapes().iter().map(|s| s.id.clone().unwrap()).collect()
+    }
+
+    #[test]
+    fn move_rewrites_the_position_and_nothing_else() {
+        let mut d = Drawing::open(SCENE).unwrap();
+        d.move_by("s1", 5.0, -2.5).unwrap();
+        assert_eq!(
+            d.source(),
+            SCENE.replace(
+                "<rect x=\"10\" y=\"10\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>",
+                "<rect x=\"15\" y=\"7.5\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>"
+            )
+        );
+        assert_eq!(
+            d.bounds("s1"),
+            Some(Bounds {
+                x: 15.0,
+                y: 7.5,
+                width: 20.0,
+                height: 10.0
+            })
+        );
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), SCENE);
+        assert!(d.check().is_empty());
+    }
+
+    #[test]
+    fn resize_fits_the_box() {
+        let mut d = Drawing::open(SCENE).unwrap();
+        d.resize(
+            "s2",
+            Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 20.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.shape("s2").unwrap().attr("r"), Some("5"));
+        assert_eq!(d.shape("s2").unwrap().attr("cx"), Some("5"));
+        d.resize(
+            "s3",
+            Bounds {
+                x: 1.0,
+                y: 2.0,
+                width: 3.0,
+                height: 4.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.shape("s3").unwrap().number("x2"), Some(4.0));
+        assert!(d.undo().unwrap());
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), SCENE);
+    }
+
+    #[test]
+    fn a_path_has_no_position_to_move() {
+        let mut d =
+            Drawing::open("<svg viewBox=\"0 0 1 1\"><path d=\"M0 0\" data-id=\"p\"/></svg>")
+                .unwrap();
+        assert!(matches!(
+            d.move_by("p", 1.0, 1.0),
+            Err(Error::Unsupported {
+                gesture: "move",
+                kind: ShapeKind::Path
+            })
+        ));
+        assert!(matches!(
+            d.move_by("zz", 1.0, 1.0),
+            Err(Error::NoSuchShape(_))
+        ));
+    }
+
+    #[test]
+    fn reorder_moves_among_sibling_shapes_and_keeps_the_lines() {
+        let mut d = Drawing::open(SCENE).unwrap();
+        assert!(d.reorder("s1", Order::Forward).unwrap());
+        assert_eq!(ids(&d), ["s2", "s1", "s3"]);
+        assert!(d.reorder("s1", Order::ToFront).unwrap());
+        assert_eq!(ids(&d), ["s2", "s3", "s1"]);
+        assert!(
+            !d.reorder("s1", Order::Forward).unwrap(),
+            "already at the front"
+        );
+        assert!(!d.reorder("s1", Order::ToFront).unwrap());
+        assert!(d.reorder("s1", Order::ToBack).unwrap());
+        assert_eq!(ids(&d), ["s1", "s2", "s3"]);
+        // <defs> stayed first: to-back is among shapes.
+        assert_eq!(d.source(), SCENE);
+        assert!(d.reorder("s3", Order::Backward).unwrap());
+        assert_eq!(
+            d.source(),
+            "<svg viewBox=\"0 0 100 100\" data-diaryx-drawing=\"1\">\n  <defs><marker id=\"m\"/></defs>\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>\n  <line x1=\"30\" y1=\"15\" x2=\"45\" y2=\"50\" data-id=\"s3\"/>\n  <circle cx=\"50\" cy=\"50\" r=\"5\" data-id=\"s2\"/>\n</svg>\n"
+        );
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), SCENE);
     }
 
     #[test]

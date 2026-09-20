@@ -21,10 +21,10 @@ readme = "README.md"
 # The tree editor under everything: parses the SVG as XML, keeps every byte it
 # is not asked to change, and owns undo. By crates.io version, as every
 # cross-repo edge in the org is; `~/diaryx/.cargo/patches.toml` is how to build
-# against a checkout. 3.8 knows the element tree and `insert_child`/`delete`;
-# `set_node_attrs` and `move_node` — the move, resize and reorder gestures —
-# are on twig's unmerged drawing branch (docs/tasks/gestures-need-twig.md).
-twig-doc = "3.8"
+# against a checkout. 3.8.1 is the first release with `set_node_attrs`,
+# `move_before`/`move_after` and the `svg` dialect — the move, resize and
+# reorder gestures.
+twig-doc = "3.8.1"
 # Rendering for the CLI's `render` and for a test that wants pixels. Same major
 # as leaf-raster and resvg-swift, so a host linking all three gets one copy.
 resvg = "0.46"

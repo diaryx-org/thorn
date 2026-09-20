@@ -2,12 +2,21 @@
 title: Move, resize and reorder wait on twig's drawing branch
 description: The gestures that rewrite attributes or reorder siblings need setNodeAttrs and moveNode, which are on twig's unmerged branch
 author: adammharris
-status: open
+status: done
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # Move, resize and reorder wait on twig's drawing branch
+
+**Done 2026-09-20.** The branch was rebased and merged, released as twig
+3.8.1, and the pin moved to it. `Drawing::move_by`, `Drawing::resize` and
+`Drawing::reorder` — over `set_node_attrs` and `move_before`/`move_after`,
+one call and one undo step each — landed in the commit that closes this,
+with `geometry.rs` under them and the fixture test
+`every_gesture_is_one_step_back_to_the_same_bytes`. What is left for a
+`<path>` and a `<g>`, which have no position in their attributes, is
+`transform` — noted in `hit-testing.md`.
 
 Move and resize are `setNodeAttrs`; forward, back, to-front and to-back
 are `moveNode`. Both are built, on `claude/diaryx-drawing-support-4g2szs` in

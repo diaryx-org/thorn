@@ -26,6 +26,21 @@ final class DrawingDocumentTests: XCTestCase {
         XCTAssertFalse(try doc.undo())
     }
 
+    func testMoveResizeReorder() throws {
+        let doc = try DrawingDocument(source: empty)
+        let a = try doc.addRect(CGRect(x: 0, y: 0, width: 10, height: 10))
+        let b = try doc.addRect(CGRect(x: 20, y: 20, width: 10, height: 10))
+        try doc.move(id: a, by: CGVector(dx: 5, dy: 2.5))
+        XCTAssertEqual(doc.bounds(id: a), CGRect(x: 5, y: 2.5, width: 10, height: 10))
+        try doc.resize(id: b, to: CGRect(x: 1, y: 1, width: 2, height: 3))
+        XCTAssertEqual(doc.bounds(id: b), CGRect(x: 1, y: 1, width: 2, height: 3))
+        XCTAssertTrue(try doc.reorder(id: a, .toFront))
+        XCTAssertEqual(doc.shapes.map(\.id), [b, a])
+        XCTAssertFalse(try doc.reorder(id: a, .forward))
+        for _ in 0..<5 { XCTAssertTrue(try doc.undo()) }
+        XCTAssertEqual(doc.source, empty)
+    }
+
     func testRefusesWhatIsNotAnSvg() {
         XCTAssertThrowsError(try DrawingDocument(source: "<html/>"))
     }

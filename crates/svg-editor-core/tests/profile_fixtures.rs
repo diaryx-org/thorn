@@ -1,7 +1,7 @@
 //! Every fixture under `tests/fixtures/` conforms to the profile, opens with
 //! its shapes in paint order, and survives an add and an undo byte for byte.
 
-use svg_editor_core::{Drawing, Rect, ShapeKind};
+use svg_editor_core::{Bounds, Drawing, Order, Rect, ShapeKind};
 
 fn fixtures() -> Vec<(String, String)> {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
@@ -80,4 +80,46 @@ fn boxes_and_arrow_reads_in_paint_order() {
     let arrow = drawing.shape("s5").unwrap();
     assert_eq!(arrow.attr("data-from"), Some("s1"));
     assert_eq!(arrow.number("x2"), Some(198.0));
+}
+
+/// Every gesture on every shape of every fixture is one undo step back to
+/// the same bytes, and the file it leaves conforms.
+#[test]
+fn every_gesture_is_one_step_back_to_the_same_bytes() {
+    for (name, src) in fixtures() {
+        let mut drawing = Drawing::open(&src).unwrap();
+        let ids = drawing
+            .shapes()
+            .iter()
+            .filter_map(|s| s.id.clone())
+            .collect::<Vec<_>>();
+        for id in ids {
+            let kind = drawing.shape(&id).unwrap().kind;
+            let mut steps = 0;
+            if drawing.move_by(&id, 3.0, -1.5).is_ok() {
+                steps += 1;
+                assert_eq!(drawing.check(), [], "{name}: after moving {id}");
+            }
+            let to = Bounds {
+                x: 1.0,
+                y: 2.0,
+                width: 30.0,
+                height: 20.0,
+            };
+            if drawing.resize(&id, to).is_ok() {
+                steps += 1;
+                assert_eq!(drawing.check(), [], "{name}: after resizing {id}");
+            }
+            if drawing.reorder(&id, Order::ToFront).unwrap() {
+                steps += 1;
+            }
+            if drawing.reorder(&id, Order::ToBack).unwrap() {
+                steps += 1;
+            }
+            for _ in 0..steps {
+                assert!(drawing.undo().unwrap(), "{name}: undoing {kind:?} {id}");
+            }
+            assert_eq!(drawing.source(), src, "{name}: after {kind:?} {id}");
+        }
+    }
 }

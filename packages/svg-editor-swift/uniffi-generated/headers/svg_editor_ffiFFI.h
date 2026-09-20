@@ -271,6 +271,11 @@ void*_Nonnull uniffi_svg_editor_ffi_fn_constructor_drawing_open(RustBuffer sourc
 RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_add_rect(void*_Nonnull ptr, RustBuffer rect, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_BOUNDS
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_BOUNDS
+RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_bounds(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_CHECK
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_CHECK
 RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_check(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -281,9 +286,24 @@ RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_check(void*_Nonnull ptr, Rust
 void uniffi_svg_editor_ffi_fn_method_drawing_delete(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_MOVE_BY
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_MOVE_BY
+void uniffi_svg_editor_ffi_fn_method_drawing_move_by(void*_Nonnull ptr, RustBuffer id, double dx, double dy, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_REDO
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_REDO
 int8_t uniffi_svg_editor_ffi_fn_method_drawing_redo(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_REORDER
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_REORDER
+int8_t uniffi_svg_editor_ffi_fn_method_drawing_reorder(void*_Nonnull ptr, RustBuffer id, RustBuffer order, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_RESIZE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_RESIZE
+void uniffi_svg_editor_ffi_fn_method_drawing_resize(void*_Nonnull ptr, RustBuffer id, RustBuffer to, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_SHAPES
@@ -587,6 +607,12 @@ uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_add_rect(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_BOUNDS
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_BOUNDS
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_bounds(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_CHECK
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_CHECK
 uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_check(void
@@ -599,9 +625,27 @@ uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_delete(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_MOVE_BY
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_MOVE_BY
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_move_by(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_REDO
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_REDO
 uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_redo(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_REORDER
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_REORDER
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_reorder(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_RESIZE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_RESIZE
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_resize(void
     
 );
 #endif

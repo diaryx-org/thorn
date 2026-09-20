@@ -15,15 +15,18 @@
 //!   flat node list. Everything else in the file (`<defs>`, `<style>`, a
 //!   comment) is noise the editor preserves and never models.
 //! - [`Drawing`] — the editor: a `twig::Editor` over the bytes, the shape list
-//!   read back after every edit, and the gestures. Each gesture is one twig
-//!   operation and therefore one undo step; the editor keeps no history of
-//!   its own.
+//!   read back after every edit, and the gestures: add, delete, move, resize,
+//!   reorder, undo, redo. Each is one twig operation and therefore one undo
+//!   step; the editor keeps no history of its own. [`geometry`] is the
+//!   arithmetic under move and resize.
 
 pub mod drawing;
+pub mod geometry;
 pub mod number;
 pub mod profile;
 pub mod shape;
 
-pub use drawing::{Drawing, Error, Rect};
+pub use drawing::{Drawing, Error, Order, Rect};
+pub use geometry::Bounds;
 pub use profile::{Finding, Rule};
 pub use shape::{Shape, ShapeKind};
