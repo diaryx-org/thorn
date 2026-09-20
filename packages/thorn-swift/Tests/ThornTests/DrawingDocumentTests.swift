@@ -84,6 +84,11 @@ final class DrawingDocumentTests: XCTestCase {
         XCTAssertEqual(b.maxY, 52, accuracy: 3)
         XCTAssertEqual(doc.hit(CGPoint(x: b.midX, y: b.midY), tolerance: 0)?.id, t)
         XCTAssertEqual(doc.shape(id: t)?.text, "Hello")
+
+        // A stylesheet's size is the layout's to report.
+        let styled = try DrawingDocument(source: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 9 9\"><style>text { font: 16px sans-serif }</style><text x=\"1\" y=\"2\" data-id=\"t\">Hi</text></svg>")
+        XCTAssertEqual(styled.fontSize(id: "t"), 16)
+        XCTAssertEqual(styled.fontSize(id: nil), 16, "a new label's too")
     }
 
     func testAnArrowBoundToAShapeFollowsIt() throws {

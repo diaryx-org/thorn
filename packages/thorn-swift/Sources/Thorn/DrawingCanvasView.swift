@@ -45,7 +45,7 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         let f = NSTextView(frame: edit.frame)
         f.string = edit.text
         f.font = .systemFont(ofSize: edit.fontSize)
-        f.backgroundColor = NSColor.textBackgroundColor.withAlphaComponent(0.9)
+        f.backgroundColor = .textBackgroundColor
         f.isRichText = false
         f.textContainerInset = .zero
         f.textContainer?.lineFragmentPadding = 0

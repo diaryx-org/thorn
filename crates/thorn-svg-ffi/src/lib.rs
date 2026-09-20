@@ -389,6 +389,12 @@ impl Drawing {
         Ok(self.lock().set_text(&id, &text)?)
     }
 
+    /// The size a label lays out at, in user units — its `font-size`, or
+    /// what a stylesheet gave it; with `None`, a new label's.
+    pub fn font_size(&self, id: Option<String>) -> f64 {
+        self.lock().font_size(id.as_deref())
+    }
+
     /// Wrap a label to `width` user units, its words flowed into `<tspan>`
     /// lines; or, with `None`, put them back on one line. One undo step.
     pub fn set_width(&self, id: String, width: Option<f64>) -> Result<(), DrawingError> {

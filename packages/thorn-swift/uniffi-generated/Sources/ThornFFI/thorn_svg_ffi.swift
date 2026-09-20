@@ -563,6 +563,12 @@ public protocol DrawingProtocol : AnyObject {
     func endPoint(id: String, end: End)  -> Point?
     
     /**
+     * The size a label lays out at, in user units — its `font-size`, or
+     * what a stylesheet gave it; with `None`, a new label's.
+     */
+    func fontSize(id: String?)  -> Double
+    
+    /**
      * Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
      * step.
      */
@@ -840,6 +846,18 @@ open func endPoint(id: String, end: End) -> Point? {
     uniffi_thorn_svg_ffi_fn_method_drawing_end_point(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterTypeEnd.lower(end),$0
+    )
+})
+}
+    
+    /**
+     * The size a label lays out at, in user units — its `font-size`, or
+     * what a stylesheet gave it; with `None`, a new label's.
+     */
+open func fontSize(id: String?) -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_font_size(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(id),$0
     )
 })
 }
@@ -2386,6 +2404,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 45968) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font_size() != 35813) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 8832) {

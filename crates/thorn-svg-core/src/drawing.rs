@@ -436,16 +436,46 @@ impl Drawing {
         doc
     }
 
+    /// The size a label lays out at, in its own user units: its `font-size`
+    /// attribute; else what the host's layout says a stylesheet gave it;
+    /// else the nominal 12. With `None`, the size a new label directly
+    /// under `<svg>` would get.
+    pub fn font_size(&self, id: Option<&str>) -> f64 {
+        let shape = id.and_then(|id| self.shape(id));
+        if let Some(size) = shape
+            .and_then(|s| s.attr("font-size"))
+            .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
+        {
+            return size;
+        }
+        let doc = match shape {
+            Some(shape) => self.label_document(shape, "x"),
+            None => {
+                let probe = Shape {
+                    node: self.root,
+                    kind: ShapeKind::Text,
+                    id: None,
+                    group: None,
+                    depth: 0,
+                    attrs: Vec::new(),
+                    text: None,
+                };
+                self.label_document(&probe, "x")
+            }
+        };
+        self.measure
+            .as_ref()
+            .and_then(|m| m.font_size(&doc))
+            .unwrap_or(12.0)
+    }
+
     /// How wide a line of `shape`'s label would lay out — measured, or by
     /// the nominal six tenths of a font size per character.
     fn line_width(&self, shape: &Shape, line: &str) -> f64 {
         if let Some(b) = self.measured_interior(shape, &escape(line)) {
             return b.width;
         }
-        let size = shape
-            .attr("font-size")
-            .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
-            .unwrap_or(12.0);
+        let size = self.font_size(shape.id.as_deref());
         0.6 * size * line.chars().count() as f64
     }
 
@@ -2273,6 +2303,12 @@ mod tests {
             eprintln!("no system fonts: nothing to measure");
             return;
         };
+        assert_eq!(d.font_size(Some("t")), 10.0);
+        assert_eq!(
+            d.font_size(None),
+            12.0,
+            "usvg's default, with no stylesheet"
+        );
         d.set_width("t", Some(60.0)).unwrap();
         d.set_text("t", "the quick brown fox jumps over the lazy dog")
             .unwrap();

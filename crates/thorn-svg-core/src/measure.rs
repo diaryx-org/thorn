@@ -23,6 +23,14 @@ pub trait Measure: Send + Sync {
     /// it lays out in its own coordinates. The box is in those. `None`
     /// when the label lays out to nothing — no characters, no face at all.
     fn measure(&self, svg: &str) -> Option<Bounds>;
+
+    /// The size the one `<text>` in `svg` lays out at, in its user units
+    /// — what a stylesheet gave it, when its attributes do not say. `None`
+    /// when the host cannot tell; the drawing then takes the nominal 12.
+    fn font_size(&self, svg: &str) -> Option<f64> {
+        let _ = svg;
+        None
+    }
 }
 
 /// resvg's layout, over the system's fonts — what a host drawing through
@@ -35,35 +43,51 @@ pub struct Usvg;
 #[cfg(feature = "usvg")]
 impl Measure for Usvg {
     fn measure(&self, svg: &str) -> Option<Bounds> {
-        use std::sync::{Arc, OnceLock};
-        static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
-        let fontdb = FONTS
-            .get_or_init(|| {
-                let mut db = usvg::fontdb::Database::new();
-                db.load_system_fonts();
-                Arc::new(db)
-            })
-            .clone();
-        let options = usvg::Options {
-            fontdb,
-            ..usvg::Options::default()
-        };
-        let tree = usvg::Tree::from_str(svg, &options).ok()?;
-        first_text(tree.root()).map(|r| Bounds {
-            x: r.x() as f64,
-            y: r.y() as f64,
-            width: r.width() as f64,
-            height: r.height() as f64,
+        let tree = parse(svg)?;
+        first_text(tree.root()).map(|t| {
+            let r = t.bounding_box();
+            Bounds {
+                x: r.x() as f64,
+                y: r.y() as f64,
+                width: r.width() as f64,
+                height: r.height() as f64,
+            }
         })
+    }
+
+    fn font_size(&self, svg: &str) -> Option<f64> {
+        let tree = parse(svg)?;
+        let text = first_text(tree.root())?;
+        text.layouted()
+            .first()
+            .map(|span| span.font_size.get() as f64)
     }
 }
 
-/// The first `<text>`'s box, in the group's own coordinates — the groups
-/// the document writes carry no transform, so these are the label's.
 #[cfg(feature = "usvg")]
-fn first_text(group: &usvg::Group) -> Option<usvg::Rect> {
+fn parse(svg: &str) -> Option<usvg::Tree> {
+    use std::sync::{Arc, OnceLock};
+    static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
+    let fontdb = FONTS
+        .get_or_init(|| {
+            let mut db = usvg::fontdb::Database::new();
+            db.load_system_fonts();
+            Arc::new(db)
+        })
+        .clone();
+    let options = usvg::Options {
+        fontdb,
+        ..usvg::Options::default()
+    };
+    usvg::Tree::from_str(svg, &options).ok()
+}
+
+/// The first `<text>`, in the group's own coordinates — the groups the
+/// document writes carry no transform, so these are the label's.
+#[cfg(feature = "usvg")]
+fn first_text(group: &usvg::Group) -> Option<&usvg::Text> {
     group.children().iter().find_map(|node| match node {
-        usvg::Node::Text(text) => Some(text.bounding_box()),
+        usvg::Node::Text(text) => Some(text.as_ref()),
         usvg::Node::Group(g) => first_text(g),
         _ => None,
     })
@@ -89,6 +113,10 @@ mod tests {
             "the cap height is above the baseline: {b:?}"
         );
         assert!(b.y + b.height >= -1.0, "{b:?}");
+        assert_eq!(Usvg.font_size(doc), Some(20.0));
+        let styled = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\">\
+                      <style>text { font: 16px sans-serif }</style><text>Hello</text></svg>";
+        assert_eq!(Usvg.font_size(styled), Some(16.0), "from the stylesheet");
         assert!(
             Usvg.measure("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>")
                 .is_none()

@@ -240,7 +240,7 @@ public final class CanvasModel {
                 selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
             } else {
                 selection = []
-                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: defaultFontSize * fit.a, wraps: false))
+                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, wraps: false))
             }
             tool = .select
         case .rect, .ellipse, .line:
@@ -312,11 +312,8 @@ public final class CanvasModel {
     public func editText(id: String) {
         guard let shape = document.shape(id: id), shape.kind == .text, let bounds = document.bounds(id: id) else { return }
         selection = [id]
-        let size = shape.attrs.first { $0.name == "font-size" }?.value.flatMap { Double($0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "px", with: "")) }
         let width = document.width(id: id)
-        // A one-line box is a font's height and a bit; a wrapped one is
-        // several lines', so its size is guessed at the default.
-        let fontSize = CGFloat(size ?? Double(width == nil ? bounds.height / 1.2 : defaultFontSize)) * fit.a
+        let fontSize = document.fontSize(id: id) * fit.a
         var frame = viewRect(bounds)
         if let width {
             frame.size.width = width * fit.a
@@ -340,12 +337,9 @@ public final class CanvasModel {
         needsDisplay?()
     }
 
-    /// The size a label lays out at when nothing says: usvg's default.
-    private let defaultFontSize: CGFloat = 12
-
     /// Where a field for a new label goes: its baseline at the click.
     private func fieldFrame(at viewPoint: CGPoint) -> CGRect {
-        let size = defaultFontSize * fit.a
+        let size = document.fontSize(id: nil) * fit.a
         return CGRect(x: viewPoint.x, y: viewPoint.y - size, width: size * 8, height: size * 1.3)
     }
 

@@ -119,6 +119,10 @@ public final class DrawingDocument {
         try changed { try inner.setWidth(id: id, width: width.map(Double.init)) }
     }
 
+    /// The size a label lays out at, in user units — its `font-size`, or
+    /// what the stylesheet gave it; with `nil`, a new label's.
+    public func fontSize(id: String?) -> CGFloat { CGFloat(inner.fontSize(id: id)) }
+
     /// The width a label wraps to, if it does.
     public func width(id: String) -> CGFloat? {
         shape(id: id)?.attrs.first { $0.name == "data-width" }?.value.flatMap { Double($0) }.map { CGFloat($0) }
