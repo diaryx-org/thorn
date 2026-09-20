@@ -2,12 +2,23 @@
 title: Freehand ink in the core
 description: 'Drawing::add_path over data-ink, the term the profile reserves: a centreline from the pointer in, an outline path out, under the nib rules the org proposal leaves to settle'
 author: adammharris
-status: open
+status: done
 created: 2026-09-20
 updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # Freehand ink in the core
+
+**Done 2026-09-20**, as settled below: `ink.rs` is the nib model —
+`Nib::Monoline`, `ink::outline` from a centreline and widths — and
+`Drawing::add_ink` writes the `<path>` with `data-ink`, `data-centreline`
+and `data-widths`; a move and a resize keep the three together
+(`geometry::baked` draws the outline again); rule 6 of the profile holds
+`data-ink` to the nibs the core draws and refuses a stroke with no
+centreline (`Rule::InkNib`). The draw tool (`P` / `7`) previews the stroke
+as it is dragged and lands it as one step; a click is a dot. PencilKit
+input and a pressure nib are the next stroke, not this one. `ink.svg` is
+the fixture.
 
 The toolbar has a draw tool (`P` / `7`, `Tool.draw`) and it is disabled.
 The profile reserves `data-ink` for it — a `<path>` whose `d` is an

@@ -74,6 +74,7 @@ history:
 | gesture | twig | status |
 |---------|------|--------|
 | add rect, ellipse, line, arrow, label | `insert_after` / `insert_child` | done: an arrow is a `<line>` with `data-arrow`, its head the drawing's `<style>` |
+| freehand ink | `insert_after` | done: a monoline stroke, its outline the `<path>`'s `d` and its centreline and width beside it (`ink.rs` is the nib) |
 | re-word a label, wrap it | `edit_range` over the `<text>`'s interior | done: `set_text`, and `set_width` flowing the words into `<tspan>` lines at `data-width` (measured by the host's layout); the canvas opens a field on a double-click or at the click with the label tool, and a label's box handles set the width it wraps to |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |

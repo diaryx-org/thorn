@@ -513,6 +513,13 @@ public protocol DrawingProtocol : AnyObject {
     func addEllipse(bounds: Bounds) throws  -> String
     
     /**
+     * Add a freehand stroke: the outline `nib` makes of the centreline
+     * `points` at `widths` (one for all, or one per point), with the
+     * centreline and widths beside it; returns its `data-id`.
+     */
+    func addInk(points: [Point], widths: [Double], nib: Nib) throws  -> String
+    
+    /**
      * Add a line; returns its `data-id`.
      */
     func addLine(x1: Double, y1: Double, x2: Double, y2: Double) throws  -> String
@@ -757,6 +764,21 @@ open func addEllipse(bounds: Bounds)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(self.uniffiClonePointer(),
         FfiConverterTypeBounds.lower(bounds),$0
+    )
+})
+}
+    
+    /**
+     * Add a freehand stroke: the outline `nib` makes of the centreline
+     * `points` at `widths` (one for all, or one per point), with the
+     * centreline and widths beside it; returns its `data-id`.
+     */
+open func addInk(points: [Point], widths: [Double], nib: Nib)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(self.uniffiClonePointer(),
+        FfiConverterSequenceTypePoint.lower(points),
+        FfiConverterSequenceDouble.lower(widths),
+        FfiConverterTypeNib.lower(nib),$0
     )
 })
 }
@@ -2078,6 +2100,67 @@ extension Heads: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Mirrors `thorn_svg_core::Nib`: the rule an ink stroke's outline is
+ * drawn by.
+ */
+
+public enum Nib {
+    
+    case monoline
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNib: FfiConverterRustBuffer {
+    typealias SwiftType = Nib
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Nib {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .monoline
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Nib, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .monoline:
+            writeInt(&buf, Int32(1))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNib_lift(_ buf: RustBuffer) throws -> Nib {
+    return try FfiConverterTypeNib.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNib_lower(_ value: Nib) -> RustBuffer {
+    return FfiConverterTypeNib.lower(value)
+}
+
+
+
+extension Nib: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Mirrors `thorn_svg_core::Order`.
  */
 
@@ -2474,6 +2557,31 @@ fileprivate struct FfiConverterOptionTypeHeads: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceDouble: FfiConverterRustBuffer {
+    typealias SwiftType = [Double]
+
+    public static func write(_ value: [Double], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterDouble.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Double] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Double]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterDouble.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2541,6 +2649,31 @@ fileprivate struct FfiConverterSequenceTypeFinding: FfiConverterRustBuffer {
         seq.reserveCapacity(Int(len))
         for _ in 0 ..< len {
             seq.append(try FfiConverterTypeFinding.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypePoint: FfiConverterRustBuffer {
+    typealias SwiftType = [Point]
+
+    public static func write(_ value: [Point], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypePoint.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Point] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Point]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypePoint.read(from: &buf))
         }
         return seq
     }
@@ -2636,6 +2769,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse() != 11165) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ink() != 35713) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_line() != 10609) {

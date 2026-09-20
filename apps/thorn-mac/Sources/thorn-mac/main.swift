@@ -16,6 +16,7 @@ let fresh = """
         line { stroke: #222; stroke-width: 2 }
         line[data-arrow="end"], line[data-arrow="both"] { marker-end: url(#arrow) }
         line[data-arrow="start"], line[data-arrow="both"] { marker-start: url(#arrow) }
+        path[data-ink] { fill: #222; stroke: none }
         text { font: 16px sans-serif }
       </style>
     </svg>

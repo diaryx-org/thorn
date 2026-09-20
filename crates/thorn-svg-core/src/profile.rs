@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 
 use crate::drawing::Drawing;
+use crate::ink::{self, Nib};
 use crate::number;
 use crate::shape::Heads;
 
@@ -43,6 +44,10 @@ pub enum Rule {
     /// `data-arrow` is `end`, `start` or `both`: the values the template's
     /// `<style>` draws a head for.
     ArrowHeads,
+    /// `data-ink` names a nib the editor draws — `monoline` — and the
+    /// stroke carries the `data-centreline` and `data-widths` its outline
+    /// was computed from.
+    InkNib,
 }
 
 impl Rule {
@@ -57,6 +62,9 @@ impl Rule {
                 "every geometry attribute is a number with at most three decimals and no trailing zeros"
             }
             Self::ArrowHeads => "data-arrow is end, start or both",
+            Self::InkNib => {
+                "data-ink names a nib the editor draws, with data-centreline and data-widths beside it"
+            }
         }
     }
 }
@@ -151,6 +159,38 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                 shape: shape.id.clone(),
                 message: format!("<{tag}> data-arrow={value:?} is not end, start or both"),
             });
+        }
+        if let Some(value) = shape.attr("data-ink") {
+            let mut ink = |message: String| {
+                findings.push(Finding {
+                    rule: Rule::InkNib,
+                    shape: shape.id.clone(),
+                    message,
+                })
+            };
+            if Nib::from_value(value).is_none() {
+                ink(format!(
+                    "<{tag}> data-ink={value:?} is not a nib the editor draws (monoline)"
+                ));
+            }
+            if shape
+                .attr("data-centreline")
+                .and_then(ink::centreline_points)
+                .is_none()
+            {
+                ink(format!(
+                    "<{tag}> data-ink={value:?} has no data-centreline that parses"
+                ));
+            }
+            if shape
+                .attr("data-widths")
+                .and_then(ink::parse_widths)
+                .is_none_or(|w| w.is_empty())
+            {
+                ink(format!(
+                    "<{tag}> data-ink={value:?} has no data-widths that parse"
+                ));
+            }
         }
     }
     findings

@@ -25,6 +25,7 @@
 pub mod drawing;
 pub mod geometry;
 pub mod hit;
+pub mod ink;
 pub mod measure;
 pub mod number;
 pub mod path;
@@ -35,6 +36,7 @@ pub mod transform;
 pub use drawing::{Drawing, End, Error, Order, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
+pub use ink::Nib;
 pub use measure::Measure;
 pub use profile::{Finding, Rule};
 pub use shape::{Heads, Shape, ShapeKind};

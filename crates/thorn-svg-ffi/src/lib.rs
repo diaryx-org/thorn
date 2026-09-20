@@ -121,6 +121,21 @@ impl From<Heads> for core::Heads {
     }
 }
 
+/// Mirrors `thorn_svg_core::Nib`: the rule an ink stroke's outline is
+/// drawn by.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum Nib {
+    Monoline,
+}
+
+impl From<Nib> for core::Nib {
+    fn from(n: Nib) -> Self {
+        match n {
+            Nib::Monoline => Self::Monoline,
+        }
+    }
+}
+
 /// One attribute of a shape; a bare attribute has no value.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct Attribute {
@@ -435,6 +450,19 @@ impl Drawing {
             .shape(&id)
             .and_then(|s| s.heads())
             .map(Heads::from)
+    }
+
+    /// Add a freehand stroke: the outline `nib` makes of the centreline
+    /// `points` at `widths` (one for all, or one per point), with the
+    /// centreline and widths beside it; returns its `data-id`.
+    pub fn add_ink(
+        &self,
+        points: Vec<Point>,
+        widths: Vec<f64>,
+        nib: Nib,
+    ) -> Result<String, DrawingError> {
+        let pts: Vec<(f64, f64)> = points.iter().map(|p| (p.x, p.y)).collect();
+        Ok(self.lock().add_ink(&pts, &widths, nib.into())?)
     }
 
     /// Add a label anchored at `(x, y)`; returns its `data-id`.

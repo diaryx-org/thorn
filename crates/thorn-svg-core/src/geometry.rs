@@ -4,6 +4,7 @@
 //! shape's own coordinates — its `transform` and its groups' are
 //! [`Drawing`](crate::Drawing)'s to compose, since only it knows the chain.
 
+use crate::ink;
 use crate::number;
 use crate::path::{self, Subpath};
 use crate::shape::{Shape, ShapeKind};
@@ -335,7 +336,26 @@ pub fn baked(shape: &Shape, t: &Transform) -> Option<Vec<Update>> {
                 Some(fmt_points(pts.iter().map(|&(x, y)| t.apply(x, y)))),
             )]
         }
-        ShapeKind::Path => vec![("d", Some(path::transformed(shape.attr("d")?, t)?))],
+        ShapeKind::Path => match shape.attr("data-ink").and_then(ink::Nib::from_value) {
+            // An ink stroke's `d` is the nib's, not a hand's: the centreline
+            // moves with the transform, the widths by its scale, and the
+            // outline is drawn again from them, so the three never drift.
+            Some(nib) => {
+                let centreline = path::transformed(shape.attr("data-centreline")?, t)?;
+                let scale = (sx * sy).sqrt();
+                let widths: Vec<f64> = ink::parse_widths(shape.attr("data-widths")?)?
+                    .into_iter()
+                    .map(|w| w * scale)
+                    .collect();
+                let points = ink::centreline_points(&centreline)?;
+                vec![
+                    ("d", Some(ink::outline(&points, &widths, nib)?)),
+                    ("data-centreline", Some(centreline)),
+                    ("data-widths", Some(ink::widths(&widths))),
+                ]
+            }
+            None => vec![("d", Some(path::transformed(shape.attr("d")?, t)?))],
+        },
         ShapeKind::Text => {
             if t.a <= 0.0 || (t.a - t.d).abs() > 1e-9 {
                 return None;

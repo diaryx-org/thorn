@@ -373,4 +373,34 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertNil(doc.heads(id: "s1"))
         XCTAssertTrue(try doc.undo(), "one step")
     }
+
+    func testTheDrawToolInksAStrokeAsOneStep() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        model.inkWidth = 4
+        model.key("p")
+        XCTAssertEqual(model.tool, .draw)
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 140, y: 120))
+        XCTAssertEqual(doc.shapes.count, 3, "the stroke follows the hand")
+        model.pointerDragged(to: CGPoint(x: 140.2, y: 120.1)) // noise, dropped
+        model.pointerDragged(to: CGPoint(x: 200, y: 100))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        let stroke = try XCTUnwrap(doc.shape(id: id))
+        XCTAssertEqual(stroke.kind, .path)
+        XCTAssertTrue(doc.source.contains("data-ink=\"monoline\" data-centreline=\"M50 50 L70 60 L100 50\" data-widths=\"4\" data-id=\"\(id)\""), doc.source)
+        XCTAssertEqual(model.tool, .select)
+        XCTAssertTrue(try doc.undo(), "one step")
+        XCTAssertEqual(doc.shapes.count, 2)
+        XCTAssertFalse(try doc.undo())
+
+        // A click alone is a dot.
+        model.key("7")
+        model.beginPointer(at: CGPoint(x: 300, y: 150))
+        model.pointerUp()
+        XCTAssertEqual(doc.shapes.count, 3)
+        XCTAssertTrue(doc.source.contains("data-centreline=\"M150 75\""))
+    }
 }

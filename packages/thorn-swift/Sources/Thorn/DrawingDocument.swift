@@ -110,6 +110,13 @@ public final class DrawingDocument {
     /// Which ends of a shape have a head; `nil` for one that is not an arrow.
     public func heads(id: String) -> Heads? { inner.heads(id: id) }
 
+    /// Add a freehand stroke along `points`, `width` wide, as a monoline:
+    /// the outline is the file's, the centreline and width beside it.
+    @discardableResult
+    public func addInk(_ points: [CGPoint], width: CGFloat) throws -> String {
+        try changed { try inner.addInk(points: points.map { Point(x: Double($0.x), y: Double($0.y)) }, widths: [Double(width)], nib: .monoline) }
+    }
+
     /// Add a label anchored at a point; returns its `data-id`.
     @discardableResult
     public func addText(_ text: String, at point: CGPoint) throws -> String {

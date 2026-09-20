@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" data-diaryx-drawing="1">
+  <!-- A freehand stroke as the editor writes it: the outline is the file's, the centreline and widths ride beside it. -->
+  <style>
+    path[data-ink] { fill: #222; stroke: none }
+  </style>
+  <path d="M21.414 61.414 L50.226 31.987 L89.822 56.992 L139.687 36.975 L168.72 61.536 A2 2 0 0 0 171.28 58.464 L140.313 33.025 L90.178 53.008 L49.774 28.013 L18.586 58.586 A2 2 0 0 0 21.414 61.414 Z" data-ink="monoline" data-centreline="M20 60 L50 30 L90 55 L140 35 L170 60" data-widths="4" data-id="s1"/>
+</svg>

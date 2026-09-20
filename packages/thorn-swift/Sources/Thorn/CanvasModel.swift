@@ -89,6 +89,8 @@ public final class CanvasModel {
 
     /// How far, in view points, a click may miss a stroke or a handle.
     public var tolerance: CGFloat = 4
+    /// The width of a stroke the draw tool makes, in user units.
+    public var inkWidth: CGFloat = 3
 
     /// User units → view points for the last `draw`: asked of the picture, so
     /// it is the fit `SVGPicture.draw` drew under and cannot disagree with it.
@@ -101,6 +103,8 @@ public final class CanvasModel {
         /// An end of a line being dragged; `other` is the end staying put.
         case endpoint(id: String, end: End, other: CGPoint, to: CGPoint)
         case create(from: CGPoint, to: CGPoint)
+        /// The draw tool: the centreline so far, in user units.
+        case ink(points: [CGPoint])
         /// The hand: `start` is `pan` when the drag began.
         case pan(start: CGVector, from: CGPoint)
         /// The eraser: what it has passed over, deleted when it lifts.
@@ -281,7 +285,10 @@ public final class CanvasModel {
             release()
         case .rect, .ellipse, .arrow, .line:
             drag = .create(from: p, to: p)
-        case .diamond, .draw, .note:
+        case .draw:
+            selection = []
+            drag = .ink(points: [p])
+        case .diamond, .note:
             // Not yet: `Tool.isAvailable` says so, and the toolbar
             // disables each until the core has its gesture.
             break
@@ -318,6 +325,11 @@ public final class CanvasModel {
             drag = .endpoint(id: id, end: end, other: other, to: p)
         case .create(let from, _):
             drag = .create(from: from, to: p)
+        case .ink(var points):
+            // A point the format could not tell from the last is noise.
+            if let last = points.last, abs(last.x - p.x) < 0.5, abs(last.y - p.y) < 0.5 { return }
+            points.append(p)
+            drag = .ink(points: points)
         case .pan(let start, let from):
             pan = CGVector(dx: start.dx + viewPoint.x - from.x, dy: start.dy + viewPoint.y - from.y)
             needsDisplay?()
@@ -365,6 +377,10 @@ public final class CanvasModel {
             default: return false
             }
             return created != nil
+        case .ink(let points) where !points.isEmpty:
+            // One point is a dot of the nib.
+            created = try? document.addInk(points, width: inkWidth)
+            return created != nil
         default:
             return false
         }
@@ -381,6 +397,10 @@ public final class CanvasModel {
         case .move, .resize, .endpoint:
             if !previewed { previewed = apply() }
         case .create:
+            if !previewed { previewed = apply() }
+            selection = previewed ? created.map { [$0] } ?? [] : []
+            release()
+        case .ink:
             if !previewed { previewed = apply() }
             selection = previewed ? created.map { [$0] } ?? [] : []
             release()

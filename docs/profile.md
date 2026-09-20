@@ -46,8 +46,10 @@ same list as code.
    wrote. What this buys is **byte-stability**: an unedited re-export is the
    same bytes, so a historica diff of a drawing means the drawing changed.
 6. **The vocabulary is closed.** A `data-` term the profile names takes
-   only the values it lists: `data-arrow` is `end`, `start` or `both`. A
-   term the profile does not name is preserved and not judged.
+   only the values it lists: `data-arrow` is `end`, `start` or `both`;
+   `data-ink` is `monoline`, and comes with `data-centreline` and
+   `data-widths`. A term the profile does not name is preserved and not
+   judged.
 
 ## What is a shape
 
@@ -108,8 +110,8 @@ draws.
 | `data-arrow` | `<line>` | `end`, `start` or `both`: which ends have a head. This is what an arrow *is*; how a head looks is the drawing's `<style>` — `line[data-arrow="end"], line[data-arrow="both"] { marker-end: url(#arrow) }` and the `<marker>` it names, which the template a new drawing is created with carries (docs/tasks/style-template.md). The editor writes `data-arrow` (`Drawing::add_arrow`) and never `marker-end`; a file that spells `marker-start`/`marker-end` itself is read as an arrow all the same (`Shape::heads`). Any other value is a finding. |
 | `data-width` | `<text>` | the width a label wraps to, in user units, in the number format. The editor flows the label's words into one `<tspan>` per line — each at the anchor's `x`, each after the first `dy="1.2em"` down — measured by the host's layout; a word longer than the width has a line to itself. Without it a label is one line. Written by a resize of the label's box; taken off by `Drawing::set_width(None)`. Any viewer draws the `<tspan>`s as they are. |
 | `data-break` | `<tspan>` in a `<text>` | `hard`: this line starts where the author broke it, not where the width did. The editor writes a label with a line break of its own as `<tspan>` lines like a wrapped one's, this on the first line of each paragraph after the first, and reads the label back with a newline there. |
-| `data-ink` | `<path>` | a freehand stroke: the `d` is an outline the nib computed, filled. *Reserved: see the ink section of the org's proposal.* |
-| `data-centreline`, `data-widths` | `<path>` with `data-ink` | the pen's centreline points and per-point widths the outline was computed from, so a platform with a different nib can recompute it. *Reserved.* |
+| `data-ink` | `<path>` | a freehand stroke, and the nib its outline was drawn by: `monoline`, a round nib at one width. The `d` is that outline, filled — right in any viewer — and the editor never writes a stroke any other way; the nibs the profile admits are exactly the ones the editor draws, so a value it cannot draw is a finding. Written by `Drawing::add_ink`. |
+| `data-centreline`, `data-widths` | `<path>` with `data-ink` | the stroke as the hand made it: the centreline as a path `d` (`M x y L x y …`, or a host's cubics), and the width at each of its points — one value alone is the width everywhere, which is all a monoline has to say. The outline is a function of these and the nib, and the editor keeps it so: a move carries the centreline, a resize scales it and the widths and draws the outline again. A stroke without them is a finding, because its outline could not be drawn again. |
 
 ## What the writer emits
 

@@ -1,7 +1,7 @@
 //! Every fixture under `tests/fixtures/` conforms to the profile, opens with
 //! its shapes in paint order, and survives an add and an undo byte for byte.
 
-use thorn_svg_core::{Bounds, Drawing, Heads, Order, Rect, Rule, ShapeKind};
+use thorn_svg_core::{Bounds, Drawing, Heads, Nib, Order, Rect, Rule, ShapeKind};
 
 fn fixtures() -> Vec<(String, String)> {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
@@ -169,4 +169,84 @@ fn an_arrow_is_what_data_arrow_says_or_what_the_file_spells() {
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0].rule, Rule::ArrowHeads);
     assert_eq!(findings[0].shape.as_deref(), Some("s4"));
+}
+
+#[test]
+fn an_ink_stroke_carries_its_centreline_and_keeps_it_under_move_and_resize() {
+    let src = include_str!("fixtures/ink.svg");
+    let mut drawing = Drawing::open(src).unwrap();
+    let stroke = drawing.shape("s1").unwrap().clone();
+    assert_eq!(stroke.kind, ShapeKind::Path);
+    assert_eq!(stroke.attr("data-ink"), Some("monoline"));
+    // The outline is what the nib makes of the centreline: the fixture is
+    // the writer's own output, so re-adding the same stroke is the same d.
+    let id = drawing
+        .add_ink(
+            &[
+                (20.0, 60.0),
+                (50.0, 30.0),
+                (90.0, 55.0),
+                (140.0, 35.0),
+                (170.0, 60.0),
+            ],
+            &[4.0],
+            Nib::Monoline,
+        )
+        .unwrap();
+    assert_eq!(drawing.shape(&id).unwrap().attr("d"), stroke.attr("d"));
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+
+    // A move carries the centreline with the outline.
+    drawing.move_by("s1", 10.0, -5.0).unwrap();
+    let moved = drawing.shape("s1").unwrap();
+    assert_eq!(
+        moved.attr("data-centreline"),
+        Some("M30 55 L60 25 L100 50 L150 30 L180 55")
+    );
+    assert_eq!(moved.attr("data-widths"), Some("4"));
+    assert!(moved.attr("d").unwrap().starts_with("M31.414 56.414 "));
+    assert_eq!(drawing.check(), []);
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+
+    // A resize scales the centreline and the width, and draws the outline
+    // again from them — so a doubled stroke is twice as wide, not a
+    // stretched outline.
+    let from = drawing.bounds("s1").unwrap();
+    drawing
+        .resize(
+            "s1",
+            Bounds {
+                x: from.x,
+                y: from.y,
+                width: from.width * 2.0,
+                height: from.height * 2.0,
+            },
+        )
+        .unwrap();
+    let resized = drawing.shape("s1").unwrap();
+    assert_eq!(resized.attr("data-widths"), Some("8"));
+    let centre = resized.attr("data-centreline").unwrap();
+    assert!(centre.starts_with("M"), "{centre}");
+    let after = drawing.bounds("s1").unwrap();
+    assert!((after.width - from.width * 2.0).abs() < 0.2, "{after:?}");
+    assert!((after.height - from.height * 2.0).abs() < 0.2, "{after:?}");
+    assert_eq!(drawing.check(), []);
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+
+    // The vocabulary is closed, and a stroke without its centreline is a
+    // finding: the outline alone cannot be drawn again.
+    let odd = src.replace("data-ink=\"monoline\"", "data-ink=\"pen\"");
+    let findings = Drawing::open(&odd).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule, Rule::InkNib);
+    let bare = src.replace(" data-widths=\"4\"", "");
+    let findings = Drawing::open(&bare).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule, Rule::InkNib);
+
+    // No points, no stroke.
+    assert!(drawing.add_ink(&[], &[4.0], Nib::Monoline).is_err());
 }

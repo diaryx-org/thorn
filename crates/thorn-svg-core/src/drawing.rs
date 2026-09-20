@@ -28,6 +28,7 @@ use std::fmt::Write as _;
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
 use crate::geometry::{self, Bounds, Update};
+use crate::ink::{self, Nib};
 use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
@@ -298,6 +299,33 @@ impl Drawing {
                 ("x2", f(x2)),
                 ("y2", f(y2)),
                 ("data-arrow", heads.value().to_string()),
+            ],
+            None,
+        )
+    }
+
+    /// Add a freehand stroke as the topmost shape: a `<path>` whose `d` is
+    /// the outline `nib` makes of `points` at `widths` (one width for all,
+    /// or one per point), with `data-ink` naming the nib and the
+    /// centreline and widths beside it (`ink`). Returns the id; an error
+    /// for a stroke with no points or no width.
+    pub fn add_ink(
+        &mut self,
+        points: &[(f64, f64)],
+        widths: &[f64],
+        nib: Nib,
+    ) -> Result<String, Error> {
+        let d = ink::outline(points, widths, nib).ok_or(Error::Unsupported {
+            gesture: "add ink with no points or no width",
+            kind: ShapeKind::Path,
+        })?;
+        self.add_shape(
+            "path",
+            &[
+                ("d", d),
+                ("data-ink", nib.value().to_string()),
+                ("data-centreline", ink::centreline(points)),
+                ("data-widths", ink::widths(widths)),
             ],
             None,
         )
