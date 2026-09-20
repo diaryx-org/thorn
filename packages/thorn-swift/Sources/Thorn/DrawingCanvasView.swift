@@ -49,15 +49,19 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         f.isRichText = false
         f.textContainerInset = .zero
         f.textContainer?.lineFragmentPadding = 0
+        // The field grows down with every line typed, and, unless the
+        // label wraps at its width, across with every character.
+        let unbounded = CGFloat.greatestFiniteMagnitude
+        f.isVerticallyResizable = true
+        f.minSize = edit.frame.size
         if edit.wraps {
             f.textContainer?.widthTracksTextView = true
+            f.maxSize = CGSize(width: edit.frame.width, height: unbounded)
         } else {
-            // One line that grows with what is typed, however long.
             f.isHorizontallyResizable = true
-            f.minSize = edit.frame.size
-            f.maxSize = CGSize(width: .greatestFiniteMagnitude, height: edit.frame.height)
+            f.maxSize = CGSize(width: unbounded, height: unbounded)
             f.textContainer?.widthTracksTextView = false
-            f.textContainer?.containerSize = CGSize(width: .greatestFiniteMagnitude, height: edit.frame.height)
+            f.textContainer?.containerSize = CGSize(width: unbounded, height: unbounded)
         }
         f.delegate = self
         addSubview(f)
