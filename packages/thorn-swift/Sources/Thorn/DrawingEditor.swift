@@ -21,8 +21,10 @@ public struct DrawingCanvas: PlatformViewRepresentable {
     #endif
 }
 
-/// The canvas with a toolbar: select, rectangle, ellipse, line, label;
-/// forward and back; group and ungroup; delete; undo and redo.
+/// The canvas with a toolbar in Excalidraw's shape: the lock, then every
+/// tool in `Tool.all` (each with its keys in its tooltip, and disabled
+/// until the core has its gesture); a menu of the layering and grouping
+/// commands; delete; undo and redo.
 public struct DrawingEditor: View {
     @ObservedObject private var state: EditorState
 
@@ -33,20 +35,37 @@ public struct DrawingEditor: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                toolButton("Select", "arrow.up.left", .select)
-                toolButton("Rectangle", "rectangle", .rect)
-                toolButton("Ellipse", "oval", .ellipse)
-                toolButton("Line", "line.diagonal", .line)
-                toolButton("Label", "textformat", .text())
+                Button { state.model.locked.toggle() } label: {
+                    Image(systemName: state.locked ? "lock.fill" : "lock.open")
+                        .padding(4)
+                        .background(state.locked ? Color.accentColor.opacity(0.25) : Color.clear)
+                        .cornerRadius(4)
+                }
+                .help("Keep the tool after drawing — \(Tool.lockKey.uppercased())")
                 Divider().frame(height: 16)
-                Button { state.model.reorderSelection(.forward) } label: { Image(systemName: "square.2.layers.3d.top.filled") }
-                    .help("Bring forward").disabled(state.selection.count != 1)
-                Button { state.model.reorderSelection(.backward) } label: { Image(systemName: "square.2.layers.3d.bottom.filled") }
-                    .help("Send backward").disabled(state.selection.count != 1)
-                Button { state.model.groupSelection() } label: { Image(systemName: "rectangle.3.group") }
-                    .help("Group").keyboardShortcut("g").disabled(!state.model.canGroup)
-                Button { state.model.ungroupSelection() } label: { Image(systemName: "rectangle.3.group.bubble") }
-                    .help("Ungroup").keyboardShortcut("g", modifiers: [.command, .shift]).disabled(!state.model.canUngroup)
+                ForEach(Tool.all, id: \.self) { tool in toolButton(tool) }
+                Divider().frame(height: 16)
+                Menu {
+                    Button("Bring to front") { state.model.reorderSelection(.toFront) }
+                        .keyboardShortcut("]", modifiers: [.command, .shift])
+                    Button("Bring forward") { state.model.reorderSelection(.forward) }
+                        .keyboardShortcut("]", modifiers: .command)
+                    Button("Send backward") { state.model.reorderSelection(.backward) }
+                        .keyboardShortcut("[", modifiers: .command)
+                    Button("Send to back") { state.model.reorderSelection(.toBack) }
+                        .keyboardShortcut("[", modifiers: [.command, .shift])
+                    Divider()
+                    Button("Group") { state.model.groupSelection() }
+                        .keyboardShortcut("g").disabled(!state.model.canGroup)
+                    Button("Ungroup") { state.model.ungroupSelection() }
+                        .keyboardShortcut("g", modifiers: [.command, .shift]).disabled(!state.model.canUngroup)
+                } label: {
+                    Image(systemName: "square.3.layers.3d")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("Layers and groups")
+                .disabled(state.selection.isEmpty)
                 Button { state.model.deleteSelection() } label: { Image(systemName: "trash") }
                     .help("Delete").disabled(state.selection.isEmpty)
                 Divider().frame(height: 16)
@@ -60,29 +79,35 @@ public struct DrawingEditor: View {
         }
     }
 
-    private func toolButton(_ name: String, _ symbol: String, _ tool: Tool) -> some View {
-        Button { state.setTool(tool) } label: {
-            Image(systemName: symbol)
+    private func toolButton(_ tool: Tool) -> some View {
+        let keys = tool.keys.map { $0.uppercased() }.joined(separator: " or ")
+        return Button { state.setTool(tool) } label: {
+            Image(systemName: tool.symbol)
                 .padding(4)
                 .background(state.tool == tool ? Color.accentColor.opacity(0.25) : Color.clear)
                 .cornerRadius(4)
         }
-        .help(name)
+        .help(tool.isAvailable ? "\(tool.name) — \(keys)" : "\(tool.name) — not yet")
+        .disabled(!tool.isAvailable)
     }
 }
 
-/// The bit of the model SwiftUI watches: the tool and the selection.
+/// The bit of the model SwiftUI watches: the tool, the lock and the
+/// selection.
 final class EditorState: ObservableObject {
     let model: CanvasModel
     @Published var tool: Tool
+    @Published var locked: Bool
     @Published var selection: [String]
 
     init(model: CanvasModel) {
         self.model = model
         tool = model.tool
+        locked = model.locked
         selection = model.selection
         model.onSelectionChange = { [weak self] ids in self?.selection = ids }
         model.onToolChange = { [weak self] tool in self?.tool = tool }
+        model.onLockChange = { [weak self] locked in self?.locked = locked }
     }
 
     func setTool(_ tool: Tool) { model.tool = tool }

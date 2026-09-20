@@ -277,4 +277,83 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertNil(doc.width(id: t))
         XCTAssertEqual(doc.bounds(id: t), one)
     }
+
+    func testKeysPickToolsAndTheLockKeepsOne() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        // Every tool's keys pick it; an unavailable one's do nothing.
+        for tool in Tool.all where tool.isAvailable {
+            for key in tool.keys {
+                model.tool = .select
+                XCTAssertTrue(model.key(key), "\(key)")
+                XCTAssertEqual(model.tool, tool, "\(key)")
+            }
+        }
+        XCTAssertEqual(Tool.forKey("R"), .rect, "case-insensitive")
+        model.tool = .select
+        XCTAssertFalse(model.key("d"), "diamond waits on the core")
+        XCTAssertEqual(model.tool, .select)
+        XCTAssertFalse(model.key("z"))
+
+        // A create tool is one-shot: one rectangle, then select.
+        model.key("r")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 140, y: 120))
+        model.pointerUp()
+        XCTAssertEqual(doc.shapes.count, 3)
+        XCTAssertEqual(model.tool, .select)
+
+        // Locked, it stays.
+        model.key(Tool.lockKey)
+        XCTAssertTrue(model.locked)
+        model.key("2")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 140, y: 120))
+        model.pointerUp()
+        XCTAssertEqual(doc.shapes.count, 4)
+        XCTAssertEqual(model.tool, .rect, "kept by the lock")
+        XCTAssertEqual(model.selection.count, 1)
+
+        // Escape: select, nothing selected.
+        model.key("\u{1B}")
+        XCTAssertEqual(model.tool, .select)
+        XCTAssertEqual(model.selection, [])
+    }
+
+    func testTheHandPansAndTheEraserSweepsAsOneStep() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let view = CGRect(x: 0, y: 0, width: 400, height: 200)
+        model.draw(in: makeContext(), rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(CGPoint(x: 40, y: 40)), CGPoint(x: 20, y: 20))
+
+        // Dragging with the hand moves the picture under the pointer,
+        // and touches nothing in the document.
+        model.key("h")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 120, y: 110))
+        model.pointerUp()
+        XCTAssertEqual(model.pan, CGVector(dx: 20, dy: 10))
+        XCTAssertEqual(model.tool, .hand, "the hand is not one-shot")
+        let context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(CGPoint(x: 60, y: 50)), CGPoint(x: 20, y: 20), "user (20,20) is now 20 points right and 10 down")
+        let (r, g, b) = pixel(context, 60, 50)
+        XCTAssertEqual([r, g, b], [255, 0, 0], "and the picture is drawn there")
+        XCTAssertFalse(try doc.undo(), "nothing to undo")
+
+        // The eraser deletes what it passes over, as one step, when it lifts.
+        model.key("e")
+        model.beginPointer(at: CGPoint(x: 60, y: 50)) // the rect
+        XCTAssertEqual(doc.shapes.count, 2, "not yet")
+        model.pointerDragged(to: CGPoint(x: 200, y: 100)) // between
+        model.pointerDragged(to: CGPoint(x: 320, y: 110)) // the circle: user (150, 50)
+        model.pointerUp()
+        XCTAssertEqual(doc.shapes.count, 0)
+        XCTAssertEqual(model.tool, .eraser)
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.shapes.count, 2, "one step for the sweep")
+    }
 }

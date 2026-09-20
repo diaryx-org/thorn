@@ -12,6 +12,10 @@ contents:
 - '[The canvas view, on the Mac and on iOS](swift-canvas.md)'
 - '[The style block a new drawing is created with](style-template.md)'
 - '[The wasm binding, for the composer](wasm-binding.md)'
+- '[A diamond gesture in the core](add-diamond.md)'
+- '[An arrow gesture in the core](add-arrow.md)'
+- '[Freehand ink in the core](add-ink.md)'
+- '[A note gesture in the core](add-note.md)'
 part_of: '[thorn](/README.md)'
 ---
 # Tasks

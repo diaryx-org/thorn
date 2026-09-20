@@ -13,16 +13,27 @@ import CoreGraphics
 import Foundation
 import ThornFFI
 
-/// What the next pointer-down does.
-public enum Tool: Equatable {
+/// What the next pointer-down does. Excalidraw's toolset; `Toolset.swift`
+/// has each one's name, symbol and keys, and which the core can make yet.
+public enum Tool: Hashable {
+    /// Pan the view by dragging.
+    case hand
     /// Select, move by dragging, resize by a handle.
     case select
     case rect
+    case diamond
     case ellipse
+    case arrow
     case line
+    /// Freehand ink.
+    case draw
     /// Place a label: with this text, or, with `nil`, one the user types
     /// into a field the view opens at the click (see `TextEdit`).
     case text(String? = nil)
+    /// A box with a label in it.
+    case note
+    /// Delete what is dragged over.
+    case eraser
 }
 
 /// A label being typed: what the view puts a text field over. `id` is
@@ -50,6 +61,16 @@ public final class CanvasModel {
     /// Called when the tool changes — a create tool is one-shot and falls
     /// back to select on its own, so a toolbar has to be told.
     public var onToolChange: ((Tool) -> Void)?
+    /// Keep a create tool after the shape it made, rather than falling
+    /// back to select: Excalidraw's lock.
+    public var locked = false {
+        didSet { if locked != oldValue { onLockChange?(locked) } }
+    }
+    /// Called when `locked` changes.
+    public var onLockChange: ((Bool) -> Void)?
+    /// How far the picture has been dragged from where it fits, in view
+    /// points: the hand tool's doing.
+    public private(set) var pan: CGVector = .zero
 
     /// The selected shapes' `data-id`s, in the order they were picked. A
     /// click on a member of a group selects the outermost group; a
@@ -80,6 +101,10 @@ public final class CanvasModel {
         /// An end of a line being dragged; `other` is the end staying put.
         case endpoint(id: String, end: End, other: CGPoint, to: CGPoint)
         case create(from: CGPoint, to: CGPoint)
+        /// The hand: `start` is `pan` when the drag began.
+        case pan(start: CGVector, from: CGPoint)
+        /// The eraser: what it has passed over, deleted when it lifts.
+        case erase(ids: [String])
     }
     private var drag: Drag?
     /// Whether the drag in flight has been applied to the document, and so
@@ -114,11 +139,12 @@ public final class CanvasModel {
     /// `scale` is the context's device pixels per point.
     public func draw(in context: CGContext, rect: CGRect, scale: CGFloat) {
         guard let picture = document.picture else { return }
-        fit = picture.fitTransform(in: rect)
+        let panned = rect.offsetBy(dx: pan.dx, dy: pan.dy)
+        fit = picture.fitTransform(in: panned)
 
         context.setFillColor(CGColor(gray: 1, alpha: 1))
         context.fill(viewRect(CGRect(origin: .zero, size: picture.size)))
-        picture.draw(in: context, rect: rect, scale: scale)
+        picture.draw(in: context, rect: panned, scale: scale)
 
         let accent = CGColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1)
         context.setStrokeColor(accent)
@@ -161,6 +187,17 @@ public final class CanvasModel {
                 context.strokePath()
             } else {
                 context.stroke(viewRect(CGRect(from: from, to: to)))
+            }
+            context.setLineDash(phase: 0, lengths: [])
+        }
+
+        // What the eraser has passed over is outlined until it lifts.
+        if case .erase(let ids) = drag {
+            context.setStrokeColor(CGColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1))
+            context.setLineDash(phase: 0, lengths: [4, 3])
+            for id in ids {
+                guard let bounds = selectionBounds(id) else { continue }
+                context.stroke(viewRect(bounds))
             }
             context.setLineDash(phase: 0, lengths: [])
         }
@@ -228,6 +265,12 @@ public final class CanvasModel {
             } else if !extending {
                 selection = []
             }
+        case .hand:
+            drag = .pan(start: pan, from: viewPoint)
+        case .eraser:
+            selection = []
+            drag = .erase(ids: [])
+            erase(at: p)
         case .text(let text):
             if let text {
                 selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
@@ -235,11 +278,30 @@ public final class CanvasModel {
                 selection = []
                 onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, fontName: document.font(id: nil)?.postScriptName, wraps: false))
             }
-            tool = .select
+            release()
         case .rect, .ellipse, .line:
             drag = .create(from: p, to: p)
+        case .diamond, .arrow, .draw, .note:
+            // Not yet: `Tool.isAvailable` says so, and the toolbar
+            // disables each until the core has its gesture.
+            break
         }
         needsDisplay?()
+    }
+
+    /// A one-shot tool's shape is made: back to select, unless locked.
+    private func release() {
+        if !locked, tool.isOneShot { tool = .select }
+    }
+
+    /// The eraser passing a user point: the outermost shape there joins
+    /// what it will delete.
+    private func erase(at p: CGPoint) {
+        guard case .erase(var ids) = drag,
+              let hit = document.hit(p, tolerance: userTolerance), let hitId = hit.id,
+              let id = document.outermost(id: hitId)?.id, !ids.contains(id) else { return }
+        ids.append(id)
+        drag = .erase(ids: ids)
     }
 
     /// Pointer moved to a view point with the button down.
@@ -256,6 +318,14 @@ public final class CanvasModel {
             drag = .endpoint(id: id, end: end, other: other, to: p)
         case .create(let from, _):
             drag = .create(from: from, to: p)
+        case .pan(let start, let from):
+            pan = CGVector(dx: start.dx + viewPoint.x - from.x, dy: start.dy + viewPoint.y - from.y)
+            needsDisplay?()
+            return
+        case .erase:
+            erase(at: p)
+            needsDisplay?()
+            return
         case nil:
             return
         }
@@ -312,10 +382,31 @@ public final class CanvasModel {
         case .create:
             if !previewed { previewed = apply() }
             selection = previewed ? created.map { [$0] } ?? [] : []
-            tool = .select
+            release()
+        case .erase(let ids) where !ids.isEmpty:
+            // One undo step for the whole sweep.
+            if ids.count == 1 { try? document.delete(id: ids[0]) } else { try? document.delete(ids: ids) }
         default:
             break
         }
+    }
+
+    /// A key with no modifier, as the canvas sees it: a tool's key picks
+    /// the tool, `q` toggles the lock, Escape is select with nothing
+    /// selected. `true` when the key meant something.
+    @discardableResult
+    public func key(_ key: Character) -> Bool {
+        if key == "\u{1B}" {
+            tool = .select
+            select([])
+        } else if key == Tool.lockKey {
+            locked.toggle()
+        } else if let picked = Tool.forKey(key), picked.isAvailable {
+            tool = picked
+        } else {
+            return false
+        }
+        return true
     }
 
     /// A double-click at a view point: on a label, opens it for editing.

@@ -120,10 +120,16 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         model.pointerUp()
     }
 
+    /// Delete deletes the selection; a bare key is the model's — a tool's
+    /// key, the lock, Escape. A field being typed into is first responder
+    /// instead, so its letters never reach here.
     public override func keyDown(with event: NSEvent) {
         switch event.keyCode {
         case 51, 117: model.deleteSelection() // delete, forward delete
-        default: super.keyDown(with: event)
+        default:
+            let bare = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.shift, .capsLock]).isEmpty
+            if bare, let c = event.charactersIgnoringModifiers?.first, model.key(c) { return }
+            super.keyDown(with: event)
         }
     }
 
@@ -200,6 +206,17 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     public override var canBecomeFirstResponder: Bool { true }
+
+    /// A hardware keyboard's bare key is the model's: a tool's key, the
+    /// lock, Escape. A field being typed into is first responder instead.
+    public override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        for press in presses {
+            guard let key = press.key, key.modifierFlags.subtracting([.shift, .alphaShift]).isEmpty else { continue }
+            let c: Character? = key.keyCode == .keyboardEscape ? "\u{1B}" : key.charactersIgnoringModifiers.first
+            if let c, model.key(c) { return }
+        }
+        super.pressesBegan(presses, with: event)
+    }
 
     public override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
