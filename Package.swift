@@ -19,19 +19,23 @@
 // clone runs no generators, so they must build as-is. `scripts/gen-bindings.sh`
 // writes them from crates/svg-editor-ffi and CI holds them to it (`--check`).
 //
-// The canvas view — AppKit and UIKit, drawing the SVG through resvg-swift with
-// selection and handles on top — is docs/tasks/swift-canvas.md, and lands in
-// the `SvgEditor` target once resvg-swift has a release to pin.
+// `SvgEditor` draws the picture through resvg-swift's `ResvgCoreGraphics`,
+// whose `resvg_uniffi` symbols ride inside this repository's staticlib
+// (crates/svg-editor-ffi depends on resvg-uniffi for exactly that), so the
+// host still force-loads one archive.
 import PackageDescription
 
 let package = Package(
     name: "SvgEditor",
-    platforms: [.macOS(.v12), .iOS(.v16)],
+    platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
         // The low-level binding: `Drawing` and the value types.
         .library(name: "SvgEditorFFI", targets: ["SvgEditorFFI"]),
         // The Swift-shaped layer over it.
         .library(name: "SvgEditor", targets: ["SvgEditor"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/diaryx-org/resvg-swift.git", from: "0.1.1"),
     ],
     targets: [
         // The C ABI as a clang module (`import svg_editor_ffiFFI`). No library
@@ -47,10 +51,14 @@ let package = Package(
             dependencies: ["svg_editor_ffiFFI"],
             path: "packages/svg-editor-swift/uniffi-generated/Sources/SvgEditorFFI"
         ),
-        // The wrapper (committed source).
+        // The document wrapper, the canvas view (AppKit / UIKit) and the
+        // SwiftUI editor with its toolbar (committed source).
         .target(
             name: "SvgEditor",
-            dependencies: ["SvgEditorFFI"],
+            dependencies: [
+                "SvgEditorFFI",
+                .product(name: "ResvgCoreGraphics", package: "resvg-swift"),
+            ],
             path: "packages/svg-editor-swift/Sources/SvgEditor"
         ),
         // Drives a real drawing, so it needs the Rust staticlib:

@@ -42,6 +42,22 @@ pub enum Error {
     Edit(twig::Error),
 }
 
+/// The five characters XML reserves, as entities.
+fn escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&apos;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// A rectangle in user units — what `add_rect` writes and what a drag over
 /// a `<rect>` keeps in flight.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -131,16 +147,71 @@ impl Drawing {
     /// Add a rectangle as the topmost shape, minting its `data-id`. One
     /// splice, one undo step. Returns the id.
     pub fn add_rect(&mut self, rect: Rect) -> Result<String, Error> {
-        let id = self.mint_id();
-        let mut markup = String::new();
-        write!(
-            markup,
-            r#"<rect x="{}" y="{}" width="{}" height="{}" data-id="{id}"/>"#,
-            number::fmt(rect.x),
-            number::fmt(rect.y),
-            number::fmt(rect.width),
-            number::fmt(rect.height),
+        let f = number::fmt;
+        self.add_shape(
+            "rect",
+            &[
+                ("x", f(rect.x)),
+                ("y", f(rect.y)),
+                ("width", f(rect.width)),
+                ("height", f(rect.height)),
+            ],
+            None,
         )
+    }
+
+    /// Add an ellipse filling `bounds` as the topmost shape. Returns the id.
+    pub fn add_ellipse(&mut self, bounds: Bounds) -> Result<String, Error> {
+        let f = number::fmt;
+        self.add_shape(
+            "ellipse",
+            &[
+                ("cx", f(bounds.x + bounds.width / 2.0)),
+                ("cy", f(bounds.y + bounds.height / 2.0)),
+                ("rx", f(bounds.width / 2.0)),
+                ("ry", f(bounds.height / 2.0)),
+            ],
+            None,
+        )
+    }
+
+    /// Add a line from `(x1, y1)` to `(x2, y2)` as the topmost shape.
+    /// Returns the id.
+    pub fn add_line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64) -> Result<String, Error> {
+        let f = number::fmt;
+        self.add_shape(
+            "line",
+            &[("x1", f(x1)), ("y1", f(y1)), ("x2", f(x2)), ("y2", f(y2))],
+            None,
+        )
+    }
+
+    /// Add a label anchored at `(x, y)` as the topmost shape. `text` is
+    /// written escaped; it is plain text, not markup. Returns the id.
+    pub fn add_text(&mut self, x: f64, y: f64, text: &str) -> Result<String, Error> {
+        let f = number::fmt;
+        self.add_shape("text", &[("x", f(x)), ("y", f(y))], Some(text))
+    }
+
+    /// Write one element — `attrs`, then the minted `data-id`, then
+    /// `content` between tags or a self-closing tag — as the topmost child
+    /// of `<svg>`.
+    fn add_shape(
+        &mut self,
+        tag: &str,
+        attrs: &[(&str, String)],
+        content: Option<&str>,
+    ) -> Result<String, Error> {
+        let id = self.mint_id();
+        let mut markup = format!("<{tag}");
+        for (name, value) in attrs {
+            write!(markup, " {name}=\"{}\"", escape(value)).expect("writing to a String");
+        }
+        write!(markup, " data-id=\"{id}\"").expect("writing to a String");
+        match content {
+            Some(text) => write!(markup, ">{}</{tag}>", escape(text)),
+            None => write!(markup, "/>"),
+        }
         .expect("writing to a String");
         self.append_to_root(&markup)?;
         Ok(id)
@@ -162,6 +233,17 @@ impl Drawing {
     /// extent is not in its attributes (a `<path>`, a `<g>`).
     pub fn bounds(&self, id: &str) -> Option<Bounds> {
         self.shape(id).and_then(geometry::bounds)
+    }
+
+    /// The topmost shape within `tolerance` user units of `(x, y)`, in paint
+    /// order — the last one painted wins. A member of a group is returned
+    /// itself; `Shape::group` names the group for a host that selects
+    /// groups whole.
+    pub fn hit(&self, x: f64, y: f64, tolerance: f64) -> Option<&Shape> {
+        self.shapes
+            .iter()
+            .rev()
+            .find(|s| crate::hit::hits(s, x, y, tolerance))
     }
 
     /// Move a shape by `(dx, dy)`: one `set_node_attrs`, one undo step,
@@ -453,6 +535,26 @@ mod tests {
     }
 
     #[test]
+    fn each_kind_adds_as_one_line() {
+        let mut d = Drawing::open(EMPTY).unwrap();
+        d.add_ellipse(Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 4.0,
+        })
+        .unwrap();
+        d.add_line(1.0, 2.0, 3.0, 4.0).unwrap();
+        d.add_text(5.0, 6.0, "a < b & \"c\"").unwrap();
+        assert_eq!(
+            d.source(),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\" data-id=\"s1\"/>\n  <line x1=\"1\" y1=\"2\" x2=\"3\" y2=\"4\" data-id=\"s2\"/>\n  <text x=\"5\" y=\"6\" data-id=\"s3\">a &lt; b &amp; &quot;c&quot;</text>\n</svg>\n"
+        );
+        assert!(d.check().is_empty());
+        assert_eq!(d.shapes().len(), 3);
+    }
+
+    #[test]
     fn add_into_an_empty_root_opens_it() {
         let mut d = Drawing::open("<svg viewBox=\"0 0 1 1\"></svg>").unwrap();
         d.add_rect(Rect {
@@ -541,6 +643,31 @@ mod tests {
         assert!(d.undo().unwrap());
         assert_eq!(d.source(), SCENE);
         assert!(d.check().is_empty());
+    }
+
+    #[test]
+    fn hit_is_the_topmost_shape_under_the_pointer() {
+        let mut d = Drawing::open(SCENE).unwrap();
+        assert_eq!(
+            d.hit(15.0, 15.0, 0.0).and_then(|s| s.id.as_deref()),
+            Some("s1")
+        );
+        assert_eq!(
+            d.hit(52.0, 52.0, 0.0).and_then(|s| s.id.as_deref()),
+            Some("s2")
+        );
+        assert_eq!(d.hit(90.0, 90.0, 0.0), None);
+        // The line ends on the circle's edge; the line was painted last and
+        // wins there, until the circle is brought to the front.
+        assert_eq!(
+            d.hit(45.0, 50.0, 1.0).and_then(|s| s.id.as_deref()),
+            Some("s3")
+        );
+        d.reorder("s2", Order::ToFront).unwrap();
+        assert_eq!(
+            d.hit(45.0, 50.0, 1.0).and_then(|s| s.id.as_deref()),
+            Some("s2")
+        );
     }
 
     #[test]

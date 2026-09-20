@@ -11,3 +11,10 @@
 /.swiftpm/
 packages/svg-editor-swift/.build/
 packages/svg-editor-swift/build/
+
+# The Mac host is its own package (apps/svg-editor-mac/Package.swift), with
+# its own build dir; `Packages/` is where `swift package edit` puts a
+# dependency being worked on locally, and is never committed.
+apps/svg-editor-mac/.build/
+apps/svg-editor-mac/Packages/
+apps/svg-editor-mac/Package.resolved

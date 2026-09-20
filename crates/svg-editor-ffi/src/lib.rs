@@ -14,6 +14,11 @@ use std::sync::{Arc, Mutex};
 
 use svg_editor_core as core;
 
+// Linked, not used: see the dependency's note in Cargo.toml. The `as _` is
+// what makes rustc treat the crate as referenced and carry its objects into
+// the staticlib.
+use resvg_uniffi as _;
+
 uniffi::setup_scaffolding!();
 
 /// Why an open or a gesture refused; mirrors `svg_editor_core::Error`.
@@ -170,6 +175,77 @@ impl From<core::Bounds> for Bounds {
     }
 }
 
+/// Mirrors `svg_editor_core::Handle`.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum Handle {
+    TopLeft,
+    Top,
+    TopRight,
+    Right,
+    BottomRight,
+    Bottom,
+    BottomLeft,
+    Left,
+}
+
+impl From<Handle> for core::Handle {
+    fn from(h: Handle) -> Self {
+        match h {
+            Handle::TopLeft => Self::TopLeft,
+            Handle::Top => Self::Top,
+            Handle::TopRight => Self::TopRight,
+            Handle::Right => Self::Right,
+            Handle::BottomRight => Self::BottomRight,
+            Handle::Bottom => Self::Bottom,
+            Handle::BottomLeft => Self::BottomLeft,
+            Handle::Left => Self::Left,
+        }
+    }
+}
+
+impl From<core::Handle> for Handle {
+    fn from(h: core::Handle) -> Self {
+        match h {
+            core::Handle::TopLeft => Self::TopLeft,
+            core::Handle::Top => Self::Top,
+            core::Handle::TopRight => Self::TopRight,
+            core::Handle::Right => Self::Right,
+            core::Handle::BottomRight => Self::BottomRight,
+            core::Handle::Bottom => Self::Bottom,
+            core::Handle::BottomLeft => Self::BottomLeft,
+            core::Handle::Left => Self::Left,
+        }
+    }
+}
+
+/// A point in user units.
+#[derive(Clone, Copy, Debug, uniffi::Record)]
+pub struct Point {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Where a handle sits on a box.
+#[uniffi::export]
+pub fn handle_position(handle: Handle, bounds: Bounds) -> Point {
+    let (x, y) = core::Handle::from(handle).position(bounds.into());
+    Point { x, y }
+}
+
+/// The handle of `bounds` within `tolerance` of the point, if any.
+#[uniffi::export]
+pub fn handle_at(bounds: Bounds, x: f64, y: f64, tolerance: f64) -> Option<Handle> {
+    core::Handle::at(bounds.into(), x, y, tolerance).map(Into::into)
+}
+
+/// `bounds` after `handle` is dragged by `(dx, dy)`.
+#[uniffi::export]
+pub fn handle_drag(handle: Handle, bounds: Bounds, dx: f64, dy: f64) -> Bounds {
+    core::Handle::from(handle)
+        .drag(bounds.into(), dx, dy)
+        .into()
+}
+
 /// Mirrors `svg_editor_core::Order`.
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
 pub enum Order {
@@ -267,6 +343,21 @@ impl Drawing {
         })?)
     }
 
+    /// Add an ellipse filling `bounds`; returns its `data-id`.
+    pub fn add_ellipse(&self, bounds: Bounds) -> Result<String, DrawingError> {
+        Ok(self.lock().add_ellipse(bounds.into())?)
+    }
+
+    /// Add a line; returns its `data-id`.
+    pub fn add_line(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> Result<String, DrawingError> {
+        Ok(self.lock().add_line(x1, y1, x2, y2)?)
+    }
+
+    /// Add a label anchored at `(x, y)`; returns its `data-id`.
+    pub fn add_text(&self, x: f64, y: f64, text: String) -> Result<String, DrawingError> {
+        Ok(self.lock().add_text(x, y, &text)?)
+    }
+
     /// Delete the shape with this `data-id`.
     pub fn delete(&self, id: String) -> Result<(), DrawingError> {
         Ok(self.lock().delete(&id)?)
@@ -275,6 +366,11 @@ impl Drawing {
     /// The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
     pub fn bounds(&self, id: String) -> Option<Bounds> {
         self.lock().bounds(&id).map(Into::into)
+    }
+
+    /// The topmost shape within `tolerance` of the point, in paint order.
+    pub fn hit(&self, x: f64, y: f64, tolerance: f64) -> Option<Shape> {
+        self.lock().hit(x, y, tolerance).map(Shape::from)
     }
 
     /// Move a shape by `(dx, dy)`.

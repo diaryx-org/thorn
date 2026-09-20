@@ -62,7 +62,8 @@ blank line still does ([docs/tasks/delete-leaves-its-line.md](docs/tasks/delete-
 | [`docs/profile.md`](docs/profile.md) | **What a Diaryx drawing SVG is.** The marker, `data-id` on every shape, the `data-` vocabulary, the number format that makes a re-export byte-stable. Held to by `svg-editor check` and the core's fixture tests. |
 | [`crates/svg-editor-core`](crates/svg-editor-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
 | [`crates/svg-editor-ffi`](crates/svg-editor-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
-| [`packages/svg-editor-swift`](packages/svg-editor-swift) | **The Swift package.** `SvgEditorFFI` is the committed generated binding; `SvgEditor` is `DrawingDocument`, the gestures with Foundation types at the edges. The canvas view is [a task](docs/tasks/swift-canvas.md). `Package.swift` sits at the repo root because SwiftPM needs it there. |
+| [`packages/svg-editor-swift`](packages/svg-editor-swift) | **The Swift package.** `SvgEditorFFI` is the committed generated binding; `SvgEditor` is `DrawingDocument` (the gestures with Foundation types at the edges), `CanvasModel` (the canvas with no view in it: tool, selection, the drag in flight, drawing into a `CGContext` through resvg-swift), `DrawingCanvasView` (AppKit / UIKit) and `DrawingEditor` (SwiftUI, with the toolbar). `Package.swift` sits at the repo root because SwiftPM needs it there. |
+| [`apps/svg-editor-mac`](apps/svg-editor-mac) | **A window around `DrawingEditor`**, for seeing a change work on the Mac. Its own package, because it force-loads the staticlib with a flag a by-version consumer may not carry. |
 | [`apps/svg-editor`](apps/svg-editor) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
 
 ## Gestures
@@ -72,12 +73,13 @@ history:
 
 | gesture | twig | status |
 |---------|------|--------|
-| add | `insert_after` / `insert_child` | done |
+| add rect, ellipse, line, label | `insert_after` / `insert_child` | done |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |
 | move, resize | `set_node_attrs` | done for rect, ellipse, circle, line, polyline, polygon, text, image; a `<path>` or `<g>` moves by `transform`, [not yet](docs/tasks/hit-testing.md) |
 | forward, back, to front, to back | `move_before` / `move_after` | done, among sibling shapes |
 | group, ungroup | `insert_child` with a `<g>` / `unwrap_node` | not yet |
+| select, hit-test, handles | — (pure geometry) | done for the attribute-stated kinds; [`<path>`, `<g>`, measured text](docs/tasks/hit-testing.md) not yet |
 | arrow bindings, freehand ink | — | reserved in the profile |
 
 ## Building
@@ -87,6 +89,7 @@ cargo xtask ci          # fmt, clippy, tests, per-crate isolation, binding drift
 cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
 scripts/test-swift.sh   # the Swift package's tests, on a Mac
 cargo run -p svg-editor -- check crates/svg-editor-core/tests/fixtures/boxes-and-arrow.svg
+cargo build -p svg-editor-ffi && swift run --package-path apps/svg-editor-mac svg-editor-mac drawing.svg
 ```
 
 ## Linking

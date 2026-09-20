@@ -619,6 +619,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "resvg-uniffi"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd51db0edafc64853e0e67839f791b44d79a387ba5f0efb95a544e7c05b62fca"
+dependencies = [
+ "thiserror 1.0.69",
+ "uniffi",
+ "usvg",
+ "usvg-flatten",
+]
+
+[[package]]
 name = "rgb"
 version = "0.8.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -824,6 +836,7 @@ dependencies = [
 name = "svg-editor-ffi"
 version = "0.1.0"
 dependencies = [
+ "resvg-uniffi",
  "svg-editor-core",
  "thiserror 2.0.20",
  "uniffi",
@@ -1210,6 +1223,19 @@ dependencies = [
  "unicode-script",
  "unicode-vo",
  "xmlwriter",
+]
+
+[[package]]
+name = "usvg-flatten"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef88ab1e4086d96da552c050d26487138f3e38be2bdc664db7cec5af7f8a1417"
+dependencies = [
+ "gif",
+ "image-webp",
+ "resvg",
+ "usvg",
+ "zune-jpeg",
 ]
 
 [[package]]

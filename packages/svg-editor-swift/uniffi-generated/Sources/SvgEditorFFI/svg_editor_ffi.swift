@@ -502,9 +502,24 @@ fileprivate struct FfiConverterString: FfiConverter {
 public protocol DrawingProtocol : AnyObject {
     
     /**
+     * Add an ellipse filling `bounds`; returns its `data-id`.
+     */
+    func addEllipse(bounds: Bounds) throws  -> String
+    
+    /**
+     * Add a line; returns its `data-id`.
+     */
+    func addLine(x1: Double, y1: Double, x2: Double, y2: Double) throws  -> String
+    
+    /**
      * Add a rectangle as the topmost shape; returns its `data-id`.
      */
     func addRect(rect: Rect) throws  -> String
+    
+    /**
+     * Add a label anchored at `(x, y)`; returns its `data-id`.
+     */
+    func addText(x: Double, y: Double, text: String) throws  -> String
     
     /**
      * The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
@@ -520,6 +535,11 @@ public protocol DrawingProtocol : AnyObject {
      * Delete the shape with this `data-id`.
      */
     func delete(id: String) throws 
+    
+    /**
+     * The topmost shape within `tolerance` of the point, in paint order.
+     */
+    func hit(x: Double, y: Double, tolerance: Double)  -> Shape?
     
     /**
      * Move a shape by `(dx, dy)`.
@@ -624,12 +644,50 @@ public static func `open`(source: String)throws  -> Drawing {
 
     
     /**
+     * Add an ellipse filling `bounds`; returns its `data-id`.
+     */
+open func addEllipse(bounds: Bounds)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_add_ellipse(self.uniffiClonePointer(),
+        FfiConverterTypeBounds.lower(bounds),$0
+    )
+})
+}
+    
+    /**
+     * Add a line; returns its `data-id`.
+     */
+open func addLine(x1: Double, y1: Double, x2: Double, y2: Double)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_add_line(self.uniffiClonePointer(),
+        FfiConverterDouble.lower(x1),
+        FfiConverterDouble.lower(y1),
+        FfiConverterDouble.lower(x2),
+        FfiConverterDouble.lower(y2),$0
+    )
+})
+}
+    
+    /**
      * Add a rectangle as the topmost shape; returns its `data-id`.
      */
 open func addRect(rect: Rect)throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_svg_editor_ffi_fn_method_drawing_add_rect(self.uniffiClonePointer(),
         FfiConverterTypeRect.lower(rect),$0
+    )
+})
+}
+    
+    /**
+     * Add a label anchored at `(x, y)`; returns its `data-id`.
+     */
+open func addText(x: Double, y: Double, text: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_svg_editor_ffi_fn_method_drawing_add_text(self.uniffiClonePointer(),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),
+        FfiConverterString.lower(text),$0
     )
 })
 }
@@ -663,6 +721,19 @@ open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawi
         FfiConverterString.lower(id),$0
     )
 }
+}
+    
+    /**
+     * The topmost shape within `tolerance` of the point, in paint order.
+     */
+open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
+    return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
+    uniffi_svg_editor_ffi_fn_method_drawing_hit(self.uniffiClonePointer(),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),
+        FfiConverterDouble.lower(tolerance),$0
+    )
+})
 }
     
     /**
@@ -1028,6 +1099,75 @@ public func FfiConverterTypeFinding_lower(_ value: Finding) -> RustBuffer {
 
 
 /**
+ * A point in user units.
+ */
+public struct Point {
+    public var x: Double
+    public var y: Double
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
+    }
+}
+
+
+
+extension Point: Equatable, Hashable {
+    public static func ==(lhs: Point, rhs: Point) -> Bool {
+        if lhs.x != rhs.x {
+            return false
+        }
+        if lhs.y != rhs.y {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(x)
+        hasher.combine(y)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePoint: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Point {
+        return
+            try Point(
+                x: FfiConverterDouble.read(from: &buf), 
+                y: FfiConverterDouble.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Point, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.x, into: &buf)
+        FfiConverterDouble.write(value.y, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePoint_lift(_ buf: RustBuffer) throws -> Point {
+    return try FfiConverterTypePoint.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePoint_lower(_ value: Point) -> RustBuffer {
+    return FfiConverterTypePoint.lower(value)
+}
+
+
+/**
  * Mirrors `svg_editor_core::Rect`.
  */
 public struct Rect {
@@ -1304,6 +1444,115 @@ extension DrawingError: Foundation.LocalizedError {
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Mirrors `svg_editor_core::Handle`.
+ */
+
+public enum Handle {
+    
+    case topLeft
+    case top
+    case topRight
+    case right
+    case bottomRight
+    case bottom
+    case bottomLeft
+    case left
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHandle: FfiConverterRustBuffer {
+    typealias SwiftType = Handle
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Handle {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .topLeft
+        
+        case 2: return .top
+        
+        case 3: return .topRight
+        
+        case 4: return .right
+        
+        case 5: return .bottomRight
+        
+        case 6: return .bottom
+        
+        case 7: return .bottomLeft
+        
+        case 8: return .left
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Handle, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .topLeft:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .top:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .topRight:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .right:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .bottomRight:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .bottom:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .bottomLeft:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .left:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHandle_lift(_ buf: RustBuffer) throws -> Handle {
+    return try FfiConverterTypeHandle.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHandle_lower(_ value: Handle) -> RustBuffer {
+    return FfiConverterTypeHandle.lower(value)
+}
+
+
+
+extension Handle: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Mirrors `svg_editor_core::Order`.
  */
 
@@ -1556,6 +1805,54 @@ fileprivate struct FfiConverterOptionTypeBounds: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeShape: FfiConverterRustBuffer {
+    typealias SwiftType = Shape?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeShape.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeShape.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeHandle: FfiConverterRustBuffer {
+    typealias SwiftType = Handle?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHandle.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHandle.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeAttribute: FfiConverterRustBuffer {
     typealias SwiftType = [Attribute]
 
@@ -1627,6 +1924,43 @@ fileprivate struct FfiConverterSequenceTypeShape: FfiConverterRustBuffer {
         return seq
     }
 }
+/**
+ * The handle of `bounds` within `tolerance` of the point, if any.
+ */
+public func handleAt(bounds: Bounds, x: Double, y: Double, tolerance: Double) -> Handle? {
+    return try!  FfiConverterOptionTypeHandle.lift(try! rustCall() {
+    uniffi_svg_editor_ffi_fn_func_handle_at(
+        FfiConverterTypeBounds.lower(bounds),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),
+        FfiConverterDouble.lower(tolerance),$0
+    )
+})
+}
+/**
+ * `bounds` after `handle` is dragged by `(dx, dy)`.
+ */
+public func handleDrag(handle: Handle, bounds: Bounds, dx: Double, dy: Double) -> Bounds {
+    return try!  FfiConverterTypeBounds.lift(try! rustCall() {
+    uniffi_svg_editor_ffi_fn_func_handle_drag(
+        FfiConverterTypeHandle.lower(handle),
+        FfiConverterTypeBounds.lower(bounds),
+        FfiConverterDouble.lower(dx),
+        FfiConverterDouble.lower(dy),$0
+    )
+})
+}
+/**
+ * Where a handle sits on a box.
+ */
+public func handlePosition(handle: Handle, bounds: Bounds) -> Point {
+    return try!  FfiConverterTypePoint.lift(try! rustCall() {
+    uniffi_svg_editor_ffi_fn_func_handle_position(
+        FfiConverterTypeHandle.lower(handle),
+        FfiConverterTypeBounds.lower(bounds),$0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -1643,7 +1977,25 @@ private var initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
+    if (uniffi_svg_editor_ffi_checksum_func_handle_at() != 36039) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_func_handle_drag() != 45668) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_func_handle_position() != 29198) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_add_ellipse() != 53420) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_add_line() != 46684) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_add_rect() != 65495) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_add_text() != 10444) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_bounds() != 20576) {
@@ -1653,6 +2005,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_delete() != 21561) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_svg_editor_ffi_checksum_method_drawing_hit() != 30910) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_svg_editor_ffi_checksum_method_drawing_move_by() != 16964) {

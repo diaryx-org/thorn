@@ -183,7 +183,7 @@ pub fn resized(shape: &Shape, to: Bounds) -> Option<Vec<(&'static str, String)>>
 }
 
 /// A `points` list: pairs separated by whitespace and/or commas.
-fn points(text: &str) -> Option<Vec<(f64, f64)>> {
+pub(crate) fn points(text: &str) -> Option<Vec<(f64, f64)>> {
     let nums = text
         .split(|c: char| c.is_whitespace() || c == ',')
         .filter(|s| !s.is_empty())

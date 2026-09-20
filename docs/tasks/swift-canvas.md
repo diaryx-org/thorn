@@ -2,12 +2,23 @@
 title: The canvas view, on the Mac and on iOS
 description: An AppKit and a UIKit view over DrawingDocument that draws the SVG through resvg-swift and puts selection, handles and the in-flight shape on top
 author: adammharris
-status: open
+status: done
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # The canvas view, on the Mac and on iOS
+
+**Done 2026-09-20**, in the commit that closes this. `CanvasModel` is the
+canvas with no view in it — tool, selection, the drag in flight, the
+view↔user fit, and drawing into any `CGContext`; `DrawingCanvasView` is an
+`NSView` or a `UIView` over it; `DrawingEditor` is the SwiftUI toolbar and
+canvas. `Package.swift` depends on resvg-swift 0.1.1 for the picture.
+`apps/svg-editor-mac` is a window around it for seeing a change work.
+What is still open moved to `hit-testing.md` (a `<path>`/`<g>` and measured
+text bounds) and `style-template.md`. resvg-swift 0.1.1 places a
+`<marker>` wrongly at any fit but 1:1; fixed there in `b1ccb73`, released
+as its next version.
 
 `packages/svg-editor-swift` has `DrawingDocument` — the gestures with
 Foundation types at the edges — and no view. The canvas is:

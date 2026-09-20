@@ -33,3 +33,13 @@ svg-editor-core.workspace = true
 # resvg-uniffi: a host links exactly one uniffi runtime.
 uniffi = { version = "0.28", features = ["cli"] }
 thiserror.workspace = true
+
+# SVG as vectors for the canvas view. Nothing here calls it: it is linked so
+# that its UniFFI scaffolding lands in *this* crate's staticlib, which is the
+# one archive a host force-loads — two Rust archives in one executable is a
+# duplicate-`std` link error, so a second binding crate can only ride along
+# inside the first. The Swift side (`ResvgCoreGraphics`, from the resvg-swift
+# package the canvas depends on) finds its `resvg_uniffi` symbols there. A
+# host that already carries resvg-uniffi in its own FFI crate (leaf-ffi does)
+# gets one copy either way, because Cargo unifies the version.
+resvg-uniffi = "0.1.1"

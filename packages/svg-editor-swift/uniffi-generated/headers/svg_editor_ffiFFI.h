@@ -266,9 +266,24 @@ void uniffi_svg_editor_ffi_fn_free_drawing(void*_Nonnull ptr, RustCallStatus *_N
 void*_Nonnull uniffi_svg_editor_ffi_fn_constructor_drawing_open(RustBuffer source, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
+RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_add_ellipse(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_LINE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_LINE
+RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_add_line(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_RECT
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_RECT
 RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_add_rect(void*_Nonnull ptr, RustBuffer rect, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_ADD_TEXT
+RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_add_text(void*_Nonnull ptr, double x, double y, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_BOUNDS
@@ -284,6 +299,11 @@ RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_check(void*_Nonnull ptr, Rust
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_DELETE
 void uniffi_svg_editor_ffi_fn_method_drawing_delete(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_HIT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_HIT
+RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_hit(void*_Nonnull ptr, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_MOVE_BY
@@ -319,6 +339,21 @@ RustBuffer uniffi_svg_editor_ffi_fn_method_drawing_source(void*_Nonnull ptr, Rus
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_UNDO
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_METHOD_DRAWING_UNDO
 int8_t uniffi_svg_editor_ffi_fn_method_drawing_undo(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_AT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_AT
+RustBuffer uniffi_svg_editor_ffi_fn_func_handle_at(RustBuffer bounds, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_DRAG
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_DRAG
+RustBuffer uniffi_svg_editor_ffi_fn_func_handle_drag(RustBuffer handle, RustBuffer bounds, double dx, double dy, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_POSITION
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_FN_FUNC_HANDLE_POSITION
+RustBuffer uniffi_svg_editor_ffi_fn_func_handle_position(RustBuffer handle, RustBuffer bounds, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_SVG_EDITOR_FFI_RUSTBUFFER_ALLOC
@@ -601,9 +636,45 @@ void ffi_svg_editor_ffi_rust_future_free_void(uint64_t handle
 void ffi_svg_editor_ffi_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_AT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_AT
+uint16_t uniffi_svg_editor_ffi_checksum_func_handle_at(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_DRAG
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_DRAG
+uint16_t uniffi_svg_editor_ffi_checksum_func_handle_drag(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_POSITION
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_FUNC_HANDLE_POSITION
+uint16_t uniffi_svg_editor_ffi_checksum_func_handle_position(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_add_ellipse(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_LINE
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_LINE
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_add_line(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_RECT
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_RECT
 uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_add_rect(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_TEXT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_ADD_TEXT
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_add_text(void
     
 );
 #endif
@@ -622,6 +693,12 @@ uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_check(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_DELETE
 uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_delete(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_HIT
+#define UNIFFI_FFIDEF_UNIFFI_SVG_EDITOR_FFI_CHECKSUM_METHOD_DRAWING_HIT
+uint16_t uniffi_svg_editor_ffi_checksum_method_drawing_hit(void
     
 );
 #endif
