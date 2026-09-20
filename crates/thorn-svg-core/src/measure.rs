@@ -1,9 +1,10 @@
 //! A `<text>`'s box, measured. The core has no fonts; a label's extent is
 //! its face's to say, and the face is the host's — the same one it draws
 //! with, or the box and the glyphs disagree. So a [`Drawing`] takes a
-//! [`Measure`] from its host and asks it, once per distinct label, for the
-//! box of the label laid out at the origin; without one it falls back to a
-//! nominal box from `font-size` and the character count.
+//! [`Measure`] from its host and asks it, once per distinct label as it
+//! stands, for the box of the label laid out in its own coordinates;
+//! without one it falls back to a nominal box from `font-size` and the
+//! character count.
 //!
 //! [`Usvg`] is the measurer for a host that draws with resvg, behind the
 //! `usvg` feature: the same layout, over the system's fonts, so the box is
@@ -18,10 +19,9 @@ pub trait Measure: Send + Sync {
     /// The box of the one `<text>` in `svg` — a small document the drawing
     /// writes: the `<svg>` element's attributes, every `<style>` and
     /// `<defs>`, the label's enclosing `<g>`s with their `transform`s
-    /// taken off, and the label itself with its `x`, `y` and `transform`
-    /// taken off, so it lays out at the origin. The box is in that
-    /// document's user units, relative to the anchor. `None` when the
-    /// label lays out to nothing — no characters, no face at all.
+    /// taken off, and the label itself with its `transform` taken off, so
+    /// it lays out in its own coordinates. The box is in those. `None`
+    /// when the label lays out to nothing — no characters, no face at all.
     fn measure(&self, svg: &str) -> Option<Bounds>;
 }
 

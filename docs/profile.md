@@ -72,10 +72,10 @@ in every drawing app.
 
 A `<text>`'s extent is its face's to say, and the face is the host's — the
 one it draws with, or the box and the glyphs disagree. The core asks the
-host (`measure::Measure`) for the label laid out at the origin under
-everything that styles it, once per distinct label, and places the box by
-the anchor; the binding lends resvg's own layout over the system's fonts,
-so the box is the one on screen. With no host layout the box is nominal:
+host (`measure::Measure`) for the label laid out where it is under
+everything that styles it, once per distinct label as it stands; the
+binding lends resvg's own layout over the system's fonts, so the box is
+the one on screen. With no host layout the box is nominal:
 `font-size` tall (12 when unset, usvg's default), six tenths of that per
 character wide, placed by `text-anchor`, and as many lines of that as
 `data-width` takes. A label's characters are its text nodes', every

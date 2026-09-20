@@ -249,6 +249,7 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(width, one.width / 2, accuracy: 0.01)
         XCTAssertGreaterThanOrEqual(doc.source.components(separatedBy: "<tspan").count - 1, 2)
         let wrapped = try XCTUnwrap(doc.bounds(id: t))
+        XCTAssertEqual(wrapped.minX, one.minX, accuracy: 0.5, "the box stays at the anchor")
         XCTAssertLessThanOrEqual(wrapped.width, width + 0.5)
         XCTAssertGreaterThan(wrapped.height, one.height * 1.8)
         XCTAssertEqual(doc.shape(id: t)?.text, "the quick brown fox jumps over the lazy dog")

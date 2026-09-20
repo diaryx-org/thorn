@@ -52,7 +52,10 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         if edit.wraps {
             f.textContainer?.widthTracksTextView = true
         } else {
+            // One line that grows with what is typed, however long.
             f.isHorizontallyResizable = true
+            f.minSize = edit.frame.size
+            f.maxSize = CGSize(width: .greatestFiniteMagnitude, height: edit.frame.height)
             f.textContainer?.widthTracksTextView = false
             f.textContainer?.containerSize = CGSize(width: .greatestFiniteMagnitude, height: edit.frame.height)
         }

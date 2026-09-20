@@ -168,8 +168,7 @@ pub struct Drawing {
     source: String,
     /// The host's text layout, when it lent one.
     measure: Option<Box<dyn Measure>>,
-    /// What the measurer said, by the document it was asked about — a
-    /// label at the origin, so a move is a hit.
+    /// What the measurer said, by the document it was asked about.
     measured: RefCell<HashMap<String, Option<Bounds>>>,
 }
 
@@ -376,7 +375,9 @@ impl Drawing {
     }
 
     /// A label's box by the host's layout, in the label's own coordinates.
-    /// `None` without a measurer, or when it lays out nothing.
+    /// `None` without a measurer, or when it lays out nothing. The label
+    /// is measured where it is, since a wrapped one's `<tspan>`s carry its
+    /// `x` themselves.
     fn measured_label(&self, shape: &Shape) -> Option<Bounds> {
         let content = self.node(shape.node).content_span.clone()?;
         let interior = self.source[content].to_string();
@@ -388,21 +389,16 @@ impl Drawing {
     fn measured_interior(&self, shape: &Shape, interior: &str) -> Option<Bounds> {
         let measure = self.measure.as_ref()?;
         let doc = self.label_document(shape, interior);
-        let at_origin = *self
+        *self
             .measured
             .borrow_mut()
             .entry(doc)
-            .or_insert_with_key(|doc| measure.measure(doc));
-        let (x, y) = (
-            shape.number("x").unwrap_or(0.0),
-            shape.number("y").unwrap_or(0.0),
-        );
-        at_origin.map(|b| b.offset(x, y))
+            .or_insert_with_key(|doc| measure.measure(doc))
     }
 
     /// The document a measurer is asked about (see [`Measure::measure`]):
-    /// the label at the origin under everything that styles it, with
-    /// `interior` as its markup.
+    /// the label where it is, under everything that styles it, with
+    /// `interior` as its markup and its own `transform` off.
     fn label_document(&self, shape: &Shape, interior: &str) -> String {
         let mut doc =
             String::from("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"");
@@ -429,7 +425,7 @@ impl Drawing {
             doc.push('>');
         }
         doc.push_str("<text");
-        write_attributes(&mut doc, &shape.attrs, &["x", "y", "transform"]);
+        write_attributes(&mut doc, &shape.attrs, &["transform"]);
         doc.push('>');
         doc.push_str(interior);
         doc.push_str("</text>");
@@ -1944,14 +1940,18 @@ mod tests {
     }
 
     /// A measurer that says every label is 40 wide and 10 tall, its box
-    /// 8 above the baseline.
+    /// 8 above the baseline — at the `x` and `y` the label carries.
     struct Fixed;
 
     impl Measure for Fixed {
-        fn measure(&self, _svg: &str) -> Option<Bounds> {
+        fn measure(&self, svg: &str) -> Option<Bounds> {
+            let attr = |name: &str| -> f64 {
+                let at = svg.find(&format!(" {name}=\"")).unwrap() + name.len() + 3;
+                svg[at..].split('"').next().unwrap().parse().unwrap()
+            };
             Some(Bounds {
-                x: 0.0,
-                y: -8.0,
+                x: attr("x"),
+                y: attr("y") - 8.0,
                 width: 40.0,
                 height: 10.0,
             })
@@ -1961,7 +1961,7 @@ mod tests {
     const LABELLED: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" font-family=\"serif\" data-diaryx-drawing=\"1\">\n  <style>text { fill: red }</style>\n  <g transform=\"translate(100 0)\" class=\"k\" data-id=\"g\">\n    <text x=\"10\" y=\"50\" transform=\"scale(2)\" data-id=\"t\">Hi <tspan>there</tspan></text>\n  </g>\n</svg>\n";
 
     #[test]
-    fn a_label_is_measured_by_the_host_at_the_origin_and_placed_by_its_anchor() {
+    fn a_label_is_measured_by_the_host_where_it_is() {
         let mut d = Drawing::open(LABELLED).unwrap();
         assert_eq!(d.shape("t").unwrap().text.as_deref(), Some("Hi there"));
         // Without a measurer: the nominal box, through the chain.
@@ -2003,7 +2003,7 @@ mod tests {
     }
 
     #[test]
-    fn the_measurer_is_asked_about_the_label_at_the_origin_under_its_styles() {
+    fn the_measurer_is_asked_about_the_label_where_it_is_under_its_styles() {
         use std::sync::{Arc, Mutex};
         /// Remembers what it was asked and measures nothing.
         struct Spy(Arc<Mutex<Vec<String>>>);
@@ -2017,15 +2017,17 @@ mod tests {
         let asked = Arc::new(Mutex::new(Vec::new()));
         d.set_measure(Box::new(Spy(asked.clone())));
         d.bounds("t");
+        d.bounds("t");
         d.move_by("t", 1.0, 1.0).unwrap();
         d.bounds("t");
         let seen: Vec<String> = asked.lock().unwrap().clone();
         assert_eq!(
             seen,
             [
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\" font-family=\"serif\" data-diaryx-drawing=\"1\"><style>text { fill: red }</style><g class=\"k\" data-id=\"g\"><text data-id=\"t\">Hi <tspan>there</tspan></text></g></svg>"
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\" font-family=\"serif\" data-diaryx-drawing=\"1\"><style>text { fill: red }</style><g class=\"k\" data-id=\"g\"><text x=\"10\" y=\"50\" data-id=\"t\">Hi <tspan>there</tspan></text></g></svg>",
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\" font-family=\"serif\" data-diaryx-drawing=\"1\"><style>text { fill: red }</style><g class=\"k\" data-id=\"g\"><text x=\"10.5\" y=\"50.5\" data-id=\"t\">Hi <tspan>there</tspan></text></g></svg>"
             ],
-            "asked once: a move does not change the label"
+            "asked once per label as it stands"
         );
     }
 
