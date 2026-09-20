@@ -89,7 +89,7 @@ cargo xtask ci          # fmt, clippy, tests, per-crate isolation, binding drift
 cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
 scripts/test-swift.sh   # the Swift package's tests, on a Mac
 cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-arrow.svg
-cargo build -p thorn-svg-ffi && swift run --package-path apps/thorn-mac thorn-mac drawing.svg
+cargo xtask mac drawing.svg   # build the staticlib, open the Mac app around a drawing
 ```
 
 ## Linking

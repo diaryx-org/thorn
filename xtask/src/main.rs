@@ -8,6 +8,7 @@
 //! [cargo-xtask]: https://github.com/matklad/cargo-xtask
 
 mod ci;
+mod mac;
 mod util;
 
 use anyhow::Result;
@@ -30,11 +31,14 @@ enum Task {
     Ci(ci::Args),
     /// (Re)generate the committed UniFFI Swift binding from crates/thorn-svg-ffi.
     Bindings,
+    /// Build the staticlib and open the Mac app (apps/thorn-mac) around a drawing.
+    Mac(mac::Args),
 }
 
 fn main() -> Result<()> {
     match Cli::parse().task {
         Task::Ci(args) => ci::run_task(args),
         Task::Bindings => util::run(util::cmd("bash").arg("scripts/gen-bindings.sh")),
+        Task::Mac(args) => mac::run_task(args),
     }
 }

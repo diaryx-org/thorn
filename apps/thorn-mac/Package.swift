@@ -4,7 +4,8 @@
 // own package rather than a target of the root one because it force-loads
 // the Rust staticlib with an unsafe linker flag, and a package with an
 // unsafe flag anywhere in it cannot be consumed by version — which the
-// root package must be. Build the archive first:
+// root package must be. `cargo xtask mac [file.svg]` builds the archive and
+// runs this; by hand that is:
 //
 //   cargo build -p thorn-svg-ffi
 //   swift run --package-path apps/thorn-mac thorn-mac [file.svg]
