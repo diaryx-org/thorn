@@ -629,7 +629,25 @@ impl Drawing {
             .apply_vector(dx, dy);
         let updates = geometry::moved(shape, ldx, ldy).ok_or_else(unsupported)?;
         self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
-        self.fold(steps)
+        self.fold(steps)?;
+        self.reflow_if_wrapped(id, steps)
+    }
+
+    /// A wrapped label's `<tspan>`s carry its `x` themselves: after its
+    /// anchor moves, its lines are written again at the new one.
+    fn reflow_if_wrapped(&mut self, id: &str, steps: &mut usize) -> Result<(), Error> {
+        let Some(shape) = self.shape(id) else {
+            return Ok(());
+        };
+        if shape.kind != ShapeKind::Text || shape.attr("data-width").is_none() {
+            return Ok(());
+        }
+        if let Some(text) = shape.text.clone() {
+            let markup = self.flowed(shape, &text);
+            self.write_interior(shape.node, &markup)?;
+            self.fold(steps)?;
+        }
+        Ok(())
     }
 
     /// Move several shapes by `(dx, dy)` as one undo step — a
@@ -868,6 +886,9 @@ impl Drawing {
                     .unwrap_or_else(|| vec![("transform", total.fmt())]);
                 self.write_attrs(member.node, &member.attrs, &updates)?;
                 self.fold(&mut steps)?;
+                if let Some(id) = member.id.as_deref() {
+                    self.reflow_if_wrapped(id, &mut steps)?;
+                }
             }
         }
 
@@ -2261,6 +2282,15 @@ mod tests {
         let b = d.bounds("t").unwrap();
         assert_eq!((b.width, b.height), (80.0, 12.0 + 5.0 * 1.2 * 12.0));
         assert_eq!(d.check(), []);
+
+        // Moved across, every line moves: the `<tspan>`s carry the `x`.
+        d.move_by("t", 5.0, 0.0).unwrap();
+        assert!(d.source().contains(
+            "<text x=\"15\" y=\"20\" data-id=\"t\" data-width=\"80\"><tspan x=\"15\">the quick</tspan><tspan x=\"15\" dy=\"1.2em\">brown fox</tspan>"
+        ));
+        assert_eq!(d.bounds("t").unwrap().x, 15.0);
+        assert!(d.undo().unwrap(), "one step");
+        assert_eq!(d.bounds("t").unwrap().x, 10.0);
 
         // Narrower by the handle: re-flowed, the box's corner kept.
         d.resize(
