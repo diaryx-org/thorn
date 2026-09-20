@@ -84,9 +84,13 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
     /// Return commits; Shift-Return breaks the line; Escape leaves the
     /// label as it was.
     public func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        // Shift-Return arrives as `insertNewline:` like Return does; the
+        // shift is on the event.
+        let shifted = NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false
         switch selector {
+        case #selector(insertNewline(_:)) where shifted, #selector(insertLineBreak(_:)):
+            textView.insertText("\n", replacementRange: textView.selectedRange())
         case #selector(insertNewline(_:)): closeField(commit: true)
-        case #selector(insertLineBreak(_:)): textView.insertText("\n", replacementRange: textView.selectedRange())
         case #selector(cancelOperation(_:)): closeField(commit: false)
         default: return false
         }
