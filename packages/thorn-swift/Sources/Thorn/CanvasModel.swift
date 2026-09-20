@@ -45,9 +45,9 @@ public final class CanvasModel {
     /// How far, in view points, a click may miss a stroke or a handle.
     public var tolerance: CGFloat = 4
 
-    /// The user-unit box the picture is drawn into, set by the view from its
-    /// bounds on every draw; the same fit `SVGPicture.draw` uses.
-    private var fit: (scale: CGFloat, origin: CGPoint) = (1, .zero)
+    /// User units → view points for the last `draw`: asked of the picture, so
+    /// it is the fit `SVGPicture.draw` drew under and cannot disagree with it.
+    private var fit: CGAffineTransform = .identity
 
     private enum Drag {
         case move(id: String, start: CGRect, delta: CGVector)
@@ -68,16 +68,12 @@ public final class CanvasModel {
     // MARK: Coordinates
 
     /// User units → view points, for the last `draw`.
-    public func viewPoint(_ p: CGPoint) -> CGPoint {
-        CGPoint(x: fit.origin.x + p.x * fit.scale, y: fit.origin.y + p.y * fit.scale)
-    }
+    public func viewPoint(_ p: CGPoint) -> CGPoint { p.applying(fit) }
 
     /// View points → user units, for the last `draw`.
-    public func userPoint(_ p: CGPoint) -> CGPoint {
-        CGPoint(x: (p.x - fit.origin.x) / fit.scale, y: (p.y - fit.origin.y) / fit.scale)
-    }
+    public func userPoint(_ p: CGPoint) -> CGPoint { p.applying(fit.inverted()) }
 
-    private var userTolerance: CGFloat { tolerance / fit.scale }
+    private var userTolerance: CGFloat { tolerance / fit.a }
 
     // MARK: Drawing
 
@@ -85,15 +81,12 @@ public final class CanvasModel {
     /// in flight, in a **y-down** context (a `UIView`, a flipped `NSView`).
     /// `scale` is the context's device pixels per point.
     public func draw(in context: CGContext, rect: CGRect, scale: CGFloat) {
-        let size = document.picture?.size ?? CGSize(width: 1, height: 1)
-        let s = min(rect.width / size.width, rect.height / size.height)
-        let drawn = CGSize(width: size.width * s, height: size.height * s)
-        let origin = CGPoint(x: rect.minX + (rect.width - drawn.width) / 2, y: rect.minY + (rect.height - drawn.height) / 2)
-        fit = (s, origin)
+        guard let picture = document.picture else { return }
+        fit = picture.fitTransform(in: rect)
 
         context.setFillColor(CGColor(gray: 1, alpha: 1))
-        context.fill(CGRect(origin: origin, size: drawn))
-        document.picture?.draw(in: context, rect: rect, scale: scale)
+        context.fill(viewRect(CGRect(origin: .zero, size: picture.size)))
+        picture.draw(in: context, rect: rect, scale: scale)
 
         let accent = CGColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1)
         context.setStrokeColor(accent)
@@ -125,10 +118,7 @@ public final class CanvasModel {
         }
     }
 
-    private func viewRect(_ r: CGRect) -> CGRect {
-        let o = viewPoint(r.origin)
-        return CGRect(x: o.x, y: o.y, width: r.width * fit.scale, height: r.height * fit.scale)
-    }
+    private func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
 
     /// The selection's box as drawn: its stated bounds, or a nominal box
     /// around a label's anchor, since a `<text>`'s extent is its font's.

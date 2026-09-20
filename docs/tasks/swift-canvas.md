@@ -13,12 +13,13 @@ part_of: '[Tasks](tasks.md)'
 canvas with no view in it — tool, selection, the drag in flight, the
 view↔user fit, and drawing into any `CGContext`; `DrawingCanvasView` is an
 `NSView` or a `UIView` over it; `DrawingEditor` is the SwiftUI toolbar and
-canvas. `Package.swift` depends on resvg-swift 0.1.1 for the picture.
-`apps/thorn-mac` is a window around it for seeing a change work.
+canvas. `Package.swift` depends on resvg-swift 0.1.2 for the picture:
+the canvas found that 0.1.1 placed a `<marker>` wrongly at any fit but 1:1
+(fixed there in `b1ccb73`), and 0.1.2's `SVGPicture.fitTransform(in:)` is
+the fit the canvas maps clicks through, so it cannot disagree with what was
+drawn. `apps/thorn-mac` is a window around it for seeing a change work.
 What is still open moved to `hit-testing.md` (a `<path>`/`<g>` and measured
-text bounds) and `style-template.md`. resvg-swift 0.1.1 places a
-`<marker>` wrongly at any fit but 1:1; fixed there in `b1ccb73`, released
-as its next version.
+text bounds) and `style-template.md`.
 
 `packages/thorn-swift` has `DrawingDocument` — the gestures with
 Foundation types at the edges — and no view. The canvas is:
