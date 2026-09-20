@@ -47,7 +47,7 @@ pub const JOBS: &[Job] = &[
     Job {
         id: "bindings",
         name: "Swift bindings",
-        about: "the committed UniFFI binding is what crates/svg-editor-ffi produces",
+        about: "the committed UniFFI binding is what crates/thorn-svg-ffi produces",
         run: bindings,
     },
 ];
@@ -77,9 +77,9 @@ fn test() -> Result<()> {
 /// actually builds it. A new workspace member belongs in this list; the test
 /// below is what says so.
 const ISOLATED: &[&[&str]] = &[
-    &["-p", "svg-editor-core"],
-    &["-p", "svg-editor-ffi"],
-    &["-p", "svg-editor"],
+    &["-p", "thorn-svg-core"],
+    &["-p", "thorn-svg-ffi"],
+    &["-p", "thorn-svg"],
     &["-p", "xtask"],
 ];
 

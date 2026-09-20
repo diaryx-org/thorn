@@ -1,7 +1,7 @@
 ---
 title: The Diaryx drawing profile
-description: What a Diaryx drawing SVG is — the marker, the ids, the number format — stated once, held to by `svg-editor check` and the core's tests
-part_of: '[svg-editor](/README.md)'
+description: What a Diaryx drawing SVG is — the marker, the ids, the number format — stated once, held to by `thorn check` and the core's tests
+part_of: '[thorn](/README.md)'
 audience: public
 ---
 # The Diaryx drawing profile
@@ -18,8 +18,8 @@ the correct silhouette in flat colour. A browser, Finder's preview, a git
 forge, leaf's body and a published page all draw the same picture; only the
 editor reads the `data-` vocabulary, and it degrades to nothing.
 
-This is profile version **1**. The rules are numbered; `svg-editor check`
-names the rule it found broken, and `svg_editor_core::profile::Rule` is the
+This is profile version **1**. The rules are numbered; `thorn check`
+names the rule it found broken, and `thorn_svg_core::profile::Rule` is the
 same list as code.
 
 ## Rules
@@ -75,7 +75,7 @@ draws.
 
 ## What the writer emits
 
-`svg_editor_core::Drawing` writes an added shape as one element on its own
+`thorn_svg_core::Drawing` writes an added shape as one element on its own
 line, indented two spaces under `<svg>`, attributes in the order geometry,
 then `data-id`, with a self-closing tag — `<rect x="10" y="10.5" width="80"
 height="40" data-id="s1"/>`. A move or resize rewrites only the geometry
@@ -89,8 +89,8 @@ marker, and that template is the app's to settle (docs/tasks/style-template.md).
 
 ## Held to by
 
-- `svg-editor check <file>` — exits 1 on any finding.
-- `crates/svg-editor-core/tests/profile_fixtures.rs` — every fixture under
+- `thorn check <file>` — exits 1 on any finding.
+- `crates/thorn-svg-core/tests/profile_fixtures.rs` — every fixture under
   `tests/fixtures/` conforms, and what the editor writes into it conforms.
-- `svg_editor_core::number` — the number format's tests are the byte-stability
+- `thorn_svg_core::number` — the number format's tests are the byte-stability
   claim.

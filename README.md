@@ -1,17 +1,17 @@
 ---
 part_of: id:org/kv2bv2m
-title: svg-editor
+title: thorn
 contents:
 - '[The Diaryx drawing profile](/docs/profile.md)'
 - '[Tasks](/docs/tasks/tasks.md)'
 - '[Changelog](/docs/CHANGELOG.md)'
-- '[svg-editor on diaryx.org](/www/index.md)'
+- '[thorn on diaryx.org](/www/index.md)'
 - '[Audiences](/vocab/audiences.md)'
 config: .config/prov.yaml
 registry: registry.yaml
 id: qf27cd5
 ---
-# svg-editor
+# thorn
 
 A drawing editor over [twig](https://github.com/diaryx-org/twig)'s SVG: the
 kind of drawing Excalidraw and tldraw make — boxes, arrows, labels, freehand
@@ -20,12 +20,12 @@ preview, a git forge and `grep`, and the editor edits it losslessly. A shape
 model, a profile that says what a Diaryx drawing SVG is, and gestures that
 each end in one twig splice and one undo step.
 
-> `svg-editor` is a placeholder name. The org's proposal argued for `petal`;
-> the name is Adam's to decide, and changes before the first release
-> ([docs/tasks/first-release.md](docs/tasks/first-release.md)).
+> **thorn**: a protrusion from a twig, and a sharp thing to draw with. `thorn`
+> itself is taken on crates.io, so the crates are `thorn-svg`, `thorn-svg-core`
+> and `thorn-svg-ffi`; the binary and the Swift product are `thorn` and `Thorn`.
 
 ```rust
-use svg_editor_core::{Drawing, Order, Rect};
+use thorn_svg_core::{Drawing, Order, Rect};
 
 let mut drawing = Drawing::open(&std::fs::read_to_string("diagram.svg")?)?;
 let id = drawing.add_rect(Rect { x: 10.0, y: 10.0, width: 80.0, height: 40.0 })?;
@@ -59,12 +59,12 @@ blank line still does ([docs/tasks/delete-leaves-its-line.md](docs/tasks/delete-
 
 | part | what it is |
 |------|------------|
-| [`docs/profile.md`](docs/profile.md) | **What a Diaryx drawing SVG is.** The marker, `data-id` on every shape, the `data-` vocabulary, the number format that makes a re-export byte-stable. Held to by `svg-editor check` and the core's fixture tests. |
-| [`crates/svg-editor-core`](crates/svg-editor-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
-| [`crates/svg-editor-ffi`](crates/svg-editor-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
-| [`packages/svg-editor-swift`](packages/svg-editor-swift) | **The Swift package.** `SvgEditorFFI` is the committed generated binding; `SvgEditor` is `DrawingDocument` (the gestures with Foundation types at the edges), `CanvasModel` (the canvas with no view in it: tool, selection, the drag in flight, drawing into a `CGContext` through resvg-swift), `DrawingCanvasView` (AppKit / UIKit) and `DrawingEditor` (SwiftUI, with the toolbar). `Package.swift` sits at the repo root because SwiftPM needs it there. |
-| [`apps/svg-editor-mac`](apps/svg-editor-mac) | **A window around `DrawingEditor`**, for seeing a change work on the Mac. Its own package, because it force-loads the staticlib with a flag a by-version consumer may not carry. |
-| [`apps/svg-editor`](apps/svg-editor) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
+| [`docs/profile.md`](docs/profile.md) | **What a Diaryx drawing SVG is.** The marker, `data-id` on every shape, the `data-` vocabulary, the number format that makes a re-export byte-stable. Held to by `thorn check` and the core's fixture tests. |
+| [`crates/thorn-svg-core`](crates/thorn-svg-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
+| [`crates/thorn-svg-ffi`](crates/thorn-svg-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
+| [`packages/thorn-swift`](packages/thorn-swift) | **The Swift package.** `ThornFFI` is the committed generated binding; `Thorn` is `DrawingDocument` (the gestures with Foundation types at the edges), `CanvasModel` (the canvas with no view in it: tool, selection, the drag in flight, drawing into a `CGContext` through resvg-swift), `DrawingCanvasView` (AppKit / UIKit) and `DrawingEditor` (SwiftUI, with the toolbar). `Package.swift` sits at the repo root because SwiftPM needs it there. |
+| [`apps/thorn-mac`](apps/thorn-mac) | **A window around `DrawingEditor`**, for seeing a change work on the Mac. Its own package, because it force-loads the staticlib with a flag a by-version consumer may not carry. |
+| [`apps/thorn-svg`](apps/thorn-svg) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
 
 ## Gestures
 
@@ -88,18 +88,18 @@ history:
 cargo xtask ci          # fmt, clippy, tests, per-crate isolation, binding drift
 cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
 scripts/test-swift.sh   # the Swift package's tests, on a Mac
-cargo run -p svg-editor -- check crates/svg-editor-core/tests/fixtures/boxes-and-arrow.svg
-cargo build -p svg-editor-ffi && swift run --package-path apps/svg-editor-mac svg-editor-mac drawing.svg
+cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-arrow.svg
+cargo build -p thorn-svg-ffi && swift run --package-path apps/thorn-mac thorn-mac drawing.svg
 ```
 
 ## Linking
 
 The Swift package builds the binding from source and expects the Rust
 staticlib to be linked by the app. An app that already links a Rust FFI crate
-of its own — the Diaryx app does — makes `svg-editor-ffi` a Cargo dependency
+of its own — the Diaryx app does — makes `thorn-svg-ffi` a Cargo dependency
 of that crate, so the scaffolding lands in the one archive it already
 force-loads; two Rust staticlibs cannot share an executable. An app with no
-Rust of its own builds `crates/svg-editor-ffi`'s staticlib and force-loads
+Rust of its own builds `crates/thorn-svg-ffi`'s staticlib and force-loads
 that, as `scripts/test-swift.sh` does.
 
 ## Where it fits

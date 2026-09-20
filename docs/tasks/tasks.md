@@ -1,6 +1,6 @@
 ---
 title: Tasks
-description: Deferred work on svg-editor, one file each — a commitment with a done state
+description: Deferred work on thorn, one file each — a commitment with a done state
 author: adammharris
 created: 2026-09-19
 updated: 2026-09-20
@@ -12,7 +12,7 @@ contents:
 - '[The canvas view, on the Mac and on iOS](swift-canvas.md)'
 - '[The style block a new drawing is created with](style-template.md)'
 - '[The wasm binding, for the composer](wasm-binding.md)'
-part_of: '[svg-editor](/README.md)'
+part_of: '[thorn](/README.md)'
 ---
 # Tasks
 

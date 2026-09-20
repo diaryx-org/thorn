@@ -16,7 +16,7 @@ fixity: attachments
 recycle_bin: false
 history: off
 about: off
-workspace_id: svg-editor
+workspace_id: thorn
 root: README.md
 fields:
   audience:
@@ -46,7 +46,7 @@ views:
     where: { has: status }
 exports:
   www:
-    label: svg-editor on diaryx.org
+    label: thorn on diaryx.org
     gate:
       field: audience
       value: public

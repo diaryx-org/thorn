@@ -14,13 +14,13 @@ canvas with no view in it — tool, selection, the drag in flight, the
 view↔user fit, and drawing into any `CGContext`; `DrawingCanvasView` is an
 `NSView` or a `UIView` over it; `DrawingEditor` is the SwiftUI toolbar and
 canvas. `Package.swift` depends on resvg-swift 0.1.1 for the picture.
-`apps/svg-editor-mac` is a window around it for seeing a change work.
+`apps/thorn-mac` is a window around it for seeing a change work.
 What is still open moved to `hit-testing.md` (a `<path>`/`<g>` and measured
 text bounds) and `style-template.md`. resvg-swift 0.1.1 places a
 `<marker>` wrongly at any fit but 1:1; fixed there in `b1ccb73`, released
 as its next version.
 
-`packages/svg-editor-swift` has `DrawingDocument` — the gestures with
+`packages/thorn-swift` has `DrawingDocument` — the gestures with
 Foundation types at the edges — and no view. The canvas is:
 
 - **Display** by handing the SVG to resvg-swift's `SVGPicture` and drawing it
@@ -28,7 +28,7 @@ Foundation types at the edges — and no view. The canvas is:
   is scaffolded and not yet released (its own `docs/tasks/first-release.md`),
   so `Package.swift` does not depend on it yet; when it has a version, add
   `.package(url: "https://github.com/diaryx-org/resvg-swift.git", from:
-  …)` and the `SvgEditor` target's dependency on `ResvgCoreGraphics`.
+  …)` and the `Thorn` target's dependency on `ResvgCoreGraphics`.
 - **Hit-testing and handles**, which are the core's
   (`docs/tasks/hit-testing.md`) and reach here through the binding; the view
   only draws what the core says is selected and where its handles are.

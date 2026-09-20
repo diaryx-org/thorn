@@ -1,10 +1,10 @@
 ---
 title: Changelog
-part_of: '[svg-editor](/README.md)'
+part_of: '[thorn](/README.md)'
 ---
 # Changelog
 
-Every notable change to the svg-editor workspace, newest first. The crates,
+Every notable change to the thorn workspace, newest first. The crates,
 the CLI and the Swift package share one version number and one release, so
 this is the changelog for all of them; the scope on a bullet (`**core**`,
 `**ffi**`, `**cli**`, `**swift**`) says which surface moved.

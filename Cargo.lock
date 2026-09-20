@@ -815,34 +815,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
-name = "svg-editor"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "resvg",
- "svg-editor-core",
-]
-
-[[package]]
-name = "svg-editor-core"
-version = "0.1.0"
-dependencies = [
- "thiserror 2.0.20",
- "twig-doc",
-]
-
-[[package]]
-name = "svg-editor-ffi"
-version = "0.1.0"
-dependencies = [
- "resvg-uniffi",
- "svg-editor-core",
- "thiserror 2.0.20",
- "uniffi",
-]
-
-[[package]]
 name = "svgtypes"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -922,6 +894,34 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
+]
+
+[[package]]
+name = "thorn-svg"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "resvg",
+ "thorn-svg-core",
+]
+
+[[package]]
+name = "thorn-svg-core"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.20",
+ "twig-doc",
+]
+
+[[package]]
+name = "thorn-svg-ffi"
+version = "0.1.0"
+dependencies = [
+ "resvg-uniffi",
+ "thiserror 2.0.20",
+ "thorn-svg-core",
+ "uniffi",
 ]
 
 [[package]]

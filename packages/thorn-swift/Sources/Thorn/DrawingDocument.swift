@@ -1,0 +1,158 @@
+// The Swift-shaped layer over the binding: a drawing as an object an AppKit
+// or UIKit document can own, with the core's gestures as methods, Foundation
+// types at the edges, and a parsed picture kept current for the canvas.
+
+import CoreGraphics
+import Foundation
+import ResvgCoreGraphics
+import ThornFFI
+
+/// A drawing being edited. Wraps the Rust `Drawing`; every mutating method
+/// is one twig splice and one undo step on the Rust side, after which
+/// `picture` is re-parsed and `onChange` is called.
+public final class DrawingDocument {
+    private let inner: Drawing
+
+    /// The drawing as resvg draws it, re-parsed after every gesture. `nil`
+    /// only when usvg refuses what twig accepted — an `<svg>` with no size,
+    /// say — in which case the canvas shows nothing but the selection.
+    public private(set) var picture: SVGPicture?
+
+    /// Called after every gesture; a view redraws here.
+    public var onChange: (() -> Void)?
+
+    /// Open an SVG's text. Throws `DrawingError` for what is not XML or whose
+    /// document element is not `<svg>`; a file that breaks the profile still
+    /// opens, and `check()` says how.
+    public init(source: String) throws {
+        inner = try Drawing.open(source: source)
+        picture = try? SVGPicture(data: Data(source.utf8))
+    }
+
+    /// Open an SVG file.
+    public convenience init(contentsOf url: URL) throws {
+        try self.init(source: String(contentsOf: url, encoding: .utf8))
+    }
+
+    /// The current bytes — what saving writes.
+    public var source: String { inner.source() }
+
+    /// The shapes, in paint order.
+    public var shapes: [Shape] { inner.shapes() }
+
+    /// The shape with this `data-id`.
+    public func shape(id: String) -> Shape? { shapes.first { $0.id == id } }
+
+    /// Hold the drawing to the profile. Empty means it conforms.
+    public func check() -> [Finding] { inner.check() }
+
+    /// The bounds a shape's attributes state; `nil` for a `<path>` or `<g>`.
+    public func bounds(id: String) -> CGRect? {
+        inner.bounds(id: id).map(CGRect.init)
+    }
+
+    /// The topmost shape within `tolerance` user units of a point.
+    public func hit(_ point: CGPoint, tolerance: CGFloat) -> Shape? {
+        inner.hit(x: Double(point.x), y: Double(point.y), tolerance: Double(tolerance))
+    }
+
+    // MARK: Gestures
+
+    /// Add a rectangle as the topmost shape; returns its `data-id`.
+    @discardableResult
+    public func addRect(_ rect: CGRect) throws -> String {
+        try changed { try inner.addRect(rect: Rect(
+            x: Double(rect.origin.x), y: Double(rect.origin.y),
+            width: Double(rect.size.width), height: Double(rect.size.height))) }
+    }
+
+    /// Add an ellipse filling a box; returns its `data-id`.
+    @discardableResult
+    public func addEllipse(in rect: CGRect) throws -> String {
+        try changed { try inner.addEllipse(bounds: Bounds(rect)) }
+    }
+
+    /// Add a line; returns its `data-id`.
+    @discardableResult
+    public func addLine(from a: CGPoint, to b: CGPoint) throws -> String {
+        try changed { try inner.addLine(x1: Double(a.x), y1: Double(a.y), x2: Double(b.x), y2: Double(b.y)) }
+    }
+
+    /// Add a label anchored at a point; returns its `data-id`.
+    @discardableResult
+    public func addText(_ text: String, at point: CGPoint) throws -> String {
+        try changed { try inner.addText(x: Double(point.x), y: Double(point.y), text: text) }
+    }
+
+    /// Delete the shape with this `data-id`.
+    public func delete(id: String) throws {
+        try changed { try inner.delete(id: id) }
+    }
+
+    /// Move a shape by a vector.
+    public func move(id: String, by delta: CGVector) throws {
+        try changed { try inner.moveBy(id: id, dx: Double(delta.dx), dy: Double(delta.dy)) }
+    }
+
+    /// Fit a shape to a box.
+    public func resize(id: String, to rect: CGRect) throws {
+        try changed { try inner.resize(id: id, to: Bounds(rect)) }
+    }
+
+    /// Change a shape's place in paint order; `false` when it was already
+    /// there (and nothing changed).
+    @discardableResult
+    public func reorder(id: String, _ order: Order) throws -> Bool {
+        try changed { try inner.reorder(id: id, order: order) }
+    }
+
+    /// Undo the last gesture; `false` when there was nothing to undo.
+    @discardableResult
+    public func undo() throws -> Bool {
+        try changed { try inner.undo() }
+    }
+
+    /// Redo the last undone gesture; `false` when there was nothing to redo.
+    @discardableResult
+    public func redo() throws -> Bool {
+        try changed { try inner.redo() }
+    }
+
+    private func changed<T>(_ gesture: () throws -> T) rethrows -> T {
+        let result = try gesture()
+        picture = try? SVGPicture(data: Data(source.utf8))
+        onChange?()
+        return result
+    }
+}
+
+extension CGRect {
+    init(_ b: Bounds) { self.init(x: b.x, y: b.y, width: b.width, height: b.height) }
+}
+
+extension Bounds {
+    init(_ r: CGRect) {
+        self.init(x: Double(r.origin.x), y: Double(r.origin.y), width: Double(r.size.width), height: Double(r.size.height))
+    }
+}
+
+extension Handle {
+    /// Where this handle sits on a box.
+    public func position(on rect: CGRect) -> CGPoint {
+        let p = handlePosition(handle: self, bounds: Bounds(rect))
+        return CGPoint(x: p.x, y: p.y)
+    }
+
+    /// The handle of a box within `tolerance` of a point, if any.
+    public static func at(_ point: CGPoint, on rect: CGRect, tolerance: CGFloat) -> Handle? {
+        handleAt(bounds: Bounds(rect), x: Double(point.x), y: Double(point.y), tolerance: Double(tolerance))
+    }
+
+    /// The box after this handle is dragged by a vector.
+    public func drag(_ rect: CGRect, by delta: CGVector) -> CGRect {
+        CGRect(handleDrag(handle: self, bounds: Bounds(rect), dx: Double(delta.dx), dy: Double(delta.dy)))
+    }
+
+    /// Every handle, clockwise from the top-left.
+    public static let all: [Handle] = [.topLeft, .top, .topRight, .right, .bottomRight, .bottom, .bottomLeft, .left]
+}

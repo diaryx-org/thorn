@@ -2,9 +2,9 @@
 resolver = "3"
 # Listed rather than globbed: `xtask` reads this line to know what CI covers.
 members = [
-  "crates/svg-editor-core",
-  "crates/svg-editor-ffi",
-  "apps/svg-editor",
+  "crates/thorn-svg-core",
+  "crates/thorn-svg-ffi",
+  "apps/thorn-svg",
   "xtask",
 ]
 
@@ -14,7 +14,7 @@ version = "0.1.0"
 # Minimum supported Rust version. Edition 2024 needs 1.85; let-chains 1.88.
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/diaryx-org/svg-editor"
+repository = "https://github.com/diaryx-org/thorn"
 readme = "README.md"
 
 [workspace.dependencies]
@@ -31,4 +31,4 @@ resvg = "0.46"
 anyhow = "1"
 thiserror = "2"
 # Internal crates.
-svg-editor-core = { path = "crates/svg-editor-core", version = "0.1.0" }
+thorn-svg-core = { path = "crates/thorn-svg-core", version = "0.1.0" }

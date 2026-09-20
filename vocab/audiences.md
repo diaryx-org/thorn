@@ -1,6 +1,6 @@
 ---
 title: Audiences
-part_of: '[svg-editor](/README.md)'
+part_of: '[thorn](/README.md)'
 contents:
 - '[Public](/vocab/public.md)'
 ---

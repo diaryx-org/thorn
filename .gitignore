@@ -4,17 +4,17 @@
 .env
 
 # SwiftPM/Xcode build dirs for the Swift package, whose manifest lives at the
-# repo root. The UniFFI binding under packages/svg-editor-swift/uniffi-generated/
+# repo root. The UniFFI binding under packages/thorn-swift/uniffi-generated/
 # is COMMITTED (a version-resolved clone runs no generators) — regenerate it
-# with scripts/gen-bindings.sh; CI diffs it against crates/svg-editor-ffi.
+# with scripts/gen-bindings.sh; CI diffs it against crates/thorn-svg-ffi.
 /.build/
 /.swiftpm/
-packages/svg-editor-swift/.build/
-packages/svg-editor-swift/build/
+packages/thorn-swift/.build/
+packages/thorn-swift/build/
 
-# The Mac host is its own package (apps/svg-editor-mac/Package.swift), with
+# The Mac host is its own package (apps/thorn-mac/Package.swift), with
 # its own build dir; `Packages/` is where `swift package edit` puts a
 # dependency being worked on locally, and is never committed.
-apps/svg-editor-mac/.build/
-apps/svg-editor-mac/Packages/
-apps/svg-editor-mac/Package.resolved
+apps/thorn-mac/.build/
+apps/thorn-mac/Packages/
+apps/thorn-mac/Package.resolved

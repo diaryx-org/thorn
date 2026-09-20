@@ -2,7 +2,7 @@
 title: Public
 term: public
 part_of: '[Audiences](/vocab/audiences.md)'
-front_page: '[svg-editor](/www/index.md)'
+front_page: '[thorn](/www/index.md)'
 ---
 
 # Public
@@ -13,5 +13,5 @@ tag says *this is meant to be read*, not *this is now visible*.
 
 The site built for this audience is `exports.www`: the project's page on
 [diaryx.org](https://diaryx.org), fronted by `www/index.md`. The org workspace
-mounts it at `/svg-editor/` when it builds the site; built here alone, it is
+mounts it at `/thorn/` when it builds the site; built here alone, it is
 the same page at `/`.

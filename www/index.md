@@ -1,17 +1,17 @@
 ---
-title: svg-editor
-nav_title: svg-editor
+title: thorn
+nav_title: thorn
 nav_order: 45
-description: svg-editor — a drawing editor over twig's SVG. Boxes, arrows, labels and ink, in a file that opens anywhere and is edited losslessly.
+description: thorn — a drawing editor over twig's SVG. Boxes, arrows, labels and ink, in a file that opens anywhere and is edited losslessly.
 audience: public
-part_of: '[svg-editor](/README.md)'
+part_of: '[thorn](/README.md)'
 id: rr5nnsf
 ---
 <section class="pj-head">
   <div class="wrap">
     <p><a class="crumb" href="../about/#projects">diaryx.org / projects /</a></p>
     <div class="pj-title" style="margin-top: 1rem">
-      <h1>svg-editor</h1>
+      <h1>thorn</h1>
       <span class="pj-tags">
         <span class="tag-chip">Rust · Swift</span>
         <span class="tag-chip">MIT / Apache-2.0</span>
@@ -41,28 +41,28 @@ heard of survives every gesture exactly.
 
 ## Where it fits
 
-svg-editor is how [Diaryx](id:org/80k72t9) draws. It edits through
+thorn is how [Diaryx](id:org/80k72t9) draws. It edits through
 [twig](id:twig/wxmq0ww)'s tree and displays through resvg-swift; a
 drawing in an entry is an image [leaf](id:leaf/6h2bs8f) shows, and
 editing it opens the drawing as its own document.
 
 ## Status
 
-Scaffolded, with a placeholder name: the profile, the shape model,
-add, delete and undo exist and are tested; move, resize and reorder
-wait on a twig release, and the canvas views are next.
+Scaffolded and not yet released: the profile, the shape model, and the
+gestures — add, delete, move, resize, reorder, undo — exist and are
+tested, and a canvas for the Mac and iOS edits a file live.
 
 </div>
 <aside class="pj-aside">
 <div class="install">
 <span class="install-head">Install</span>
-<div class="cmd">cargo add svg-editor-core <small>Rust</small></div>
+<div class="cmd">cargo add thorn-svg-core <small>Rust</small></div>
 </div>
 <div class="facts">
 <div class="row"><span class="k">Language</span><span class="v">Rust · Swift</span></div>
 <div class="row"><span class="k">Built on</span><span class="v"><a href="../twig/index.md">twig</a></span></div>
 <div class="row"><span class="k">Used by</span><span class="v"><a href="../index.html">Diaryx</a> — drawings</span></div>
-<div class="row"><span class="k">Source</span><span class="v"><a href="https://github.com/diaryx-org/svg-editor">github.com/diaryx-org/svg-editor</a></span></div>
+<div class="row"><span class="k">Source</span><span class="v"><a href="https://github.com/diaryx-org/thorn">github.com/diaryx-org/thorn</a></span></div>
 <div class="row"><span class="k">License</span><span class="v">MIT or Apache-2.0</span></div>
 </div>
 </aside>

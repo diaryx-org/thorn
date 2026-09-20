@@ -28,7 +28,7 @@ struct Cli {
 enum Task {
     /// Run the checks a release has to pass — all of them, or one by id.
     Ci(ci::Args),
-    /// (Re)generate the committed UniFFI Swift binding from crates/svg-editor-ffi.
+    /// (Re)generate the committed UniFFI Swift binding from crates/thorn-svg-ffi.
     Bindings,
 }
 

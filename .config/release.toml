@@ -1,8 +1,8 @@
-# What the shared release tooling needs to know about svg-editor. Everything
+# What the shared release tooling needs to know about thorn. Everything
 # not stated here is a default in lib/repo.nu — the manifest, the changelog
 # path, the cliff config, and that this is a Cargo workspace.
-name = "svg-editor"
-url = "https://github.com/diaryx-org/svg-editor"
+name = "thorn"
+url = "https://github.com/diaryx-org/thorn"
 release_branch = "main"
 
 # What to run before cutting. Each repo owns its own CI; this names it.
@@ -12,4 +12,4 @@ verify = "cargo xtask ci"
 # before the push is handed back to you is composed from these.
 [[tag_starts]]
 workflow = "publish.yml"
-does = "uploads svg-editor-core, svg-editor-ffi and the svg-editor CLI to crates.io"
+does = "uploads thorn-svg-core, thorn-svg-ffi and the thorn-svg CLI to crates.io"

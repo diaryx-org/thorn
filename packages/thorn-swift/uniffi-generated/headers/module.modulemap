@@ -1,0 +1,4 @@
+module thorn_svg_ffiFFI {
+    header "thorn_svg_ffiFFI.h"
+    export *
+}
