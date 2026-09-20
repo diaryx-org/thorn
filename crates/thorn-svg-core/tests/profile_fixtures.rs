@@ -1,7 +1,7 @@
 //! Every fixture under `tests/fixtures/` conforms to the profile, opens with
 //! its shapes in paint order, and survives an add and an undo byte for byte.
 
-use thorn_svg_core::{Bounds, Drawing, Heads, Nib, Order, Rect, Rule, ShapeKind};
+use thorn_svg_core::{Bounds, Drawing, Heads, Nib, Note, Order, Rect, Rule, ShapeKind};
 
 fn fixtures() -> Vec<(String, String)> {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
@@ -249,4 +249,114 @@ fn an_ink_stroke_carries_its_centreline_and_keeps_it_under_move_and_resize() {
 
     // No points, no stroke.
     assert!(drawing.add_ink(&[], &[4.0], Nib::Monoline).is_err());
+}
+
+#[test]
+fn a_diamond_is_a_polygon_and_a_note_is_a_group_resized_as_one() {
+    let src = include_str!("fixtures/diamond-and-note.svg");
+    let mut drawing = Drawing::open(src).unwrap();
+    assert_eq!(drawing.shape("s1").unwrap().kind, ShapeKind::Polygon);
+    assert_eq!(
+        drawing.note("s2"),
+        Some(Note {
+            frame: "s3".into(),
+            label: "s4".into()
+        })
+    );
+    assert_eq!(drawing.note("s1"), None);
+    assert_eq!(
+        drawing.shape("s4").unwrap().text.as_deref(),
+        Some("A note wraps its words to the box")
+    );
+
+    // Each add is one step and re-adds the same bytes.
+    let d = drawing
+        .add_diamond(Bounds {
+            x: 20.0,
+            y: 30.0,
+            width: 100.0,
+            height: 80.0,
+        })
+        .unwrap();
+    assert_eq!(
+        drawing.shape(&d).unwrap().attr("points"),
+        Some("70,30 120,70 70,110 20,70")
+    );
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+    let n = drawing
+        .add_note(
+            Bounds {
+                x: 160.0,
+                y: 30.0,
+                width: 140.0,
+                height: 80.0,
+            },
+            "A note wraps its words to the box",
+        )
+        .unwrap();
+    let note = drawing.note(&n).unwrap();
+    assert_eq!(
+        drawing.shape(&note.label).unwrap().text.as_deref(),
+        Some("A note wraps its words to the box")
+    );
+    assert_eq!(drawing.check(), []);
+    assert!(
+        drawing.undo().unwrap(),
+        "one step for the group, its box and its label"
+    );
+    assert_eq!(drawing.source(), src);
+    assert!(drawing.add_polygon(&[(0.0, 0.0), (1.0, 1.0)]).is_err());
+
+    // A note resized: the box to the bounds, the label at its corner and
+    // wrapped to its inner width — one step.
+    drawing
+        .resize(
+            "s2",
+            Bounds {
+                x: 160.0,
+                y: 30.0,
+                width: 300.0,
+                height: 60.0,
+            },
+        )
+        .unwrap();
+    let frame = drawing.shape("s3").unwrap();
+    assert_eq!(frame.attr("width"), Some("300"));
+    let label = drawing.shape("s4").unwrap();
+    assert_eq!(label.attr("data-width"), Some("284"));
+    assert_eq!(label.attr("x"), Some("168"));
+    assert_eq!(
+        label.text.as_deref(),
+        Some("A note wraps its words to the box")
+    );
+    assert!(
+        !drawing.source().contains("dy=\"1.2em\""),
+        "one line now: {}",
+        drawing.source()
+    );
+    assert_eq!(drawing.check(), []);
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+
+    // A moved note moves as a group; its label is re-worded as any label.
+    drawing.move_by("s2", 5.0, 5.0).unwrap();
+    assert_eq!(drawing.bounds("s3").unwrap().x, 165.0);
+    drawing.set_text("s4", "Short").unwrap();
+    assert_eq!(drawing.shape("s4").unwrap().text.as_deref(), Some("Short"));
+    assert_eq!(drawing.check(), []);
+
+    // The role's vocabulary is closed, and a note needs its members.
+    let odd = src.replace("data-role=\"note\"", "data-role=\"card\"");
+    let findings = Drawing::open(&odd).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule, Rule::Role);
+    let bare = src.replace(
+        "<rect x=\"160\" y=\"30\" width=\"140\" height=\"80\" data-id=\"s3\"/>",
+        "",
+    );
+    let findings = Drawing::open(&bare).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule, Rule::Role);
+    assert_eq!(findings[0].shape.as_deref(), Some("s2"));
 }

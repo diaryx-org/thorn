@@ -69,13 +69,12 @@ extension Tool {
         all.first { $0.keys.contains(Character(key.lowercased())) }
     }
 
-    /// Whether the core has the gesture this tool makes. The rest are in
-    /// the toolbar and disabled, each with a task under `docs/tasks/`
-    /// naming what the core needs: `add-diamond.md`, `add-note.md`.
+    /// Whether the core has the gesture this tool makes. Every tool does
+    /// now; a tool added ahead of its gesture sits in the toolbar disabled
+    /// until the core has it.
     public var isAvailable: Bool {
         switch self {
-        case .hand, .select, .rect, .ellipse, .arrow, .line, .draw, .text, .eraser: true
-        case .diamond, .note: false
+        case .hand, .select, .rect, .diamond, .ellipse, .arrow, .line, .draw, .text, .note, .eraser: true
         }
     }
 

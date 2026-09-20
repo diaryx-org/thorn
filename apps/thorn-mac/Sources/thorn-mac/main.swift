@@ -12,7 +12,7 @@ let fresh = """
         </marker>
       </defs>
       <style>
-        rect, ellipse { fill: none; stroke: #222; stroke-width: 2 }
+        rect, ellipse, polygon { fill: none; stroke: #222; stroke-width: 2 }
         line { stroke: #222; stroke-width: 2 }
         line[data-arrow="end"], line[data-arrow="both"] { marker-end: url(#arrow) }
         line[data-arrow="start"], line[data-arrow="both"] { marker-start: url(#arrow) }

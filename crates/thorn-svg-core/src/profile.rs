@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use crate::drawing::Drawing;
 use crate::ink::{self, Nib};
 use crate::number;
-use crate::shape::Heads;
+use crate::shape::{Heads, ShapeKind};
 
 /// The profile's version, written as the root's `data-diaryx-drawing` value.
 pub const VERSION: &str = "1";
@@ -48,6 +48,10 @@ pub enum Rule {
     /// stroke carries the `data-centreline` and `data-widths` its outline
     /// was computed from.
     InkNib,
+    /// `data-role` names a shape the editor composes — `note`, a `<g>` of
+    /// a `<rect>` and a `<text>` — and the group has the members it
+    /// needs.
+    Role,
 }
 
 impl Rule {
@@ -65,6 +69,7 @@ impl Rule {
             Self::InkNib => {
                 "data-ink names a nib the editor draws, with data-centreline and data-widths beside it"
             }
+            Self::Role => "data-role is note, on a <g> with a <rect> and a <text> in it",
         }
     }
 }
@@ -190,6 +195,31 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                 ink(format!(
                     "<{tag}> data-ink={value:?} has no data-widths that parse"
                 ));
+            }
+        }
+        if let Some(value) = shape.attr("data-role") {
+            let message = if value != "note" {
+                Some(format!("<{tag}> data-role={value:?} is not note"))
+            } else if shape.kind != ShapeKind::Group {
+                Some(format!("<{tag}> data-role=\"note\" is only for a <g>"))
+            } else if shape
+                .id
+                .as_deref()
+                .is_some_and(|id| drawing.note(id).is_none())
+            {
+                Some(
+                    "<g data-role=\"note\"> has no <rect> and <text> with data-id in it"
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            if let Some(message) = message {
+                findings.push(Finding {
+                    rule: Rule::Role,
+                    shape: shape.id.clone(),
+                    message,
+                });
             }
         }
     }

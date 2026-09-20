@@ -33,7 +33,7 @@ pub mod profile;
 pub mod shape;
 pub mod transform;
 
-pub use drawing::{Drawing, End, Error, Order, Rect};
+pub use drawing::{Drawing, End, Error, NOTE_PAD, Note, Order, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
 pub use ink::Nib;

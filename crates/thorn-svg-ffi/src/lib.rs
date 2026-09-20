@@ -136,6 +136,22 @@ impl From<Nib> for core::Nib {
     }
 }
 
+/// Mirrors `thorn_svg_core::Note`: a note's box and label, by `data-id`.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct Note {
+    pub frame: String,
+    pub label: String,
+}
+
+impl From<core::Note> for Note {
+    fn from(n: core::Note) -> Self {
+        Self {
+            frame: n.frame,
+            label: n.label,
+        }
+    }
+}
+
 /// One attribute of a shape; a bare attribute has no value.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct Attribute {
@@ -423,6 +439,23 @@ impl Drawing {
     /// Add an ellipse filling `bounds`; returns its `data-id`.
     pub fn add_ellipse(&self, bounds: Bounds) -> Result<String, DrawingError> {
         Ok(self.lock().add_ellipse(bounds.into())?)
+    }
+
+    /// Add a diamond filling `bounds` — a polygon through the midpoints of
+    /// its sides; returns its `data-id`.
+    pub fn add_diamond(&self, bounds: Bounds) -> Result<String, DrawingError> {
+        Ok(self.lock().add_diamond(bounds.into())?)
+    }
+
+    /// Add a note filling `bounds` — a group of a box and a label wrapped
+    /// to it; returns the group's `data-id`.
+    pub fn add_note(&self, bounds: Bounds, text: String) -> Result<String, DrawingError> {
+        Ok(self.lock().add_note(bounds.into(), &text)?)
+    }
+
+    /// A note's box and label, when `id` is a note.
+    pub fn note(&self, id: String) -> Option<Note> {
+        self.lock().note(&id).map(Into::into)
     }
 
     /// Add a line; returns its `data-id`.

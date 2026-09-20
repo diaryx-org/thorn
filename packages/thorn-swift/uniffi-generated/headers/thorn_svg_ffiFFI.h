@@ -271,6 +271,11 @@ void*_Nonnull uniffi_thorn_svg_ffi_fn_constructor_drawing_open(RustBuffer source
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustBuffer heads, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_DIAMOND
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_DIAMOND
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
@@ -284,6 +289,11 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(void*_Nonnull ptr, Rus
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_LINE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_LINE
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_line(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_NOTE
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_NOTE
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_note(void*_Nonnull ptr, RustBuffer bounds, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_RECT
@@ -369,6 +379,11 @@ void uniffi_thorn_svg_ffi_fn_method_drawing_move_all(void*_Nonnull ptr, RustBuff
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_BY
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_BY
 void uniffi_thorn_svg_ffi_fn_method_drawing_move_by(void*_Nonnull ptr, RustBuffer id, double dx, double dy, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_NOTE
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_NOTE
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_note(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_OUTERMOST
@@ -740,6 +755,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_DIAMOND
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_DIAMOND
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_diamond(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse(void
@@ -755,6 +776,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_ink(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_LINE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_LINE
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_line(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_NOTE
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_NOTE
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_note(void
     
 );
 #endif
@@ -857,6 +884,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_move_all(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_MOVE_BY
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_MOVE_BY
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_move_by(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_NOTE
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_NOTE
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_note(void
     
 );
 #endif

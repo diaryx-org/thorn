@@ -283,8 +283,8 @@ final class CanvasModelTests: XCTestCase {
         let model = CanvasModel(document: doc)
         model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
 
-        // Every tool's keys pick it; an unavailable one's do nothing.
-        for tool in Tool.all where tool.isAvailable {
+        // Every tool's keys pick it.
+        for tool in Tool.all {
             for key in tool.keys {
                 model.tool = .select
                 XCTAssertTrue(model.key(key), "\(key)")
@@ -293,8 +293,6 @@ final class CanvasModelTests: XCTestCase {
         }
         XCTAssertEqual(Tool.forKey("R"), .rect, "case-insensitive")
         model.tool = .select
-        XCTAssertFalse(model.key("d"), "diamond waits on the core")
-        XCTAssertEqual(model.tool, .select)
         XCTAssertFalse(model.key("z"))
 
         // A create tool is one-shot: one rectangle, then select.
@@ -402,5 +400,58 @@ final class CanvasModelTests: XCTestCase {
         model.pointerUp()
         XCTAssertEqual(doc.shapes.count, 3)
         XCTAssertTrue(doc.source.contains("data-centreline=\"M150 75\""))
+    }
+
+    func testTheDiamondAndNoteToolsAndANoteIsTypedIntoResizedAndEmptiedAsOne() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        var edits: [TextEdit] = []
+        model.onTextEdit = { edits.append($0) }
+
+        model.key("d")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 180))
+        model.pointerUp()
+        let d = try XCTUnwrap(model.selection.first)
+        XCTAssertEqual(doc.shape(id: d)?.kind, .polygon)
+        XCTAssertTrue(doc.source.contains("<polygon points=\"75,50 100,70 75,90 50,70\""), doc.source)
+        XCTAssertTrue(try doc.undo())
+
+        // A note dragged out opens its label at once; what is typed lands
+        // wrapped to the box.
+        model.key("n")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 300, y: 180))
+        model.pointerUp()
+        let n = try XCTUnwrap(model.selection.first)
+        let note = try XCTUnwrap(doc.note(id: n))
+        XCTAssertEqual(edits.count, 1)
+        XCTAssertEqual(edits[0].id, note.label)
+        XCTAssertTrue(edits[0].wraps)
+        XCTAssertEqual(edits[0].frame, CGRect(x: 116, y: 116, width: 168, height: 48), "the box inside its padding, in view points")
+        model.commitTextEdit(edits[0], text: "Words in a box")
+        XCTAssertEqual(doc.shape(id: note.label)?.text, "Words in a box")
+        XCTAssertEqual(doc.width(id: note.label), 84)
+
+        // Resized by its handle, the label follows and re-wraps: one step.
+        model.select(n)
+        model.beginPointer(at: CGPoint(x: 300, y: 180)) // bottom-right handle
+        model.pointerDragged(to: CGPoint(x: 400, y: 180))
+        model.pointerUp()
+        XCTAssertEqual(doc.bounds(id: note.frame)?.width, 150)
+        XCTAssertEqual(doc.width(id: note.label), 134)
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.bounds(id: note.frame)?.width, 100)
+
+        // A double-click anywhere on the note edits its label; emptied,
+        // the whole note goes.
+        model.doubleClick(at: CGPoint(x: 110, y: 170))
+        XCTAssertEqual(edits.count, 2)
+        XCTAssertEqual(edits[1].id, note.label)
+        XCTAssertEqual(edits[1].text, "Words in a box")
+        model.commitTextEdit(edits[1], text: "  ")
+        XCTAssertNil(doc.shape(id: n))
+        XCTAssertNil(doc.shape(id: note.frame))
     }
 }

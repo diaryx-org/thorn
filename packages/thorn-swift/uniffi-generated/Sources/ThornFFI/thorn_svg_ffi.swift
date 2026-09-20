@@ -508,6 +508,12 @@ public protocol DrawingProtocol : AnyObject {
     func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads) throws  -> String
     
     /**
+     * Add a diamond filling `bounds` — a polygon through the midpoints of
+     * its sides; returns its `data-id`.
+     */
+    func addDiamond(bounds: Bounds) throws  -> String
+    
+    /**
      * Add an ellipse filling `bounds`; returns its `data-id`.
      */
     func addEllipse(bounds: Bounds) throws  -> String
@@ -523,6 +529,12 @@ public protocol DrawingProtocol : AnyObject {
      * Add a line; returns its `data-id`.
      */
     func addLine(x1: Double, y1: Double, x2: Double, y2: Double) throws  -> String
+    
+    /**
+     * Add a note filling `bounds` — a group of a box and a label wrapped
+     * to it; returns the group's `data-id`.
+     */
+    func addNote(bounds: Bounds, text: String) throws  -> String
     
     /**
      * Add a rectangle as the topmost shape; returns its `data-id`.
@@ -620,6 +632,11 @@ public protocol DrawingProtocol : AnyObject {
      * Move a shape by `(dx, dy)`.
      */
     func moveBy(id: String, dx: Double, dy: Double) throws 
+    
+    /**
+     * A note's box and label, when `id` is a note.
+     */
+    func note(id: String)  -> Note?
     
     /**
      * The outermost group a shape is in, or the shape itself.
@@ -758,6 +775,18 @@ open func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads)
 }
     
     /**
+     * Add a diamond filling `bounds` — a polygon through the midpoints of
+     * its sides; returns its `data-id`.
+     */
+open func addDiamond(bounds: Bounds)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(self.uniffiClonePointer(),
+        FfiConverterTypeBounds.lower(bounds),$0
+    )
+})
+}
+    
+    /**
      * Add an ellipse filling `bounds`; returns its `data-id`.
      */
 open func addEllipse(bounds: Bounds)throws  -> String {
@@ -793,6 +822,19 @@ open func addLine(x1: Double, y1: Double, x2: Double, y2: Double)throws  -> Stri
         FfiConverterDouble.lower(y1),
         FfiConverterDouble.lower(x2),
         FfiConverterDouble.lower(y2),$0
+    )
+})
+}
+    
+    /**
+     * Add a note filling `bounds` — a group of a box and a label wrapped
+     * to it; returns the group's `data-id`.
+     */
+open func addNote(bounds: Bounds, text: String)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_note(self.uniffiClonePointer(),
+        FfiConverterTypeBounds.lower(bounds),
+        FfiConverterString.lower(text),$0
     )
 })
 }
@@ -1003,6 +1045,17 @@ open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithErr
         FfiConverterDouble.lower(dy),$0
     )
 }
+}
+    
+    /**
+     * A note's box and label, when `id` is a note.
+     */
+open func note(id: String) -> Note? {
+    return try!  FfiConverterOptionTypeNote.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_note(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
 }
     
     /**
@@ -1475,6 +1528,75 @@ public func FfiConverterTypeFont_lift(_ buf: RustBuffer) throws -> Font {
 #endif
 public func FfiConverterTypeFont_lower(_ value: Font) -> RustBuffer {
     return FfiConverterTypeFont.lower(value)
+}
+
+
+/**
+ * Mirrors `thorn_svg_core::Note`: a note's box and label, by `data-id`.
+ */
+public struct Note {
+    public var frame: String
+    public var label: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(frame: String, label: String) {
+        self.frame = frame
+        self.label = label
+    }
+}
+
+
+
+extension Note: Equatable, Hashable {
+    public static func ==(lhs: Note, rhs: Note) -> Bool {
+        if lhs.frame != rhs.frame {
+            return false
+        }
+        if lhs.label != rhs.label {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(frame)
+        hasher.combine(label)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNote: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Note {
+        return
+            try Note(
+                frame: FfiConverterString.read(from: &buf), 
+                label: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Note, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.frame, into: &buf)
+        FfiConverterString.write(value.label, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNote_lift(_ buf: RustBuffer) throws -> Note {
+    return try FfiConverterTypeNote.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNote_lower(_ value: Note) -> RustBuffer {
+    return FfiConverterTypeNote.lower(value)
 }
 
 
@@ -2461,6 +2583,30 @@ fileprivate struct FfiConverterOptionTypeFont: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeNote: FfiConverterRustBuffer {
+    typealias SwiftType = Note?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeNote.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeNote.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePoint: FfiConverterRustBuffer {
     typealias SwiftType = Point?
 
@@ -2768,6 +2914,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow() != 7662) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_diamond() != 5103) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse() != 11165) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2775,6 +2924,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_line() != 10609) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_note() != 2159) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_rect() != 12832) {
@@ -2826,6 +2978,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_by() != 4199) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_note() != 6387) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_outermost() != 20228) {

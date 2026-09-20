@@ -2,12 +2,18 @@
 title: A diamond gesture in the core
 description: 'Drawing::add_polygon (and the diamond tool over it): four points at the midpoints of a box, resized as a polygon already is'
 author: adammharris
-status: open
+status: done
 created: 2026-09-20
 updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # A diamond gesture in the core
+
+**Done 2026-09-20.** `Drawing::add_polygon` is the writer — `points` as
+`x,y` pairs one space apart, three or more — and `add_diamond(Bounds)`
+the four midpoints over it; the profile's existing polygon reading,
+hit-testing and resize do the rest. The diamond tool (`D` / `3`) drags
+one out and previews it in flight. `diamond-and-note.svg` is the fixture.
 
 The toolbar has a diamond (`D` / `3`, `Tool.diamond` in the Swift package)
 and it is disabled: the core has no gesture that makes one. A diamond in

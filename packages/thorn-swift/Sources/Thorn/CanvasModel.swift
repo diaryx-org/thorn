@@ -185,12 +185,23 @@ public final class CanvasModel {
         // it is big enough to add; its first pixel is drawn here.
         if case .create(let from, let to) = drag, !previewed {
             context.setLineDash(phase: 0, lengths: [4, 3])
-            if tool == .line || tool == .arrow {
+            let box = viewRect(CGRect(from: from, to: to))
+            switch tool {
+            case .line, .arrow:
                 context.move(to: viewPoint(from))
                 context.addLine(to: viewPoint(to))
                 context.strokePath()
-            } else {
-                context.stroke(viewRect(CGRect(from: from, to: to)))
+            case .diamond:
+                context.move(to: CGPoint(x: box.midX, y: box.minY))
+                context.addLine(to: CGPoint(x: box.maxX, y: box.midY))
+                context.addLine(to: CGPoint(x: box.midX, y: box.maxY))
+                context.addLine(to: CGPoint(x: box.minX, y: box.midY))
+                context.closePath()
+                context.strokePath()
+            case .ellipse:
+                context.strokeEllipse(in: box)
+            default:
+                context.stroke(box)
             }
             context.setLineDash(phase: 0, lengths: [])
         }
@@ -283,15 +294,11 @@ public final class CanvasModel {
                 onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, fontName: document.font(id: nil)?.postScriptName, wraps: false))
             }
             release()
-        case .rect, .ellipse, .arrow, .line:
+        case .rect, .diamond, .ellipse, .arrow, .line, .note:
             drag = .create(from: p, to: p)
         case .draw:
             selection = []
             drag = .ink(points: [p])
-        case .diamond, .note:
-            // Not yet: `Tool.isAvailable` says so, and the toolbar
-            // disables each until the core has its gesture.
-            break
         }
         needsDisplay?()
     }
@@ -371,6 +378,8 @@ public final class CanvasModel {
             guard box.width > 0 || box.height > 0 else { return false }
             switch tool {
             case .rect: created = try? document.addRect(box)
+            case .diamond: created = try? document.addDiamond(in: box)
+            case .note: created = try? document.addNote(in: box)
             case .ellipse: created = try? document.addEllipse(in: box)
             case .line: created = try? document.addLine(from: from, to: to)
             case .arrow: created = try? document.addArrow(from: from, to: to)
@@ -399,7 +408,10 @@ public final class CanvasModel {
         case .create:
             if !previewed { previewed = apply() }
             selection = previewed ? created.map { [$0] } ?? [] : []
+            let made = created
             release()
+            // A new note opens its label for typing at once.
+            if let id = made, document.note(id: id) != nil { editNote(id: id) }
         case .ink:
             if !previewed { previewed = apply() }
             selection = previewed ? created.map { [$0] } ?? [] : []
@@ -433,8 +445,24 @@ public final class CanvasModel {
     /// A double-click at a view point: on a label, opens it for editing.
     public func doubleClick(at viewPoint: CGPoint) {
         guard tool == .select, let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance),
-              hit.kind == .text, let id = hit.id else { return }
-        editText(id: id)
+              let hitId = hit.id else { return }
+        if let outer = document.outermost(id: hitId)?.id, document.note(id: outer) != nil {
+            editNote(id: outer)
+        } else if hit.kind == .text {
+            editText(id: hitId)
+        }
+    }
+
+    /// Open a note's label for editing: the field fills the box inside
+    /// its padding, and wraps at that width.
+    public func editNote(id: String) {
+        guard let note = document.note(id: id), let box = document.bounds(id: note.frame),
+              let shape = document.shape(id: note.label) else { return }
+        selection = [id]
+        let pad = DrawingDocument.notePadding
+        let inner = box.insetBy(dx: pad, dy: pad)
+        let fontSize = document.fontSize(id: note.label) * fit.a
+        onTextEdit?(TextEdit(id: note.label, anchor: inner.origin, text: shape.text ?? "", frame: viewRect(inner), fontSize: fontSize, fontName: document.font(id: note.label)?.postScriptName, wraps: true))
     }
 
     /// Open a label for editing.
@@ -460,7 +488,12 @@ public final class CanvasModel {
     public func commitTextEdit(_ edit: TextEdit, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let id = edit.id {
-            if trimmed.isEmpty { try? document.delete(id: id) } else if trimmed != edit.text { try? document.setText(id: id, trimmed) }
+            if trimmed.isEmpty {
+                // A note with nothing in it goes, box and all.
+                let outer = document.outermost(id: id)?.id
+                let victim = outer.flatMap { document.note(id: $0) != nil ? $0 : nil } ?? id
+                try? document.delete(id: victim)
+            } else if trimmed != edit.text { try? document.setText(id: id, trimmed) }
         } else if !trimmed.isEmpty {
             selection = (try? document.addText(trimmed, at: edit.anchor)).map { [$0] } ?? []
         }

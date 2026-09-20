@@ -94,6 +94,26 @@ public final class DrawingDocument {
         try changed { try inner.addEllipse(bounds: Bounds(rect)) }
     }
 
+    /// Add a diamond filling a box — a polygon through the midpoints of
+    /// its sides; returns its `data-id`.
+    @discardableResult
+    public func addDiamond(in rect: CGRect) throws -> String {
+        try changed { try inner.addDiamond(bounds: Bounds(rect)) }
+    }
+
+    /// Add a note filling a box — a group of a box and a label wrapped to
+    /// it; returns the group's `data-id`. `note(id:)` names its members.
+    @discardableResult
+    public func addNote(in rect: CGRect, text: String = "") throws -> String {
+        try changed { try inner.addNote(bounds: Bounds(rect), text: text) }
+    }
+
+    /// A note's box and label, when the shape is a note.
+    public func note(id: String) -> Note? { inner.note(id: id) }
+
+    /// The space between a note's box and its label, in user units.
+    public static let notePadding: CGFloat = 8
+
     /// Add a line; returns its `data-id`.
     @discardableResult
     public func addLine(from a: CGPoint, to b: CGPoint) throws -> String {

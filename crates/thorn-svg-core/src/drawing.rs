@@ -125,6 +125,17 @@ pub enum Order {
     ToBack,
 }
 
+/// The space between a note's box and its label, in user units.
+pub const NOTE_PAD: f64 = 8.0;
+
+/// A note's members: the `<rect>` that is its box and the `<text>` that
+/// is its label, by `data-id`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Note {
+    pub frame: String,
+    pub label: String,
+}
+
 /// An end of an arrow: the coordinates it is at and the attribute that
 /// binds it to a shape.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -265,6 +276,41 @@ impl Drawing {
         )
     }
 
+    /// Add a polygon through `points` as the topmost shape, its `points`
+    /// written as `x,y` pairs one space apart. Returns the id; an error
+    /// for fewer than three points.
+    pub fn add_polygon(&mut self, points: &[(f64, f64)]) -> Result<String, Error> {
+        if points.len() < 3 {
+            return Err(Error::Unsupported {
+                gesture: "add polygon with fewer than three points",
+                kind: ShapeKind::Polygon,
+            });
+        }
+        let f = number::fmt;
+        let list = points
+            .iter()
+            .map(|&(x, y)| format!("{},{}", f(x), f(y)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.add_shape("polygon", &[("points", list)], None)
+    }
+
+    /// Add a diamond filling `bounds` — a `<polygon>` through the midpoints
+    /// of its sides, top first, clockwise — as the topmost shape. Returns
+    /// the id.
+    pub fn add_diamond(&mut self, bounds: Bounds) -> Result<String, Error> {
+        let (cx, cy) = (
+            bounds.x + bounds.width / 2.0,
+            bounds.y + bounds.height / 2.0,
+        );
+        self.add_polygon(&[
+            (cx, bounds.y),
+            (bounds.x + bounds.width, cy),
+            (cx, bounds.y + bounds.height),
+            (bounds.x, cy),
+        ])
+    }
+
     /// Add a line from `(x1, y1)` to `(x2, y2)` as the topmost shape.
     /// Returns the id.
     pub fn add_line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64) -> Result<String, Error> {
@@ -336,6 +382,85 @@ impl Drawing {
     pub fn add_text(&mut self, x: f64, y: f64, text: &str) -> Result<String, Error> {
         let f = number::fmt;
         self.add_shape("text", &[("x", f(x)), ("y", f(y))], Some(text))
+    }
+
+    /// Add a note filling `bounds`: a box with a label in it, as one
+    /// `<g data-role="note">` of a `<rect>` and a `<text>` wrapped to the
+    /// box's inner width, `text` flowed into it. One undo step. Returns
+    /// the group's id; [`Drawing::note`] names its members. A note is
+    /// resized as one — the box to the new bounds, the label re-wrapped
+    /// to it — and deleted as one; its label is re-worded like any other.
+    pub fn add_note(&mut self, bounds: Bounds, text: &str) -> Result<String, Error> {
+        let f = number::fmt;
+        let (group, frame, label) = (self.mint_id(), self.mint_id_after(1), self.mint_id_after(2));
+        let inner = (bounds.width - 2.0 * NOTE_PAD).max(1.0);
+        let size = self.font_size(None);
+        let markup = format!(
+            "<g data-role=\"note\" data-id=\"{group}\">\n    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" data-id=\"{frame}\"/>\n    <text x=\"{}\" y=\"{}\" data-width=\"{}\" data-id=\"{label}\">{}</text>\n  </g>",
+            f(bounds.x),
+            f(bounds.y),
+            f(bounds.width),
+            f(bounds.height),
+            f(bounds.x + NOTE_PAD),
+            f(bounds.y + NOTE_PAD + size),
+            f(inner),
+            escape(text.trim()),
+        );
+        self.append_to_root(&markup)?;
+        // The words are flowed into the width now the label exists to be
+        // measured; folded into the insert.
+        if !text.trim().is_empty() {
+            let mut steps = 1;
+            self.rewrap(&label, Some(inner), &mut steps)?;
+        }
+        Ok(group)
+    }
+
+    /// A note's members, when `id` is a note: its box and its label.
+    pub fn note(&self, id: &str) -> Option<Note> {
+        let group = self.shape(id)?;
+        if group.kind != ShapeKind::Group || group.attr("data-role") != Some("note") {
+            return None;
+        }
+        let members: Vec<&Shape> = self.members(id);
+        let frame = members
+            .iter()
+            .find(|m| m.kind == ShapeKind::Rect)?
+            .id
+            .clone()?;
+        let label = members
+            .iter()
+            .find(|m| m.kind == ShapeKind::Text)?
+            .id
+            .clone()?;
+        Some(Note { frame, label })
+    }
+
+    /// A note resized as one: its box to `to`, its label moved to the
+    /// box's corner and wrapped to its inner width, one undo step.
+    fn resize_note(&mut self, note: Note, to: Bounds) -> Result<(), Error> {
+        self.resize(&note.frame, to)?;
+        let mut steps = 1;
+        let frame = self.shape(&note.frame).expect("just resized");
+        // The label sits in the box's own coordinates, being its sibling.
+        let (x, y, width) = (
+            frame.number("x").unwrap_or(0.0),
+            frame.number("y").unwrap_or(0.0),
+            frame.number("width").unwrap_or(0.0),
+        );
+        let size = self.font_size(Some(&note.label));
+        let label = self.shape(&note.label).expect("a note's label");
+        let updates = [
+            ("x", Some(number::fmt(x + NOTE_PAD))),
+            ("y", Some(number::fmt(y + NOTE_PAD + size))),
+        ];
+        self.write_attrs(label.node, &label.attrs.clone(), &updates)?;
+        self.fold(&mut steps)?;
+        self.rewrap(
+            &note.label,
+            Some((width - 2.0 * NOTE_PAD).max(1.0)),
+            &mut steps,
+        )
     }
 
     /// Write one element — `attrs`, then the minted `data-id`, then
@@ -754,6 +879,9 @@ impl Drawing {
             gesture: "resize",
             kind: shape.kind,
         };
+        if let Some(note) = self.note(id) {
+            return self.resize_note(note, to);
+        }
         if shape.kind == ShapeKind::Text {
             // A label goes where its box's corner went, and a box of a
             // different width wraps it to that width.
@@ -1494,6 +1622,12 @@ impl Drawing {
 
     /// The next free `s<n>` id: one past the largest such id in the file.
     fn mint_id(&self) -> String {
+        self.mint_id_after(0)
+    }
+
+    /// The id `n` after the next free one, for a gesture that mints
+    /// several in one splice.
+    fn mint_id_after(&self, n: u64) -> String {
         let taken = self
             .shapes
             .iter()
@@ -1502,7 +1636,7 @@ impl Drawing {
             .filter_map(|n| n.parse::<u64>().ok())
             .max()
             .unwrap_or(0);
-        format!("s{}", taken + 1)
+        format!("s{}", taken + 1 + n)
     }
 }
 

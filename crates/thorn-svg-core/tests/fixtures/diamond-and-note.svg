@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" data-diaryx-drawing="1">
+  <!-- A diamond and a note as the editor writes them: a polygon through the midpoints, a group of a box and a label wrapped to it. -->
+  <style>
+    rect, polygon { fill: none; stroke: #222; stroke-width: 2 }
+    text { font: 14px sans-serif }
+  </style>
+  <polygon points="70,30 120,70 70,110 20,70" data-id="s1"/>
+  <g data-role="note" data-id="s2">
+    <rect x="160" y="30" width="140" height="80" data-id="s3"/>
+    <text x="168" y="50" data-width="124" data-id="s4"><tspan x="168">A note wraps its</tspan><tspan x="168" dy="1.2em">words to the box</tspan></text>
+  </g>
+</svg>
