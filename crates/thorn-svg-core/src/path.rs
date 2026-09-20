@@ -5,6 +5,9 @@
 
 use svgtypes::{SimplePathSegment as Seg, SimplifyingPathParser};
 
+use crate::number;
+use crate::transform::Transform;
+
 /// One `M`…`Z` run of a path, as the points along it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Subpath {
@@ -97,6 +100,37 @@ pub fn flatten(d: &str) -> Option<Vec<Subpath>> {
     (!subpaths.is_empty()).then_some(subpaths)
 }
 
+/// `d` with `t` applied to every coordinate, written back as absolute
+/// `M`/`L`/`C`/`Q`/`Z` in the profile's number format — what baking a
+/// transform into a `<path>` writes. Relative commands, `H`/`V`/`S`/`T`
+/// and arcs come out expanded (an arc as cubics), so the first bake
+/// reshapes a hand-written `d` and every one after is byte-stable.
+/// `None` when `d` does not parse.
+pub fn transformed(d: &str, t: &Transform) -> Option<String> {
+    let mut out: Vec<String> = Vec::new();
+    let p = |x: f64, y: f64| {
+        let (x, y) = t.apply(x, y);
+        format!("{} {}", number::fmt(x), number::fmt(y))
+    };
+    for seg in SimplifyingPathParser::from(d) {
+        out.push(match seg.ok()? {
+            Seg::MoveTo { x, y } => format!("M{}", p(x, y)),
+            Seg::LineTo { x, y } => format!("L{}", p(x, y)),
+            Seg::CurveTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => format!("C{} {} {}", p(x1, y1), p(x2, y2), p(x, y)),
+            Seg::Quadratic { x1, y1, x, y } => format!("Q{} {}", p(x1, y1), p(x, y)),
+            Seg::ClosePath => "Z".to_string(),
+        });
+    }
+    Some(out.join(" "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,6 +160,20 @@ mod tests {
         assert!((reach - 5.0).abs() < 0.01, "{reach}");
         let end = *arc[0].points.last().unwrap();
         assert!((end.0 - 10.0).abs() < 1e-9 && end.1.abs() < 1e-9, "{end:?}");
+    }
+
+    #[test]
+    fn transformed_writes_absolute_commands() {
+        let t = Transform::scale(2.0, 1.0).then(&Transform::translate(1.0, 0.0));
+        assert_eq!(
+            transformed("M0 0 h10 v5 q 1 1 2 2 z", &t).unwrap(),
+            "M1 0 L21 0 L21 5 Q23 6 25 7 Z"
+        );
+        assert_eq!(
+            transformed("M1 1 C 1 2, 2 2, 2 1", &Transform::IDENTITY).unwrap(),
+            "M1 1 C1 2 2 2 2 1"
+        );
+        assert!(transformed("M 1", &Transform::IDENTITY).is_none());
     }
 
     #[test]

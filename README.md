@@ -76,9 +76,9 @@ history:
 | add rect, ellipse, line, label | `insert_after` / `insert_child` | done |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |
-| move, resize | `set_node_attrs` | done: the attributes for rect, ellipse, circle, line, polyline, polygon, text, image; a `transform` for a `<path>` or a `<g>` |
+| move, resize | `set_node_attrs` | done: the attributes for rect, ellipse, circle, line, polyline, polygon, text, image, the `d` for a `<path>`; a `transform` only for a `<g>` or under a rotation |
 | forward, back, to front, to back | `move_before` / `move_after` | done, among sibling shapes |
-| group, ungroup | `edit_range` around the members / over the `<g>`, `move_after` to bring a stray member up, folded into one undo step | done; a group's `transform` is pushed down onto its members on ungroup |
+| group, ungroup | `edit_range` around the members / over the `<g>`, `move_after` to bring a stray member up, folded into one undo step | done; a group's `transform` is baked into its members' attributes on ungroup |
 | select, hit-test, handles | — (pure geometry) | done, through `transform` chains; a `<text>`'s box is measured by the host's layout (`measure::Usvg` in the binding — resvg's, so it is the box drawn) |
 | bind an arrow | `set_node_attrs` on the `<line>`, folded into the move that made it follow | done: `data-from` / `data-to` on a `<line>`; a bound end sits on its shape's edge and follows it; dropping an endpoint handle on a shape binds it |
 | freehand ink | — | reserved in the profile |

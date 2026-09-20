@@ -579,7 +579,8 @@ impl Drawing {
                     .then(&parent)
                     .then(&geometry::fit(from, to))
                     .then(&back);
-                vec![("transform", own.fmt())]
+                // A path takes the scale into its `d` when it can.
+                geometry::baked(shape, &own).unwrap_or_else(|| vec![("transform", own.fmt())])
             }
             _ => {
                 let t = self.ctm(shape);
@@ -688,19 +689,9 @@ impl Drawing {
             let count = self.members(id).len();
             for i in 0..count {
                 let member = self.members(id)[i].clone();
-                let own = geometry::own_transform(&member);
-                let plain = !matches!(member.kind, ShapeKind::Path | ShapeKind::Group)
-                    && own.is_identity()
-                    && transform.is_axis_aligned()
-                    && transform.a == 1.0
-                    && transform.d == 1.0;
-                let updates = match plain
-                    .then(|| geometry::moved(&member, transform.e, transform.f))
-                    .flatten()
-                {
-                    Some(shifted) => shifted,
-                    None => vec![("transform", own.then(&transform).fmt())],
-                };
+                let total = geometry::own_transform(&member).then(&transform);
+                let updates = geometry::baked(&member, &total)
+                    .unwrap_or_else(|| vec![("transform", total.fmt())]);
                 self.write_attrs(member.node, &member.attrs, &updates)?;
                 self.fold(&mut steps)?;
             }
@@ -1459,7 +1450,7 @@ mod tests {
     }
 
     #[test]
-    fn a_path_moves_by_a_translate_and_is_hit_through_it() {
+    fn a_path_moves_by_rewriting_its_d_and_is_hit_there() {
         let src = "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M10 10 h20 v10 z\" data-id=\"p\"/>\n</svg>\n";
         let mut d = Drawing::open(src).unwrap();
         assert_eq!(
@@ -1472,9 +1463,11 @@ mod tests {
             })
         );
         d.move_by("p", 5.0, 5.0).unwrap();
+        let moved = "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M15 15 L35 15 L35 25 Z\" data-id=\"p\"/>\n</svg>\n";
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M10 10 h20 v10 z\" data-id=\"p\" transform=\"translate(5 5)\"/>\n</svg>\n"
+            moved,
+            "absolute commands, in the profile's format"
         );
         assert_eq!(d.bounds("p").map(|b| (b.x, b.y)), Some((15.0, 15.0)));
         assert_eq!(
@@ -1483,7 +1476,29 @@ mod tests {
         );
         assert_eq!(d.hit(12.0, 12.0, 0.0), None, "where it was");
         d.move_by("p", -5.0, -5.0).unwrap();
-        assert_eq!(d.source(), src, "moved back, the attribute comes off");
+        assert_eq!(
+            d.source(),
+            "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M10 10 L30 10 L30 20 Z\" data-id=\"p\"/>\n</svg>\n",
+            "moved back: the hand's spelling is gone, the shape is not"
+        );
+        // Under a rotation there is nothing to bake into: the move goes
+        // onto the transform, and the hit is through it.
+        let mut r = Drawing::open(
+            "<svg viewBox=\"0 0 100 100\"><path d=\"M10 10 h20 v10 z\" data-id=\"p\" transform=\"rotate(90)\"/></svg>",
+        )
+        .unwrap();
+        r.move_by("p", 5.0, 5.0).unwrap();
+        assert_eq!(
+            r.shape("p").unwrap().attrs[2..],
+            [(
+                "transform".to_string(),
+                Some("matrix(0 1 -1 0 5 5)".to_string())
+            )]
+        );
+        assert_eq!(
+            r.hit(-10.0, 30.0, 0.0).and_then(|s| s.id.as_deref()),
+            Some("p")
+        );
         assert!(matches!(
             d.move_by("zz", 1.0, 1.0),
             Err(Error::NoSuchShape(_))
@@ -1507,8 +1522,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            d.shape("p").unwrap().attr("transform"),
-            Some("matrix(2 0 0 4 -20 -40)")
+            d.shape("p").unwrap().attrs,
+            [
+                ("d".to_string(), Some("M0 0 L40 0 L40 40 Z".to_string())),
+                ("data-id".to_string(), Some("p".to_string()))
+            ],
+            "the scale is baked into the d"
         );
         assert_eq!(
             d.bounds("p"),
@@ -1518,6 +1537,64 @@ mod tests {
                 width: 40.0,
                 height: 40.0
             })
+        );
+    }
+
+    #[test]
+    fn a_resized_group_ungroups_into_plain_attributes() {
+        let mut d = Drawing::open(
+            "<svg viewBox=\"0 0 100 100\">\n  <g data-id=\"g\">\n    <rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" data-id=\"r\"/>\n    <circle cx=\"20\" cy=\"5\" r=\"5\" data-id=\"c\"/>\n    <text x=\"0\" y=\"20\" font-size=\"10\" data-id=\"t\">Hi</text>\n  </g>\n</svg>\n",
+        )
+        .unwrap();
+        // Double the group; its transform is a matrix over three shapes.
+        let from = d.bounds("g").unwrap();
+        d.resize(
+            "g",
+            Bounds {
+                x: from.x,
+                y: from.y,
+                width: from.width * 2.0,
+                height: from.height * 2.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            d.shape("g").unwrap().attr("transform"),
+            Some("matrix(2 0 0 2 0 0)")
+        );
+        let before: Vec<_> = ["r", "c", "t"].iter().map(|id| d.bounds(id)).collect();
+        // Ungrouped, each shape carries the scale in its own attributes —
+        // the circle its radius, the label its font-size — and no transform.
+        d.ungroup("g").unwrap();
+        assert_eq!(
+            d.source(),
+            "<svg viewBox=\"0 0 100 100\">\n  <rect x=\"0\" y=\"0\" width=\"20\" height=\"20\" data-id=\"r\"/>\n  <circle cx=\"40\" cy=\"10\" r=\"10\" data-id=\"c\"/>\n  <text x=\"0\" y=\"40\" font-size=\"20\" data-id=\"t\">Hi</text>\n</svg>\n"
+        );
+        let after: Vec<_> = ["r", "c", "t"].iter().map(|id| d.bounds(id)).collect();
+        assert_eq!(after, before, "nothing moved");
+        // Squashed instead, the circle and the label have no attributes
+        // for an unequal scale and keep a transform.
+        assert!(d.undo().unwrap());
+        assert!(d.undo().unwrap());
+        d.resize(
+            "g",
+            Bounds {
+                x: from.x,
+                y: from.y,
+                width: from.width * 2.0,
+                height: from.height,
+            },
+        )
+        .unwrap();
+        d.ungroup("g").unwrap();
+        assert_eq!(d.shape("r").unwrap().attr("width"), Some("20"));
+        assert_eq!(
+            d.shape("c").unwrap().attr("transform"),
+            Some("matrix(2 0 0 1 0 0)")
+        );
+        assert_eq!(
+            d.shape("t").unwrap().attr("transform"),
+            Some("matrix(2 0 0 1 0 0)")
         );
     }
 
@@ -1700,7 +1777,7 @@ mod tests {
         d.ungroup("s1").unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 100 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"0\" width=\"10\" height=\"10\" data-id=\"s2\"/>\n  <path d=\"M20 0 h10\" data-id=\"s3\" transform=\"translate(10 0)\"/>\n</svg>\n"
+            "<svg viewBox=\"0 0 100 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"0\" width=\"10\" height=\"10\" data-id=\"s2\"/>\n  <path d=\"M30 0 L40 0\" data-id=\"s3\"/>\n</svg>\n"
         );
         assert_eq!((d.bounds("s2"), d.bounds("s3")), before, "nothing moved");
         assert!(d.undo().unwrap(), "three edits, one step");

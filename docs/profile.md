@@ -55,12 +55,20 @@ one) *and* a container of shapes; its members follow it in paint order.
 
 A shape may carry a `transform`, and the editor honours one wherever it
 finds it — in hit-testing, in the box it draws, in where a drag lands. It
-*writes* one only for a `<path>` or a `<g>`, which have no position in
-their attributes to move or resize by: `translate(x y)` when that is all it
-is, `matrix(a b c d e f)` otherwise, each number in the profile's format,
-and none at all for the identity. Ungrouping pushes a group's `transform`
-down onto its members — a shift of a plain shape's attributes where it can
-be, a `transform` of their own where it cannot — so nothing moves.
+prefers not to write one: a move or a resize goes into the attributes, and
+a `<path>`'s goes into its `d`, rewritten as absolute `M`/`L`/`C`/`Q`/`Z`
+in the profile's number format (an arc becomes cubics; the first rewrite
+reshapes a hand-written `d`, and every one after is byte-stable).
+Ungrouping *bakes* a group's `transform` into each member the same way —
+a box's corners and sides, an ellipse's radii, a label's `font-size` —
+so nothing moves and no member carries the group's matrix. What cannot be
+baked keeps a `transform`: a `<g>` (nothing to bake into), any shape under
+a rotation or a skew, a circle or a label under an unequal scale, a label
+under a scale with no `font-size` of its own. Written, it is `translate(x
+y)` when that is all it is, `matrix(a b c d e f)` otherwise, each number
+in the profile's format, and none at all for the identity. `stroke-width`
+is never touched: a shape scaled by a resize keeps its stroke, as it does
+in every drawing app.
 
 A `<text>`'s extent is its face's to say, and the face is the host's — the
 one it draws with, or the box and the glyphs disagree. The core asks the

@@ -247,9 +247,93 @@ pub fn moved(shape: &Shape, dx: f64, dy: f64) -> Option<Vec<Update>> {
         }
         ShapeKind::Path | ShapeKind::Group => {
             let t = own_transform(shape).then(&Transform::translate(dx, dy));
-            vec![("transform", t.fmt())]
+            baked(shape, &t).unwrap_or_else(|| vec![("transform", t.fmt())])
         }
     })
+}
+
+/// The attributes of `shape` with `t` — its own `transform` included, and
+/// replaced — applied to them, so the element draws the same with the
+/// attribute gone: a box's corners and sides, an ellipse's centre and
+/// radii, a `d` rewritten (see [`path::transformed`]). Only an
+/// axis-aligned `t` bakes; a rotation or a skew has no attributes to go
+/// into, and `None` says keep the `transform`. So does a circle under an
+/// unequal scale (it would be an ellipse), a label under a flip or an
+/// unequal scale, and one under a scale with no `font-size` of its own to
+/// scale. `stroke-width` is left alone, as a resize leaves it. A `<g>` has
+/// nothing to bake into.
+pub fn baked(shape: &Shape, t: &Transform) -> Option<Vec<Update>> {
+    if !t.is_axis_aligned() {
+        return None;
+    }
+    let f = |v: f64| Some(number::fmt(v));
+    let n = |name: &str| shape.number(name).unwrap_or(0.0);
+    let (sx, sy) = (t.a.abs(), t.d.abs());
+    let mut updates: Vec<Update> = match shape.kind {
+        ShapeKind::Rect | ShapeKind::Image => {
+            let (x0, y0) = t.apply(n("x"), n("y"));
+            let (x1, y1) = t.apply(n("x") + n("width"), n("y") + n("height"));
+            let mut u = vec![
+                ("x", f(x0.min(x1))),
+                ("y", f(y0.min(y1))),
+                ("width", f((x1 - x0).abs())),
+                ("height", f((y1 - y0).abs())),
+            ];
+            if let Some(rx) = shape.number("rx") {
+                u.push(("rx", f(rx * sx)));
+            }
+            if let Some(ry) = shape.number("ry") {
+                u.push(("ry", f(ry * sy)));
+            }
+            u
+        }
+        ShapeKind::Ellipse => {
+            let (cx, cy) = t.apply(n("cx"), n("cy"));
+            vec![
+                ("cx", f(cx)),
+                ("cy", f(cy)),
+                ("rx", f(n("rx") * sx)),
+                ("ry", f(n("ry") * sy)),
+            ]
+        }
+        ShapeKind::Circle => {
+            if (sx - sy).abs() > 1e-9 {
+                return None;
+            }
+            let (cx, cy) = t.apply(n("cx"), n("cy"));
+            vec![("cx", f(cx)), ("cy", f(cy)), ("r", f(n("r") * sx))]
+        }
+        ShapeKind::Line => {
+            let (x1, y1) = t.apply(n("x1"), n("y1"));
+            let (x2, y2) = t.apply(n("x2"), n("y2"));
+            vec![("x1", f(x1)), ("y1", f(y1)), ("x2", f(x2)), ("y2", f(y2))]
+        }
+        ShapeKind::Polyline | ShapeKind::Polygon => {
+            let pts = points(shape.attr("points")?)?;
+            vec![(
+                "points",
+                Some(fmt_points(pts.iter().map(|&(x, y)| t.apply(x, y)))),
+            )]
+        }
+        ShapeKind::Path => vec![("d", Some(path::transformed(shape.attr("d")?, t)?))],
+        ShapeKind::Text => {
+            if t.a <= 0.0 || (t.a - t.d).abs() > 1e-9 {
+                return None;
+            }
+            let (x, y) = t.apply(n("x"), n("y"));
+            let mut u = vec![("x", f(x)), ("y", f(y))];
+            if (t.a - 1.0).abs() > 1e-9 {
+                let size = shape
+                    .attr("font-size")
+                    .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())?;
+                u.push(("font-size", f(size * t.a)));
+            }
+            u
+        }
+        ShapeKind::Group => return None,
+    };
+    updates.push(("transform", None));
+    Some(updates)
 }
 
 /// The transform that takes the box `from` to the box `to`: a scale about
@@ -518,18 +602,130 @@ mod tests {
             m(ShapeKind::Group, &[]),
             [("transform", Some("translate(1.5 -2)".to_string()))]
         );
+        // A path bakes the move, and whatever transform it carried, into
+        // its `d`; the attribute comes off.
         assert_eq!(
             m(
                 ShapeKind::Path,
-                &[("d", "M0 0"), ("transform", "translate(-1.5 2)")]
+                &[("d", "M0 0 h2"), ("transform", "translate(-1.5 2)")]
             ),
-            [("transform", None)],
-            "moved back where it was, the attribute comes off"
+            [("d", Some("M0 0 L2 0".to_string())), ("transform", None)]
         );
         assert_eq!(
-            m(ShapeKind::Path, &[("d", "M0 0"), ("transform", "scale(2)")]),
-            [("transform", Some("matrix(2 0 0 2 1.5 -2)".to_string()))],
+            m(
+                ShapeKind::Path,
+                &[("d", "M0 0 h2"), ("transform", "scale(2)")]
+            ),
+            [
+                ("d", Some("M1.5 -2 L5.5 -2".to_string())),
+                ("transform", None)
+            ],
             "the delta is in the parent's space, so it is not scaled"
+        );
+        assert_eq!(
+            m(
+                ShapeKind::Path,
+                &[("d", "M0 0 h2"), ("transform", "rotate(90)")]
+            ),
+            [("transform", Some("matrix(0 1 -1 0 1.5 -2)".to_string()))],
+            "a rotation has nowhere to bake"
+        );
+    }
+
+    #[test]
+    fn baked_puts_an_axis_aligned_transform_into_the_attributes() {
+        let t = Transform::scale(2.0, 0.5).then(&Transform::translate(10.0, 10.0));
+        let b = |k, a: &[(&str, &str)]| baked(&shape(k, a), &t);
+        let s = |v: &str| Some(v.to_string());
+        assert_eq!(
+            b(
+                ShapeKind::Rect,
+                &[
+                    ("x", "1"),
+                    ("y", "2"),
+                    ("width", "3"),
+                    ("height", "4"),
+                    ("rx", "1")
+                ]
+            )
+            .unwrap(),
+            [
+                ("x", s("12")),
+                ("y", s("11")),
+                ("width", s("6")),
+                ("height", s("2")),
+                ("rx", s("2")),
+                ("transform", None)
+            ]
+        );
+        assert_eq!(
+            b(
+                ShapeKind::Ellipse,
+                &[("cx", "5"), ("cy", "5"), ("rx", "2"), ("ry", "2")]
+            )
+            .unwrap(),
+            [
+                ("cx", s("20")),
+                ("cy", s("12.5")),
+                ("rx", s("4")),
+                ("ry", s("1")),
+                ("transform", None)
+            ]
+        );
+        assert!(
+            b(ShapeKind::Circle, &[("cx", "5"), ("cy", "5"), ("r", "2")]).is_none(),
+            "a circle under an unequal scale would be an ellipse"
+        );
+        assert!(
+            b(ShapeKind::Text, &[("x", "5"), ("y", "5")]).is_none(),
+            "a label under an unequal scale keeps its transform"
+        );
+        assert_eq!(
+            b(ShapeKind::Polygon, &[("points", "0,0 1,1")]).unwrap(),
+            [("points", s("10,10 12,10.5")), ("transform", None)]
+        );
+        let even = Transform::scale(2.0, 2.0);
+        assert_eq!(
+            baked(
+                &shape(
+                    ShapeKind::Text,
+                    &[("x", "5"), ("y", "5"), ("font-size", "10")]
+                ),
+                &even
+            )
+            .unwrap(),
+            [
+                ("x", s("10")),
+                ("y", s("10")),
+                ("font-size", s("20")),
+                ("transform", None)
+            ]
+        );
+        assert!(
+            baked(&shape(ShapeKind::Text, &[("x", "5")]), &even).is_none(),
+            "no font-size of its own to scale"
+        );
+        // A flip normalizes a box and mirrors a path.
+        let flip = Transform::scale(-1.0, 1.0);
+        assert_eq!(
+            baked(
+                &shape(ShapeKind::Rect, &[("width", "3"), ("height", "4")]),
+                &flip
+            )
+            .unwrap()[..2],
+            [("x", s("-3")), ("y", s("0"))]
+        );
+        assert_eq!(
+            baked(&shape(ShapeKind::Path, &[("d", "M1 0 L2 0")]), &flip).unwrap(),
+            [("d", s("M-1 0 L-2 0")), ("transform", None)]
+        );
+        assert!(baked(&shape(ShapeKind::Group, &[]), &even).is_none());
+        assert!(
+            baked(
+                &shape(ShapeKind::Rect, &[]),
+                &Transform::parse("rotate(45)").unwrap()
+            )
+            .is_none()
         );
     }
 

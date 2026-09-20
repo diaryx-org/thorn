@@ -48,6 +48,8 @@ Neither has a position in its attributes. The gesture is a
 `transform="translate(dx dy)"` — composed onto whatever `transform` is
 already there, which means parsing the transform list — and `bounds` for a
 `<path>` is its `d` parsed for its extent, with the transform applied.
-*(Done, as above.)* One limit stands: a shape under a rotation or a skew
+*(Done, as above — and then revised: an axis-aligned transform is baked
+into the attributes instead, a path's into its `d`, so a `transform` is
+written only for a `<g>` or under a rotation; `geometry::baked`.)* One limit stands: a shape under a rotation or a skew
 has no axis-aligned box to fit, so `resize` reports `Unsupported` for it;
 the handles are still drawn on the box around its rotated outline.
