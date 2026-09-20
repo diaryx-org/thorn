@@ -522,6 +522,12 @@ public protocol DrawingProtocol : AnyObject {
     func addText(x: Double, y: Double, text: String) throws  -> String
     
     /**
+     * Bind an end of a `<line>` to a shape, the end put on its edge; or,
+     * with no target, unbind it. One undo step.
+     */
+    func bind(id: String, end: End, target: String?) throws 
+    
+    /**
      * A shape's extent in the root's user units, through its transform
      * chain; a `<g>`'s is its members'. `None` for an empty group or a
      * shape missing what its kind needs.
@@ -542,6 +548,19 @@ public protocol DrawingProtocol : AnyObject {
      * Delete several shapes as one undo step.
      */
     func deleteAll(ids: [String]) throws 
+    
+    /**
+     * Drop an end of a `<line>` at a point: it goes there, bound to the
+     * topmost shape within `tolerance` — any but the arrow — or unbound.
+     * Returns what it was bound to. One undo step.
+     */
+    func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double) throws  -> String?
+    
+    /**
+     * Where an end of a `<line>` is, in the root's user units; `None`
+     * for any other kind.
+     */
+    func endPoint(id: String, end: End)  -> Point?
     
     /**
      * Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
@@ -666,7 +685,8 @@ open class Drawing:
 
     
     /**
-     * Open an SVG's text.
+     * Open an SVG's text. A `<text>`'s bounds are measured by resvg's
+     * layout over the system's fonts — the layout the canvas draws with.
      */
 public static func `open`(source: String)throws  -> Drawing {
     return try  FfiConverterTypeDrawing.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
@@ -728,6 +748,19 @@ open func addText(x: Double, y: Double, text: String)throws  -> String {
 }
     
     /**
+     * Bind an end of a `<line>` to a shape, the end put on its edge; or,
+     * with no target, unbind it. One undo step.
+     */
+open func bind(id: String, end: End, target: String?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_bind(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeEnd.lower(end),
+        FfiConverterOptionString.lower(target),$0
+    )
+}
+}
+    
+    /**
      * A shape's extent in the root's user units, through its transform
      * chain; a `<g>`'s is its members'. `None` for an empty group or a
      * shape missing what its kind needs.
@@ -768,6 +801,36 @@ open func deleteAll(ids: [String])throws  {try rustCallWithError(FfiConverterTyp
         FfiConverterSequenceString.lower(ids),$0
     )
 }
+}
+    
+    /**
+     * Drop an end of a `<line>` at a point: it goes there, bound to the
+     * topmost shape within `tolerance` — any but the arrow — or unbound.
+     * Returns what it was bound to. One undo step.
+     */
+open func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double)throws  -> String? {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeEnd.lower(end),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),
+        FfiConverterDouble.lower(tolerance),$0
+    )
+})
+}
+    
+    /**
+     * Where an end of a `<line>` is, in the root's user units; `None`
+     * for any other kind.
+     */
+open func endPoint(id: String, end: End) -> Point? {
+    return try!  FfiConverterOptionTypePoint.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_end_point(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterTypeEnd.lower(end),$0
+    )
+})
 }
     
     /**
@@ -1368,15 +1431,23 @@ public struct Shape {
     public var group: String?
     public var depth: UInt32
     public var attrs: [Attribute]
+    /**
+     * A `<text>`'s characters, whitespace collapsed; `None` otherwise.
+     */
+    public var text: String?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(kind: ShapeKind, id: String?, group: String?, depth: UInt32, attrs: [Attribute]) {
+    public init(kind: ShapeKind, id: String?, group: String?, depth: UInt32, attrs: [Attribute], 
+        /**
+         * A `<text>`'s characters, whitespace collapsed; `None` otherwise.
+         */text: String?) {
         self.kind = kind
         self.id = id
         self.group = group
         self.depth = depth
         self.attrs = attrs
+        self.text = text
     }
 }
 
@@ -1399,6 +1470,9 @@ extension Shape: Equatable, Hashable {
         if lhs.attrs != rhs.attrs {
             return false
         }
+        if lhs.text != rhs.text {
+            return false
+        }
         return true
     }
 
@@ -1408,6 +1482,7 @@ extension Shape: Equatable, Hashable {
         hasher.combine(group)
         hasher.combine(depth)
         hasher.combine(attrs)
+        hasher.combine(text)
     }
 }
 
@@ -1423,7 +1498,8 @@ public struct FfiConverterTypeShape: FfiConverterRustBuffer {
                 id: FfiConverterOptionString.read(from: &buf), 
                 group: FfiConverterOptionString.read(from: &buf), 
                 depth: FfiConverterUInt32.read(from: &buf), 
-                attrs: FfiConverterSequenceTypeAttribute.read(from: &buf)
+                attrs: FfiConverterSequenceTypeAttribute.read(from: &buf), 
+                text: FfiConverterOptionString.read(from: &buf)
         )
     }
 
@@ -1433,6 +1509,7 @@ public struct FfiConverterTypeShape: FfiConverterRustBuffer {
         FfiConverterOptionString.write(value.group, into: &buf)
         FfiConverterUInt32.write(value.depth, into: &buf)
         FfiConverterSequenceTypeAttribute.write(value.attrs, into: &buf)
+        FfiConverterOptionString.write(value.text, into: &buf)
     }
 }
 
@@ -1552,6 +1629,79 @@ extension DrawingError: Foundation.LocalizedError {
         String(reflecting: self)
     }
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Mirrors `thorn_svg_core::End`: an end of a `<line>` arrow.
+ */
+
+public enum End {
+    
+    /**
+     * `(x1, y1)`, bound by `data-from`.
+     */
+    case from
+    /**
+     * `(x2, y2)`, bound by `data-to`.
+     */
+    case to
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeEnd: FfiConverterRustBuffer {
+    typealias SwiftType = End
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> End {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .from
+        
+        case 2: return .to
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: End, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .from:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .to:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEnd_lift(_ buf: RustBuffer) throws -> End {
+    return try FfiConverterTypeEnd.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeEnd_lower(_ value: End) -> RustBuffer {
+    return FfiConverterTypeEnd.lower(value)
+}
+
+
+
+extension End: Equatable, Hashable {}
+
+
 
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
@@ -1917,6 +2067,30 @@ fileprivate struct FfiConverterOptionTypeBounds: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypePoint: FfiConverterRustBuffer {
+    typealias SwiftType = Point?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypePoint.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypePoint.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeShape: FfiConverterRustBuffer {
     typealias SwiftType = Shape?
 
@@ -2135,6 +2309,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 58303) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 8142) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 7686) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2145,6 +2322,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete_all() != 13572) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end() != 40545) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 45968) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 8832) {
@@ -2186,7 +2369,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 51363) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 51814) {
+    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 20304) {
         return InitializationResult.apiChecksumMismatch
     }
 

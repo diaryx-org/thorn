@@ -47,7 +47,8 @@ public final class DrawingDocument {
     public func check() -> [Finding] { inner.check() }
 
     /// A shape's extent in user units, through its transform chain; a
-    /// `<g>`'s is its members'. `nil` for an empty group.
+    /// `<g>`'s is its members'; a `<text>`'s is measured by the layout the
+    /// picture is drawn with. `nil` for an empty group.
     public func bounds(id: String) -> CGRect? {
         inner.bounds(id: id).map(CGRect.init)
     }
@@ -63,6 +64,19 @@ public final class DrawingDocument {
 
     /// The shapes directly inside a `<g>`, in paint order.
     public func members(id: String) -> [Shape] { inner.members(id: id) }
+
+    /// Where an end of a `<line>` is, in user units; `nil` for any other
+    /// kind.
+    public func endPoint(id: String, _ end: End) -> CGPoint? {
+        inner.endPoint(id: id, end: end).map { CGPoint(x: $0.x, y: $0.y) }
+    }
+
+    /// What an end of a `<line>` is bound to — the `data-id` in its
+    /// `data-from` or `data-to` — if anything.
+    public func binding(id: String, _ end: End) -> String? {
+        let name = end == .from ? "data-from" : "data-to"
+        return shape(id: id)?.attrs.first { $0.name == name }?.value
+    }
 
     // MARK: Gestures
 
@@ -124,6 +138,20 @@ public final class DrawingDocument {
     @discardableResult
     public func ungroup(id: String) throws -> [String] {
         try changed { try inner.ungroup(id: id) }
+    }
+
+    /// Bind an end of a `<line>` to a shape, the end put on its edge; or,
+    /// with `nil`, unbind it. One undo step.
+    public func bind(id: String, _ end: End, to target: String?) throws {
+        try changed { try inner.bind(id: id, end: end, target: target) }
+    }
+
+    /// Drop an end of a `<line>` at a point: it goes there, bound to the
+    /// topmost shape within `tolerance` — any but the arrow — or unbound.
+    /// Returns what it was bound to. One undo step.
+    @discardableResult
+    public func dropEnd(id: String, _ end: End, at point: CGPoint, tolerance: CGFloat) throws -> String? {
+        try changed { try inner.dropEnd(id: id, end: end, x: Double(point.x), y: Double(point.y), tolerance: Double(tolerance)) }
     }
 
     /// Fit a shape to a box.

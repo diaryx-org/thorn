@@ -15,13 +15,22 @@
 //! the canvas measures. A shape inside a transformed `<g>`, or carrying a
 //! `transform` of its own, is mapped through the chain here; [`geometry`]
 //! and [`hit`](crate::hit) work in a shape's own coordinates.
+//!
+//! An arrow — a `<line>` with `data-from` or `data-to` naming a shape — is
+//! kept on that shape's edge: every gesture that moves a shape ends by
+//! settling the arrows bound to it, in the same undo step, and deleting a
+//! shape takes the bindings to it off.
 
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
 use crate::geometry::{self, Bounds, Update};
+use crate::measure::Measure;
 use crate::number;
+use crate::path::Subpath;
 use crate::profile::{self, Finding};
 use crate::shape::{self, Shape, ShapeKind};
 use crate::transform::Transform;
@@ -40,7 +49,8 @@ pub enum Error {
     NoSuchShape(String),
     /// The gesture is not defined for this shape: ungrouping what is not a
     /// `<g>`, resizing a shape under a rotation by a box, moving one whose
-    /// `transform` maps everything to a point.
+    /// `transform` maps everything to a point, binding an end of what is
+    /// not a `<line>`.
     #[error("{gesture} is not defined for this <{}>", kind.tag())]
     Unsupported {
         gesture: &'static str,
@@ -74,6 +84,22 @@ fn escape(text: &str) -> String {
     out
 }
 
+/// Write attributes as markup, `skip` left out. Values are quoted as they
+/// came, since twig hands them over as the bytes in the file.
+fn write_attributes(out: &mut String, attrs: &[(String, Option<String>)], skip: &[&str]) {
+    for (name, value) in attrs {
+        if skip.contains(&name.as_str()) {
+            continue;
+        }
+        match value {
+            Some(v) if v.contains('"') => write!(out, " {name}='{v}'"),
+            Some(v) => write!(out, " {name}=\"{v}\""),
+            None => write!(out, " {name}"),
+        }
+        .expect("writing to a String");
+    }
+}
+
 /// A rectangle in user units — what `add_rect` writes and what a drag over
 /// a `<rect>` keeps in flight.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,6 +124,40 @@ pub enum Order {
     ToBack,
 }
 
+/// An end of an arrow: the coordinates it is at and the attribute that
+/// binds it to a shape.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum End {
+    /// `(x1, y1)`, bound by `data-from`.
+    From,
+    /// `(x2, y2)`, bound by `data-to`.
+    To,
+}
+
+impl End {
+    /// The attribute that binds this end.
+    pub fn binding(self) -> &'static str {
+        match self {
+            End::From => "data-from",
+            End::To => "data-to",
+        }
+    }
+
+    fn coords(self) -> (&'static str, &'static str) {
+        match self {
+            End::From => ("x1", "y1"),
+            End::To => ("x2", "y2"),
+        }
+    }
+
+    fn other(self) -> End {
+        match self {
+            End::From => End::To,
+            End::To => End::From,
+        }
+    }
+}
+
 /// A drawing being edited.
 pub struct Drawing {
     editor: Editor,
@@ -106,6 +166,11 @@ pub struct Drawing {
     root: NodeId,
     shapes: Vec<Shape>,
     source: String,
+    /// The host's text layout, when it lent one.
+    measure: Option<Box<dyn Measure>>,
+    /// What the measurer said, by the document it was asked about — a
+    /// label at the origin, so a move is a hit.
+    measured: RefCell<HashMap<String, Option<Bounds>>>,
 }
 
 impl std::fmt::Debug for Drawing {
@@ -130,9 +195,18 @@ impl Drawing {
             root: NodeId(0),
             shapes: Vec::new(),
             source: String::new(),
+            measure: None,
+            measured: RefCell::new(HashMap::new()),
         };
         drawing.reload()?;
         Ok(drawing)
+    }
+
+    /// Lend the drawing a text layout, so a `<text>`'s bounds are the box
+    /// the host draws rather than the nominal one. See [`measure`](crate::measure).
+    pub fn set_measure(&mut self, measure: Box<dyn Measure>) {
+        self.measure = Some(measure);
+        self.measured.borrow_mut().clear();
     }
 
     /// The current bytes — what saving writes.
@@ -233,16 +307,12 @@ impl Drawing {
         Ok(id)
     }
 
-    /// Delete the shape with this `data-id`. One splice, one undo step. The
-    /// line's indentation is left where it was (docs/tasks/delete-leaves-its-line.md).
+    /// Delete the shape with this `data-id`: one splice, one undo step —
+    /// plus, in the same step, the binding taken off any arrow that
+    /// pointed at it. The line's indentation is left where it was
+    /// (docs/tasks/delete-leaves-its-line.md).
     pub fn delete(&mut self, id: &str) -> Result<(), Error> {
-        let node = self
-            .shape(id)
-            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?
-            .node;
-        let locator = self.locator(node);
-        self.editor.delete(&locator).map_err(Error::Edit)?;
-        self.reload()
+        self.delete_all(&[id])
     }
 
     /// Delete several shapes as one undo step — a multi-selection's delete.
@@ -250,13 +320,18 @@ impl Drawing {
     pub fn delete_all(&mut self, ids: &[&str]) -> Result<(), Error> {
         let mut steps = 0;
         for id in ids {
-            if self.shape(id).is_none() && steps > 0 {
-                continue;
-            }
-            self.delete(id)?;
+            let Some(shape) = self.shape(id) else {
+                if steps > 0 {
+                    continue;
+                }
+                return Err(Error::NoSuchShape(id.to_string()));
+            };
+            let locator = self.locator(shape.node);
+            self.editor.delete(&locator).map_err(Error::Edit)?;
+            self.reload()?;
             self.fold(&mut steps)?;
         }
-        Ok(())
+        self.unbind_dangling(&mut steps)
     }
 
     /// A shape's extent in the root's user units — its attributes' box
@@ -276,9 +351,9 @@ impl Drawing {
         }
         let t = self.ctm(shape);
         if t.is_identity() {
-            geometry::bounds(shape)
+            self.local_bounds(shape)
         } else if t.is_axis_aligned() || shape.kind == ShapeKind::Text {
-            Some(geometry::bounds(shape)?.transformed(&t))
+            Some(self.local_bounds(shape)?.transformed(&t))
         } else {
             let subs = geometry::outline(shape)?;
             Bounds::around(
@@ -289,12 +364,90 @@ impl Drawing {
         }
     }
 
+    /// A shape's box in its own coordinates: its attributes', or for a
+    /// label the measured one when a host lent its layout.
+    fn local_bounds(&self, shape: &Shape) -> Option<Bounds> {
+        if shape.kind == ShapeKind::Text
+            && let Some(measured) = self.measured_label(shape)
+        {
+            return Some(measured);
+        }
+        geometry::bounds(shape)
+    }
+
+    /// A label's box by the host's layout, in the label's own coordinates.
+    /// `None` without a measurer, or when it lays out nothing.
+    fn measured_label(&self, shape: &Shape) -> Option<Bounds> {
+        let measure = self.measure.as_ref()?;
+        let doc = self.label_document(shape)?;
+        let at_origin = *self
+            .measured
+            .borrow_mut()
+            .entry(doc)
+            .or_insert_with_key(|doc| measure.measure(doc));
+        let (x, y) = (
+            shape.number("x").unwrap_or(0.0),
+            shape.number("y").unwrap_or(0.0),
+        );
+        at_origin.map(|b| b.offset(x, y))
+    }
+
+    /// The document a measurer is asked about (see [`Measure::measure`]):
+    /// the label at the origin under everything that styles it.
+    fn label_document(&self, shape: &Shape) -> Option<String> {
+        let content = self.node(shape.node).content_span.clone()?;
+        let mut doc =
+            String::from("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"");
+        let skip_root = ["xmlns", "width", "height", "viewBox", "preserveAspectRatio"];
+        write_attributes(&mut doc, self.root_attrs(), &skip_root);
+        doc.push('>');
+        let mut next = self.node(self.root).first_child;
+        while let Some(id) = next {
+            let node = self.node(id);
+            next = node.next_sibling;
+            if matches!(node.name.as_deref(), Some("style" | "defs")) {
+                doc.push_str(&self.source[node.span.clone()]);
+            }
+        }
+        let mut chain = Vec::new();
+        let mut group = shape.group.as_deref().and_then(|g| self.shape(g));
+        while let Some(g) = group {
+            chain.push(g);
+            group = g.group.as_deref().and_then(|g| self.shape(g));
+        }
+        for g in chain.iter().rev() {
+            doc.push_str("<g");
+            write_attributes(&mut doc, &g.attrs, &["transform"]);
+            doc.push('>');
+        }
+        doc.push_str("<text");
+        write_attributes(&mut doc, &shape.attrs, &["x", "y", "transform"]);
+        doc.push('>');
+        doc.push_str(&self.source[content]);
+        doc.push_str("</text>");
+        for _ in &chain {
+            doc.push_str("</g>");
+        }
+        doc.push_str("</svg>");
+        Some(doc)
+    }
+
     /// The topmost shape within `tolerance` user units of `(x, y)`, in paint
     /// order — the last one painted wins. A member of a group is returned
     /// itself; [`Drawing::outermost`] is the group a host selects instead.
     pub fn hit(&self, x: f64, y: f64, tolerance: f64) -> Option<&Shape> {
+        self.hit_where(x, y, tolerance, |_| true)
+    }
+
+    fn hit_where(
+        &self,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+        wanted: impl Fn(&Shape) -> bool,
+    ) -> Option<&Shape> {
         self.shapes.iter().rev().find(|s| {
-            if s.kind == ShapeKind::Group {
+            if s.kind == ShapeKind::Group || !wanted(s) {
                 return false;
             }
             let t = self.ctm(s);
@@ -302,7 +455,13 @@ impl Drawing {
                 return false;
             };
             let (lx, ly) = inverse.apply(x, y);
-            crate::hit::hits(s, lx, ly, tolerance / t.length_scale())
+            let tolerance = tolerance / t.length_scale();
+            if s.kind == ShapeKind::Text {
+                return self
+                    .local_bounds(s)
+                    .is_some_and(|b| b.expanded(tolerance).contains(lx, ly));
+            }
+            crate::hit::hits(s, lx, ly, tolerance)
         })
     }
 
@@ -348,8 +507,16 @@ impl Drawing {
     /// Move a shape by `(dx, dy)` user units: one `set_node_attrs`, one undo
     /// step, every other attribute left in place and in order. A kind with
     /// its position in its attributes has them shifted; a `<path>` or a
-    /// `<g>` gets a `translate` composed onto its `transform`.
+    /// `<g>` gets a `translate` composed onto its `transform`. An arrow
+    /// bound to the shape follows, in the same step.
     pub fn move_by(&mut self, id: &str, dx: f64, dy: f64) -> Result<(), Error> {
+        let mut steps = 0;
+        self.shift(id, dx, dy, &mut steps)?;
+        self.settle(&[id], &mut steps)
+    }
+
+    /// One shape moved, arrows not yet settled.
+    fn shift(&mut self, id: &str, dx: f64, dy: f64, steps: &mut usize) -> Result<(), Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
@@ -368,7 +535,8 @@ impl Drawing {
             .ok_or_else(unsupported)?
             .apply_vector(dx, dy);
         let updates = geometry::moved(shape, ldx, ldy).ok_or_else(unsupported)?;
-        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        self.fold(steps)
     }
 
     /// Move several shapes by `(dx, dy)` as one undo step — a
@@ -377,17 +545,17 @@ impl Drawing {
     pub fn move_all(&mut self, ids: &[&str], dx: f64, dy: f64) -> Result<(), Error> {
         let mut steps = 0;
         for id in ids {
-            self.move_by(id, dx, dy)?;
-            self.fold(&mut steps)?;
+            self.shift(id, dx, dy, &mut steps)?;
         }
-        Ok(())
+        self.settle(ids, &mut steps)
     }
 
     /// Fit a shape to `to`, in the root's user units: one `set_node_attrs`,
     /// one undo step. A line keeps its direction, a circle takes the smaller
-    /// side, a label moves its anchor; a `<path>` or a `<g>` is scaled by
-    /// its `transform`, strokes and all. A shape under a rotation or a skew
-    /// has no box to fit and is `Unsupported`.
+    /// side, a label keeps its size and goes where the box's corner went;
+    /// a `<path>` or a `<g>` is scaled by its `transform`, strokes and all.
+    /// A shape under a rotation or a skew has no box to fit and is
+    /// `Unsupported`. An arrow bound to the shape follows, in the same step.
     pub fn resize(&mut self, id: &str, to: Bounds) -> Result<(), Error> {
         let shape = self
             .shape(id)
@@ -396,6 +564,10 @@ impl Drawing {
             gesture: "resize",
             kind: shape.kind,
         };
+        if shape.kind == ShapeKind::Text {
+            let from = self.bounds_of(shape).ok_or_else(unsupported)?;
+            return self.move_by(id, to.x - from.x, to.y - from.y);
+        }
         let updates: Vec<Update> = match shape.kind {
             ShapeKind::Path | ShapeKind::Group => {
                 let from = self.bounds_of(shape).ok_or_else(unsupported)?;
@@ -421,7 +593,9 @@ impl Drawing {
                 geometry::resized(shape, local).ok_or_else(unsupported)?
             }
         };
-        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        let mut steps = 1;
+        self.settle(&[id], &mut steps)
     }
 
     /// Wrap shapes in a new `<g>`, minting its `data-id`, which is returned.
@@ -554,7 +728,279 @@ impl Drawing {
             .map_err(Error::Edit)?;
         self.fold(&mut steps)?;
         self.reload()?;
+        // An arrow bound to the group itself has nothing to point at now.
+        self.unbind_dangling(&mut steps)?;
         Ok(ids)
+    }
+
+    // ----- arrows ----------------------------------------------------------
+
+    /// Where an end of a `<line>` is, in the root's user units. `None` for
+    /// any other kind.
+    pub fn end_point(&self, id: &str, end: End) -> Option<(f64, f64)> {
+        let shape = self.shape(id)?;
+        if shape.kind != ShapeKind::Line {
+            return None;
+        }
+        let (x, y) = end.coords();
+        let t = self.ctm(shape);
+        Some(t.apply(
+            shape.number(x).unwrap_or(0.0),
+            shape.number(y).unwrap_or(0.0),
+        ))
+    }
+
+    /// Bind an end of a `<line>` to a shape — `data-from` or `data-to`
+    /// written, and the end put on the shape's edge, facing the other end
+    /// — or, with `None`, unbind it, the end staying put. One undo step.
+    /// `Unsupported` for what is not a `<line>`; `NoSuchShape` for a
+    /// target that is not there, the arrow itself included.
+    pub fn bind(&mut self, id: &str, end: End, target: Option<&str>) -> Result<(), Error> {
+        let shape = self.arrow(id, "bind")?;
+        if let Some(target) = target
+            && (target == id || self.shape(target).is_none())
+        {
+            return Err(Error::NoSuchShape(target.to_string()));
+        }
+        let updates = [(end.binding(), target.map(str::to_string))];
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        let mut steps = 1;
+        self.settle(&[id], &mut steps)
+    }
+
+    /// Drop an end of a `<line>` at `(x, y)`, in the root's user units: the
+    /// end goes there, and is bound to the topmost shape within
+    /// `tolerance` of the point — any but the arrow itself — or unbound if
+    /// there is none. Returns what it was bound to. One undo step; the
+    /// gesture a canvas makes of dragging an endpoint handle.
+    pub fn drop_end(
+        &mut self,
+        id: &str,
+        end: End,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+    ) -> Result<Option<String>, Error> {
+        let shape = self.arrow(id, "drop end")?;
+        let unsupported = || Error::Unsupported {
+            gesture: "drop end",
+            kind: shape.kind,
+        };
+        let target = self
+            .hit_where(x, y, tolerance, |s| s.id.as_deref() != Some(id))
+            .and_then(|s| s.id.clone());
+        let (lx, ly) = self
+            .ctm(shape)
+            .inverse()
+            .ok_or_else(unsupported)?
+            .apply(x, y);
+        let (xn, yn) = end.coords();
+        let updates = [
+            (xn, Some(number::fmt(lx))),
+            (yn, Some(number::fmt(ly))),
+            (end.binding(), target.clone()),
+        ];
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        let mut steps = 1;
+        self.settle(&[id], &mut steps)?;
+        Ok(target)
+    }
+
+    /// The `<line>` with this id, for a binding gesture.
+    fn arrow(&self, id: &str, gesture: &'static str) -> Result<&Shape, Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        if shape.kind != ShapeKind::Line {
+            return Err(Error::Unsupported {
+                gesture,
+                kind: shape.kind,
+            });
+        }
+        Ok(shape)
+    }
+
+    /// Put every arrow that `affected` reaches — one of them, or bound to
+    /// one of them or to a shape inside one of them — back on its targets'
+    /// edges, folded into the gesture's step. Only an end that would move
+    /// is written.
+    fn settle(&mut self, affected: &[&str], steps: &mut usize) -> Result<(), Error> {
+        let mut reached: HashSet<String> = HashSet::new();
+        for id in affected {
+            self.descend(id, &mut reached);
+        }
+        let arrows: Vec<String> = self
+            .shapes
+            .iter()
+            .filter(|s| s.kind == ShapeKind::Line)
+            .filter(|s| {
+                let bound = |end: End| s.attr(end.binding());
+                (bound(End::From).is_some() || bound(End::To).is_some())
+                    && [s.id.as_deref(), bound(End::From), bound(End::To)]
+                        .into_iter()
+                        .flatten()
+                        .any(|id| reached.contains(id))
+            })
+            .filter_map(|s| s.id.clone())
+            .collect();
+        for id in arrows {
+            let Some(arrow) = self.shape(&id) else {
+                continue;
+            };
+            let updates = self.settled_ends(arrow);
+            if !updates.is_empty() {
+                self.write_attrs(arrow.node, &arrow.attrs.clone(), &updates)?;
+                self.fold(steps)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// `id` and every shape inside it.
+    fn descend(&self, id: &str, into: &mut HashSet<String>) {
+        if !into.insert(id.to_string()) {
+            return;
+        }
+        for member in self.members(id) {
+            if let Some(member) = member.id.as_deref() {
+                self.descend(member, into);
+            }
+        }
+    }
+
+    /// The ends of an arrow moved onto their targets' edges: each bound end
+    /// on the segment from its target's centre to the other end's anchor —
+    /// the other target's centre, or the other end itself.
+    fn settled_ends(&self, arrow: &Shape) -> Vec<Update> {
+        let t = self.ctm(arrow);
+        let Some(back) = t.inverse() else {
+            return Vec::new();
+        };
+        let at = |end: End| {
+            let (x, y) = end.coords();
+            t.apply(
+                arrow.number(x).unwrap_or(0.0),
+                arrow.number(y).unwrap_or(0.0),
+            )
+        };
+        let target = |end: End| {
+            arrow
+                .attr(end.binding())
+                .filter(|&id| arrow.id.as_deref() != Some(id))
+                .and_then(|id| self.shape(id))
+                .and_then(|s| Some((s, self.bounds_of(s)?)))
+        };
+        let anchor = |end: End| match target(end) {
+            Some((_, b)) => (b.x + b.width / 2.0, b.y + b.height / 2.0),
+            None => at(end),
+        };
+        let mut updates = Vec::new();
+        for end in [End::From, End::To] {
+            let Some((shape, _)) = target(end) else {
+                continue;
+            };
+            let (px, py) = self.edge(shape, anchor(end), anchor(end.other()));
+            let (lx, ly) = back.apply(px, py);
+            let (xn, yn) = end.coords();
+            for (name, value) in [(xn, lx), (yn, ly)] {
+                let written = number::fmt(value);
+                if arrow.number(name).map(number::fmt) != Some(written.clone()) {
+                    updates.push((name, Some(written)));
+                }
+            }
+        }
+        updates
+    }
+
+    /// Where the segment from `from` (inside `shape`) to `to` last leaves
+    /// the shape's outline, in the root's units; `from` itself when it
+    /// never does.
+    fn edge(&self, shape: &Shape, from: (f64, f64), to: (f64, f64)) -> (f64, f64) {
+        let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+        let mut furthest: Option<f64> = None;
+        for sub in self.outline_of(shape) {
+            let pts = &sub.points;
+            let closing = sub.closed.then(|| (pts[pts.len() - 1], pts[0]));
+            for (a, b) in pts.windows(2).map(|w| (w[0], w[1])).chain(closing) {
+                let (ex, ey) = (b.0 - a.0, b.1 - a.1);
+                let denominator = dx * ey - dy * ex;
+                if denominator.abs() < 1e-12 {
+                    continue;
+                }
+                let (wx, wy) = (a.0 - from.0, a.1 - from.1);
+                let t = (wx * ey - wy * ex) / denominator;
+                let u = (wx * dy - wy * dx) / denominator;
+                if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+                    furthest = Some(furthest.map_or(t, |f: f64| f.max(t)));
+                }
+            }
+        }
+        match furthest {
+            Some(t) => (from.0 + t * dx, from.1 + t * dy),
+            None => from,
+        }
+    }
+
+    /// A shape's silhouette in the root's units: its outline through its
+    /// transform chain, a label's box, a group's members'.
+    fn outline_of(&self, shape: &Shape) -> Vec<Subpath> {
+        if shape.kind == ShapeKind::Group {
+            return self
+                .members_of(shape)
+                .flat_map(|m| self.outline_of(m))
+                .collect();
+        }
+        let t = self.ctm(shape);
+        let subs = match shape.kind {
+            ShapeKind::Text => self.local_bounds(shape).map(|b| {
+                let (x1, y1) = (b.x + b.width, b.y + b.height);
+                vec![Subpath {
+                    points: vec![(b.x, b.y), (x1, b.y), (x1, y1), (b.x, y1)],
+                    closed: true,
+                }]
+            }),
+            _ => geometry::outline(shape),
+        };
+        subs.unwrap_or_default()
+            .into_iter()
+            .map(|mut s| {
+                for p in &mut s.points {
+                    *p = t.apply(p.0, p.1);
+                }
+                s
+            })
+            .collect()
+    }
+
+    /// Take the binding off every arrow end whose target is gone, folded
+    /// into the gesture's step.
+    fn unbind_dangling(&mut self, steps: &mut usize) -> Result<(), Error> {
+        let dangling: Vec<(String, Vec<Update>)> = self
+            .shapes
+            .iter()
+            .filter(|s| s.kind == ShapeKind::Line)
+            .filter_map(|s| {
+                let gone: Vec<Update> = [End::From, End::To]
+                    .into_iter()
+                    .filter(|end| {
+                        s.attr(end.binding())
+                            .is_some_and(|target| self.shape(target).is_none())
+                    })
+                    .map(|end| (end.binding(), None))
+                    .collect();
+                (!gone.is_empty())
+                    .then_some(())
+                    .and(s.id.clone().map(|id| (id, gone)))
+            })
+            .collect();
+        for (id, updates) in dangling {
+            let Some(arrow) = self.shape(&id) else {
+                continue;
+            };
+            self.write_attrs(arrow.node, &arrow.attrs.clone(), &updates)?;
+            self.fold(steps)?;
+        }
+        Ok(())
     }
 
     /// Change a shape's place in paint order among its sibling shapes: one
@@ -1275,6 +1721,227 @@ mod tests {
         assert!(d.undo().unwrap());
         assert_eq!(d.source(), SCENE);
         assert!(matches!(d.delete_all(&["zz"]), Err(Error::NoSuchShape(_))));
+    }
+
+    /// A measurer that says every label is 40 wide and 10 tall, its box
+    /// 8 above the baseline.
+    struct Fixed;
+
+    impl Measure for Fixed {
+        fn measure(&self, _svg: &str) -> Option<Bounds> {
+            Some(Bounds {
+                x: 0.0,
+                y: -8.0,
+                width: 40.0,
+                height: 10.0,
+            })
+        }
+    }
+
+    const LABELLED: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" font-family=\"serif\" data-diaryx-drawing=\"1\">\n  <style>text { fill: red }</style>\n  <g transform=\"translate(100 0)\" class=\"k\" data-id=\"g\">\n    <text x=\"10\" y=\"50\" transform=\"scale(2)\" data-id=\"t\">Hi <tspan>there</tspan></text>\n  </g>\n</svg>\n";
+
+    #[test]
+    fn a_label_is_measured_by_the_host_at_the_origin_and_placed_by_its_anchor() {
+        let mut d = Drawing::open(LABELLED).unwrap();
+        assert_eq!(d.shape("t").unwrap().text.as_deref(), Some("Hi there"));
+        // Without a measurer: the nominal box, through the chain.
+        let nominal = d.bounds("t").unwrap();
+        assert_eq!((nominal.x, nominal.y, nominal.height), (120.0, 80.8, 24.0));
+        assert!((nominal.width - 115.2).abs() < 1e-9, "{nominal:?}");
+
+        d.set_measure(Box::new(Fixed));
+        let b = d.bounds("t").unwrap();
+        // (10, 50) + (0, -8), 40 by 10, scaled by 2, then across by 100.
+        assert_eq!(
+            b,
+            Bounds {
+                x: 120.0,
+                y: 84.0,
+                width: 80.0,
+                height: 20.0
+            }
+        );
+        assert_eq!(d.hit(150.0, 90.0, 0.0).unwrap().id.as_deref(), Some("t"));
+        assert!(d.hit(150.0, 110.0, 0.0).is_none());
+
+        // Moving keeps the measured box.
+        d.move_by("t", 10.0, 0.0).unwrap();
+        assert_eq!(d.shape("t").unwrap().attr("x"), Some("15"));
+        assert_eq!(d.bounds("t").unwrap().x, 130.0);
+        // Resizing a label moves its anchor to where the box went.
+        d.resize(
+            "t",
+            Bounds {
+                x: 120.0,
+                y: 84.0,
+                width: 1.0,
+                height: 1.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.shape("t").unwrap().attr("x"), Some("10"));
+    }
+
+    #[test]
+    fn the_measurer_is_asked_about_the_label_at_the_origin_under_its_styles() {
+        use std::sync::{Arc, Mutex};
+        /// Remembers what it was asked and measures nothing.
+        struct Spy(Arc<Mutex<Vec<String>>>);
+        impl Measure for Spy {
+            fn measure(&self, svg: &str) -> Option<Bounds> {
+                self.0.lock().unwrap().push(svg.to_string());
+                None
+            }
+        }
+        let mut d = Drawing::open(LABELLED).unwrap();
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        d.set_measure(Box::new(Spy(asked.clone())));
+        d.bounds("t");
+        d.move_by("t", 1.0, 1.0).unwrap();
+        d.bounds("t");
+        let seen: Vec<String> = asked.lock().unwrap().clone();
+        assert_eq!(
+            seen,
+            [
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\" font-family=\"serif\" data-diaryx-drawing=\"1\"><style>text { fill: red }</style><g class=\"k\" data-id=\"g\"><text data-id=\"t\">Hi <tspan>there</tspan></text></g></svg>"
+            ],
+            "asked once: a move does not change the label"
+        );
+    }
+
+    /// The end is on the rim of the circle of radius 10 at `centre`.
+    fn on_rim(line: &Shape, end: End, centre: (f64, f64)) {
+        let (xn, yn) = end.coords();
+        let (x, y) = (line.number(xn).unwrap(), line.number(yn).unwrap());
+        let r = ((x - centre.0).powi(2) + (y - centre.1).powi(2)).sqrt();
+        assert!((r - 10.0).abs() < 0.05, "on the rim of {centre:?}: {x} {y}");
+    }
+
+    const WIRED: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"20\" data-id=\"s1\"/>\n  <circle cx=\"100\" cy=\"20\" r=\"10\" data-id=\"s2\"/>\n  <line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\" data-id=\"s3\"/>\n</svg>\n";
+
+    #[test]
+    fn a_bound_arrow_sits_on_its_targets_edges_and_follows_them() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        d.bind("s3", End::From, Some("s1")).unwrap();
+        d.bind("s3", End::To, Some("s2")).unwrap();
+        let line = d.shape("s3").unwrap();
+        // Centres (20, 20) and (100, 20): the rect's right edge, the
+        // circle's left.
+        assert_eq!(
+            line.attrs,
+            [
+                ("x1", Some("30".into())),
+                ("y1", Some("20".into())),
+                ("x2", Some("90".into())),
+                ("y2", Some("20".into())),
+                ("data-id", Some("s3".into())),
+                ("data-from", Some("s1".into())),
+                ("data-to", Some("s2".into())),
+            ]
+            .map(|(k, v): (&str, Option<String>)| (k.to_string(), v))
+        );
+        assert_eq!(d.end_point("s3", End::To), Some((90.0, 20.0)));
+
+        // The circle moves down: the line's end follows around its rim,
+        // in the move's one step, and the start leaves the rect lower.
+        d.move_by("s2", 0.0, 60.0).unwrap();
+        let line = d.shape("s3").unwrap();
+        assert_eq!(
+            (line.attr("x1"), line.attr("y1")),
+            (Some("30"), Some("27.5"))
+        );
+        on_rim(line, End::To, (100.0, 80.0));
+        assert!(d.undo().unwrap());
+        assert_eq!(d.shape("s3").unwrap().attr("y1"), Some("20"));
+        assert_eq!(d.shape("s2").unwrap().attr("cy"), Some("20"));
+
+        // Dragging the arrow itself moves nothing bound.
+        d.move_by("s3", 5.0, 5.0).unwrap();
+        assert_eq!(d.shape("s3").unwrap().attr("x1"), Some("30"));
+        assert!(d.undo().unwrap());
+
+        // Deleting a target takes the binding off, in the delete's step.
+        d.delete("s2").unwrap();
+        let line = d.shape("s3").unwrap();
+        assert_eq!(line.attr("data-to"), None);
+        assert_eq!(line.attr("data-from"), Some("s1"));
+        assert_eq!(line.attr("x2"), Some("90"), "the end stays where it was");
+        assert!(d.undo().unwrap());
+        assert_eq!(d.shape("s3").unwrap().attr("data-to"), Some("s2"));
+
+        // Unbinding leaves the end put.
+        d.bind("s3", End::To, None).unwrap();
+        assert_eq!(d.shape("s3").unwrap().attr("data-to"), None);
+        d.move_by("s2", 0.0, 60.0).unwrap();
+        assert_eq!(d.shape("s3").unwrap().attr("x2"), Some("90"));
+
+        assert!(matches!(
+            d.bind("s1", End::To, Some("s2")),
+            Err(Error::Unsupported {
+                gesture: "bind",
+                ..
+            })
+        ));
+        assert!(matches!(
+            d.bind("s3", End::To, Some("s3")),
+            Err(Error::NoSuchShape(_))
+        ));
+    }
+
+    #[test]
+    fn dropping_an_end_on_a_shape_binds_it_and_off_one_unbinds() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        assert_eq!(
+            d.drop_end("s3", End::To, 95.0, 20.0, 2.0)
+                .unwrap()
+                .as_deref(),
+            Some("s2")
+        );
+        let line = d.shape("s3").unwrap();
+        assert_eq!(line.attr("data-to"), Some("s2"));
+        // From (0, 0) toward the circle's centre, the end lands on the rim.
+        on_rim(line, End::To, (100.0, 20.0));
+        let (x2, y2) = (line.number("x2").unwrap(), line.number("y2").unwrap());
+        assert!(x2 < 100.0 && y2 < 20.0, "facing the other end: {x2} {y2}");
+        assert!(d.undo().unwrap(), "one step");
+        assert_eq!(d.source(), WIRED);
+
+        d.drop_end("s3", End::To, 95.0, 20.0, 2.0).unwrap();
+        assert_eq!(d.drop_end("s3", End::To, 150.0, 50.0, 2.0).unwrap(), None);
+        let line = d.shape("s3").unwrap();
+        assert_eq!(line.attr("data-to"), None);
+        assert_eq!(
+            (line.attr("x2"), line.attr("y2")),
+            (Some("150"), Some("50"))
+        );
+        // An end dropped on the arrow's own stroke binds to nothing.
+        assert_eq!(d.drop_end("s3", End::From, 75.0, 25.0, 2.0).unwrap(), None);
+    }
+
+    #[test]
+    fn an_arrow_bound_into_a_group_follows_the_group_and_a_deleted_group() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        let g = d.group(&["s1", "s2"]).unwrap();
+        d.bind("s3", End::To, Some("s2")).unwrap();
+        on_rim(d.shape("s3").unwrap(), End::To, (100.0, 20.0));
+        d.move_by(&g, 0.0, 10.0).unwrap();
+        on_rim(d.shape("s3").unwrap(), End::To, (100.0, 30.0));
+        // Bound to the group, an end leaves the last of its members'
+        // outlines on the way out from the group's centre, (60, 30).
+        d.drop_end("s3", End::To, 180.0, 30.0, 0.0).unwrap();
+        d.bind("s3", End::From, Some(&g)).unwrap();
+        let line = d.shape("s3").unwrap();
+        assert_eq!(line.attr("data-from"), Some(&*g));
+        assert_eq!(
+            (line.attr("x1"), line.attr("y1")),
+            (Some("110"), Some("30"))
+        );
+        d.ungroup(&g).unwrap();
+        let line = d.shape("s3").unwrap();
+        assert_eq!(line.attr("data-from"), None, "nothing to point at");
+        assert_eq!(line.attr("x1"), Some("110"));
+        assert!(d.undo().unwrap());
+        assert_eq!(d.shape("s3").unwrap().attr("data-from"), Some(&*g));
     }
 
     #[test]

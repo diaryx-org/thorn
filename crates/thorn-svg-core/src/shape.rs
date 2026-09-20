@@ -94,6 +94,10 @@ pub struct Shape {
     pub depth: usize,
     /// Every attribute, in source order, bare ones as `None`.
     pub attrs: Vec<(String, Option<String>)>,
+    /// A `<text>`'s characters — every text node inside it, `<tspan>`s
+    /// included, whitespace collapsed as SVG lays it out. `None` for every
+    /// other kind, and for an empty label.
+    pub text: Option<String>,
 }
 
 impl Shape {
@@ -149,11 +153,36 @@ fn walk(
             group: group.map(str::to_string),
             depth,
             attrs: node.attrs.clone(),
+            text: (kind == ShapeKind::Text)
+                .then(|| characters(nodes, id))
+                .filter(|t| !t.is_empty()),
         };
         let own_id = shape.id.clone();
         out.push(shape);
         if kind == ShapeKind::Group {
             walk(nodes, id, depth + 1, own_id.as_deref(), out);
+        }
+    }
+}
+
+/// The characters under an element, whitespace runs collapsed to one
+/// space and the ends trimmed.
+fn characters(nodes: &[FlatNode], parent: NodeId) -> String {
+    let mut raw = String::new();
+    gather(nodes, parent, &mut raw);
+    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn gather(nodes: &[FlatNode], parent: NodeId, out: &mut String) {
+    let by_id = |id: NodeId| nodes.iter().find(|n| n.id == id);
+    let mut next = by_id(parent).and_then(|n| n.first_child);
+    while let Some(id) = next {
+        let Some(node) = by_id(id) else { break };
+        next = node.next_sibling;
+        match node.kind {
+            Kind::Str => out.push_str(node.text.as_deref().unwrap_or("")),
+            Kind::Container => gather(nodes, id, out),
+            _ => {}
         }
     }
 }

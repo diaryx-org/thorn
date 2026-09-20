@@ -10,7 +10,14 @@ description = "The frontend-neutral core of a drawing editor over twig's SVG: th
 keywords = ["svg", "drawing", "editor", "twig", "diaryx"]
 categories = ["multimedia::images", "text-editors"]
 
+[features]
+# `measure::Usvg`: a label's box laid out by resvg's usvg over the system's
+# fonts. Off, a `Drawing` needs a host's `Measure`, or falls back to a
+# nominal box. The FFI crate turns it on, since its host draws with resvg.
+usvg = ["dep:usvg"]
+
 [dependencies]
 twig-doc.workspace = true
 svgtypes.workspace = true
 thiserror.workspace = true
+usvg = { workspace = true, optional = true }

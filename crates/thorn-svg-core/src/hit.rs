@@ -125,16 +125,10 @@ pub fn hits(shape: &Shape, x: f64, y: f64, tolerance: f64) -> bool {
         }
         ShapeKind::Path => path::flatten(shape.attr("d").unwrap_or(""))
             .is_some_and(|subs| subs.iter().any(|s| hits_subpath(s, x, y, tolerance))),
-        // A label's extent is its font's to say; until the host says, a box
-        // around the anchor is what a click can land on.
+        // A label is its box — the nominal one here; `Drawing::hit` has
+        // the measured one when a font is at hand.
         ShapeKind::Text => {
-            let b = Bounds {
-                x: n("x") - TEXT_REACH,
-                y: n("y") - TEXT_REACH,
-                width: 2.0 * TEXT_REACH,
-                height: TEXT_REACH,
-            };
-            b.expanded(tolerance).contains(x, y)
+            geometry::bounds(shape).is_some_and(|b| b.expanded(tolerance).contains(x, y))
         }
         ShapeKind::Group => false,
     }
@@ -155,10 +149,6 @@ fn hits_subpath(sub: &Subpath, x: f64, y: f64, tolerance: f64) -> bool {
         .chain(closing)
         .any(|(a, b)| segment_distance(a, b, (x, y)) <= tolerance)
 }
-
-/// How far around a `<text>` anchor a click counts, in user units, until
-/// the host supplies measured bounds.
-const TEXT_REACH: f64 = 12.0;
 
 impl Bounds {
     /// Whether the box contains the point, edges included.
@@ -230,6 +220,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), Some(v.to_string())))
                 .collect(),
+            text: (kind == ShapeKind::Text).then(|| "Hello".to_string()),
         }
     }
 
@@ -272,8 +263,11 @@ mod tests {
         let open = shape(ShapeKind::Polyline, &[("points", "0,0 10,0 0,10")]);
         assert!(!hits(&open, 2.0, 2.0, 0.0), "a polyline has no interior");
 
+        // "Hello" at the default 12: 36 wide, 9.6 above the baseline.
         let text = shape(ShapeKind::Text, &[("x", "100"), ("y", "100")]);
         assert!(hits(&text, 105.0, 95.0, 0.0));
+        assert!(hits(&text, 135.0, 102.0, 0.0));
+        assert!(!hits(&text, 137.0, 95.0, 0.0));
         assert!(!hits(&text, 100.0, 120.0, 0.0));
 
         let stroke = shape(ShapeKind::Path, &[("d", "M0 0h10")]);

@@ -62,6 +62,15 @@ and none at all for the identity. Ungrouping pushes a group's `transform`
 down onto its members — a shift of a plain shape's attributes where it can
 be, a `transform` of their own where it cannot — so nothing moves.
 
+A `<text>`'s extent is its face's to say, and the face is the host's — the
+one it draws with, or the box and the glyphs disagree. The core asks the
+host (`measure::Measure`) for the label laid out at the origin under
+everything that styles it, once per distinct label, and places the box by
+the anchor; the binding lends resvg's own layout over the system's fonts,
+so the box is the one on screen. With no host layout the box is nominal:
+`font-size` tall (12 when unset, usvg's default), six tenths of that per
+character wide, placed by `text-anchor`.
+
 Everything else — `<defs>`, `<style>`, `<title>`, `<desc>`, `<metadata>`, a
 comment, a processing instruction, an element the editor has never heard of
 — is preserved exactly and never modelled. The editor edits through twig,
@@ -78,7 +87,7 @@ draws.
 |-----------|----|-------|
 | `data-diaryx-drawing` | `<svg>` | rule 1: the profile version |
 | `data-id` | every shape | rule 3 |
-| `data-from`, `data-to` | `<line>`, `<path>` | an arrow bound to a shape at each end: when the shape moves, the arrow's endpoint follows. The value is the shape's `data-id`. *Binding is not yet a gesture; the attributes are reserved.* |
+| `data-from`, `data-to` | `<line>`, `<path>` | an arrow bound to a shape at each end: when the shape moves, the arrow's endpoint follows. The value is the shape's `data-id`. The editor binds a `<line>` (`Drawing::bind`, or dropping an endpoint handle on a shape) and keeps a bound end on its shape's edge, facing the other end — it rewrites `x1`/`y1` or `x2`/`y2` whenever the shape moves or resizes, in that gesture's undo step, and takes the binding off when the shape is deleted. A bound `<path>` is honoured as reserved: read, never rewritten. |
 | `data-ink` | `<path>` | a freehand stroke: the `d` is an outline the nib computed, filled. *Reserved: see the ink section of the org's proposal.* |
 | `data-centreline`, `data-widths` | `<path>` with `data-ink` | the pen's centreline points and per-point widths the outline was computed from, so a platform with a different nib can recompute it. *Reserved.* |
 
@@ -92,7 +101,9 @@ attributes it changes, each in its existing place among the element's
 attributes, and appends one the element lacked; every other attribute keeps
 its bytes. A `points` list is written as `x,y` pairs separated by one space.
 A reorder moves the element and the line break and indentation ahead of it,
-and nothing else. It does not write a `<style>`; the app's proposal
+and nothing else. Binding an arrow appends `data-from` or `data-to` after
+the attributes it has, and settling a bound end rewrites only the two
+coordinates of that end, and only when they would change. It does not write a `<style>`; the app's proposal
 puts one in the file it creates so a viewer with no theme shows a marker as a
 marker, and that template is the app's to settle (docs/tasks/style-template.md).
 

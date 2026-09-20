@@ -80,6 +80,21 @@ fn boxes_and_arrow_reads_in_paint_order() {
     let arrow = drawing.shape("s5").unwrap();
     assert_eq!(arrow.attr("data-from"), Some("s1"));
     assert_eq!(arrow.number("x2"), Some(198.0));
+
+    // The arrow is bound at both ends: moving the ellipse up brings its
+    // head along the rim, and the tail off the box's right edge to face
+    // it — one step, back to the same bytes.
+    let mut drawing = drawing;
+    drawing.move_by("s3", 0.0, -30.0).unwrap();
+    let arrow = drawing.shape("s5").unwrap();
+    assert_eq!(arrow.attr("x1"), Some("120"));
+    assert!(arrow.number("y1").unwrap() < 70.0, "{:?}", arrow.attrs);
+    let (x2, y2) = (arrow.number("x2").unwrap(), arrow.number("y2").unwrap());
+    let on_rim = ((x2 - 250.0) / 50.0).powi(2) + ((y2 - 40.0) / 30.0).powi(2);
+    assert!((on_rim - 1.0).abs() < 0.01, "{x2} {y2}");
+    assert_eq!(drawing.check(), []);
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
 }
 
 /// Every gesture on every shape of every fixture is one undo step back to

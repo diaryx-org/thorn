@@ -71,6 +71,39 @@ final class DrawingDocumentTests: XCTestCase {
         XCTAssertEqual(path.bounds(id: "p"), CGRect(x: 0, y: 0, width: 8, height: 8))
     }
 
+    func testALabelIsMeasuredByTheFontItIsDrawnWith() throws {
+        let doc = try DrawingDocument(source: empty)
+        let t = try doc.addText("Hello", at: CGPoint(x: 10, y: 50))
+        let b = try XCTUnwrap(doc.bounds(id: t))
+        // The box is the glyphs': the H starts at the anchor, the cap
+        // height stands above the baseline, nothing hangs far below it.
+        XCTAssertEqual(b.minX, 10, accuracy: 2)
+        XCTAssertGreaterThan(b.width, 20)
+        XCTAssertLessThan(b.width, 40)
+        XCTAssertLessThan(b.minY, 50)
+        XCTAssertEqual(b.maxY, 52, accuracy: 3)
+        XCTAssertEqual(doc.hit(CGPoint(x: b.midX, y: b.midY), tolerance: 0)?.id, t)
+        XCTAssertEqual(doc.shape(id: t)?.text, "Hello")
+    }
+
+    func testAnArrowBoundToAShapeFollowsIt() throws {
+        let doc = try DrawingDocument(source: empty)
+        let r = try doc.addRect(CGRect(x: 10, y: 10, width: 20, height: 20))
+        let l = try doc.addLine(from: CGPoint(x: 100, y: 20), to: CGPoint(x: 90, y: 20))
+        try doc.bind(id: l, .to, to: r)
+        XCTAssertEqual(doc.binding(id: l, .to), r)
+        XCTAssertEqual(doc.endPoint(id: l, .to), CGPoint(x: 30, y: 20), "on the rect's right edge")
+        // The rect moves down: the end leaves its right edge on the way
+        // to the other end, lower now.
+        try doc.move(id: r, by: CGVector(dx: 0, dy: 30))
+        XCTAssertEqual(doc.endPoint(id: l, .to), CGPoint(x: 30, y: 46.25))
+        XCTAssertTrue(doc.source.contains("<line x1=\"100\" y1=\"20\" x2=\"30\" y2=\"46.25\" data-id=\"s2\" data-to=\"s1\"/>"))
+        try doc.delete(id: r)
+        XCTAssertNil(doc.binding(id: l, .to))
+        XCTAssertThrowsError(try doc.bind(id: r, .to, to: l), "gone")
+        XCTAssertEqual(doc.check().count, 0)
+    }
+
     func testRefusesWhatIsNotAnSvg() {
         XCTAssertThrowsError(try DrawingDocument(source: "<html/>"))
     }

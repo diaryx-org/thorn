@@ -18,8 +18,8 @@ the canvas found that 0.1.1 placed a `<marker>` wrongly at any fit but 1:1
 (fixed there in `b1ccb73`), and 0.1.2's `SVGPicture.fitTransform(in:)` is
 the fit the canvas maps clicks through, so it cannot disagree with what was
 drawn. `apps/thorn-mac` is a window around it for seeing a change work.
-What is still open moved to `hit-testing.md` (a `<path>`/`<g>` and measured
-text bounds) and `style-template.md`.
+What was still open moved to `hit-testing.md` (a `<path>`/`<g>` and measured
+text bounds — since done there) and `style-template.md`.
 
 `packages/thorn-swift` has `DrawingDocument` — the gestures with
 Foundation types at the edges — and no view. The canvas is:

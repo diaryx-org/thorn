@@ -66,16 +66,43 @@ pub fn bounds(shape: &Shape) -> Option<Bounds> {
             let subs = path::flatten(shape.attr("d")?)?;
             Bounds::around(subs.iter().flat_map(|s| s.points.iter().copied()))?
         }
-        // A label's extent is its font's to say; its anchor is all the
-        // attributes carry.
-        ShapeKind::Text => Bounds {
-            x: or0("x"),
-            y: or0("y"),
-            width: 0.0,
-            height: 0.0,
-        },
+        ShapeKind::Text => nominal_text(shape),
         ShapeKind::Group => return None,
     })
+}
+
+/// The size a `<text>` lays out at when nothing says: usvg's default,
+/// which is what the canvas draws with.
+const DEFAULT_FONT_SIZE: f64 = 12.0;
+
+/// A label's box without a font: `font-size` (12 when unset) tall, with
+/// the baseline four fifths of the way down, and six tenths of that per
+/// character wide — the average of a text face — placed by `text-anchor`.
+/// What [`Drawing::bounds`](crate::Drawing::bounds) falls back to when no
+/// [`Measure`](crate::measure::Measure) is installed; every measured face
+/// is within a few units of it.
+fn nominal_text(shape: &Shape) -> Bounds {
+    let (x, y) = (
+        shape.number("x").unwrap_or(0.0),
+        shape.number("y").unwrap_or(0.0),
+    );
+    let size = shape
+        .attr("font-size")
+        .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
+        .unwrap_or(DEFAULT_FONT_SIZE);
+    let chars = shape.text.as_deref().map_or(0, |t| t.chars().count());
+    let width = 0.6 * size * chars as f64;
+    let left = match shape.attr("text-anchor").map(str::trim) {
+        Some("middle") => x - width / 2.0,
+        Some("end") => x - width,
+        _ => x,
+    };
+    Bounds {
+        x: left,
+        y: y - 0.8 * size,
+        width,
+        height: size,
+    }
 }
 
 impl Bounds {
@@ -277,7 +304,12 @@ pub fn resized(shape: &Shape, to: Bounds) -> Option<Vec<Update>> {
             };
             vec![("x1", f(xa)), ("y1", f(ya)), ("x2", f(xb)), ("y2", f(yb))]
         }
-        ShapeKind::Text => vec![("x", f(to.x)), ("y", f(to.y))],
+        // A label keeps its size; its anchor goes where its box's corner
+        // went.
+        ShapeKind::Text => {
+            let from = bounds(shape)?;
+            return moved(shape, to.x - from.x, to.y - from.y);
+        }
         ShapeKind::Polyline | ShapeKind::Polygon => {
             let pts = points(shape.attr("points")?)?;
             let from = bounds(shape)?;
@@ -338,6 +370,7 @@ mod tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), Some(v.to_string())))
                 .collect(),
+            text: (kind == ShapeKind::Text).then(|| "Hello".to_string()),
         }
     }
 
@@ -403,6 +436,49 @@ mod tests {
             "no width"
         );
         assert!(bounds(&shape(ShapeKind::Path, &[("d", "M0 0")])).is_none());
+    }
+
+    #[test]
+    fn a_label_has_a_nominal_box_around_its_anchor() {
+        // "Hello" at 20: 60 wide, 16 above the baseline, 4 below.
+        let b = |a: &[(&str, &str)]| bounds(&shape(ShapeKind::Text, a)).unwrap();
+        let start = b(&[("x", "10"), ("y", "50"), ("font-size", "20")]);
+        assert_eq!(
+            start,
+            Bounds {
+                x: 10.0,
+                y: 34.0,
+                width: 60.0,
+                height: 20.0
+            }
+        );
+        let end = b(&[
+            ("x", "10"),
+            ("y", "50"),
+            ("font-size", "20px"),
+            ("text-anchor", "end"),
+        ]);
+        assert_eq!(end.x, -50.0);
+        let middle = b(&[("x", "10"), ("y", "50"), ("text-anchor", "middle")]);
+        assert_eq!((middle.x, middle.width, middle.height), (-8.0, 36.0, 12.0));
+        // Resizing moves the anchor by where the box's corner went.
+        let moved_to = resized(
+            &shape(ShapeKind::Text, &[("x", "10"), ("y", "50")]),
+            Bounds {
+                x: 20.0,
+                y: 50.0,
+                width: 1.0,
+                height: 1.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            moved_to,
+            [
+                ("x", Some("20".to_string())),
+                ("y", Some("59.6".to_string()))
+            ]
+        );
     }
 
     #[test]

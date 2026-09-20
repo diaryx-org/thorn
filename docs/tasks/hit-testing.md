@@ -2,15 +2,16 @@
 title: Hit-testing and selection in the core
 description: What is under the pointer, which handle of the selection it grabbed, and the bounds a handle set is drawn from — pure geometry, testable with no screen
 author: adammharris
-status: in-progress
+status: done
 created: 2026-09-19
 updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # Hit-testing and selection in the core
 
-**In progress.** `hit::hits`, `Drawing::hit`, `Handle` (position, `at`,
-`drag`) landed 2026-09-20 for every attribute-stated kind: a stroke counts
+**Done 2026-09-20**, over three commits. `hit::hits`, `Drawing::hit`,
+`Handle` (position, `at`, `drag`) landed first, for every attribute-stated
+kind: a stroke counts
 as its centreline within a tolerance, a fill as its interior, a polygon by
 even-odd. The same day, in the commit that added group and ungroup: a
 `<path>` through its `d` flattened (`path::flatten`, over svgtypes'
@@ -18,9 +19,16 @@ simplifying parser), a `<g>` through its members (`Drawing::bounds` is
 their union, `Drawing::outermost` is what a click on a member selects), and
 `transform` — parsed into one matrix (`transform.rs`), composed up the
 group chain, honoured by `bounds`, `hit`, `move_by` and `resize` for every
-kind, and written by `move_by`/`resize` for a `<path>` or a `<g>`. What is
-left: measured `<text>` bounds (the core uses a nominal box around the
-anchor), and arrow bindings.
+kind, and written by `move_by`/`resize` for a `<path>` or a `<g>`. Last,
+in the commit that closes this: a `<text>`'s box measured by the host's
+layout (`measure::Measure`; the binding lends resvg's, `measure::Usvg`,
+over the system's fonts, so it is the box the canvas draws; a nominal box
+from `font-size` and the character count without one), and arrow bindings
+— `Drawing::bind` and `Drawing::drop_end` on a `<line>`, a bound end kept
+on its shape's edge by every gesture that moves the shape, folded into
+that gesture's step, and the canvas dragging a line by endpoint handles
+that bind on drop. A bound `<path>` is still reserved: the profile allows
+it, and the editor reads it and rewrites nothing.
 
 The core knows what a rectangle is; it should also know whether a point is
 inside one. Pure geometry over the shape list, so the Mac, iOS and the

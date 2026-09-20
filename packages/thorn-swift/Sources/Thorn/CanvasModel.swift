@@ -55,6 +55,8 @@ public final class CanvasModel {
         /// The selection moving as one; `start` is the box around it all.
         case move(ids: [String], start: CGRect, delta: CGVector)
         case resize(id: String, handle: Handle, start: CGRect, delta: CGVector)
+        /// An end of a line being dragged; `other` is the end staying put.
+        case endpoint(id: String, end: End, other: CGPoint, to: CGPoint)
         case create(from: CGPoint, to: CGPoint)
     }
     private var drag: Drag?
@@ -99,16 +101,26 @@ public final class CanvasModel {
         for id in selection {
             guard let bounds = selectionBounds(id) else { continue }
             let r = viewRect(bounds)
+            // A lone line is outlined as itself, its handles its ends —
+            // filled when bound to a shape. Everything else is its box,
+            // with handles when it can be resized by them; a group of
+            // shapes moves as one and is resized one at a time.
+            if selection.count == 1, let ends = endpoints(id), ends.count == 2 {
+                context.move(to: viewPoint(ends[0].1))
+                context.addLine(to: viewPoint(ends[1].1))
+                context.strokePath()
+                for (end, p) in ends {
+                    let bound = document.binding(id: id, end) != nil
+                    context.setFillColor(bound ? accent : CGColor(gray: 1, alpha: 1))
+                    handleBox(at: viewPoint(p), in: context)
+                }
+                continue
+            }
             context.stroke(r)
-            // Handles on a lone selection; a group of shapes moves as one
-            // and is resized one at a time.
-            guard selection.count == 1 else { continue }
+            guard resizable == id else { continue }
             context.setFillColor(CGColor(gray: 1, alpha: 1))
             for h in Handle.all {
-                let p = h.position(on: r)
-                let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
-                context.fill(box)
-                context.stroke(box)
+                handleBox(at: h.position(on: r), in: context)
             }
         }
 
@@ -127,14 +139,22 @@ public final class CanvasModel {
 
     private func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
 
-    /// A selected shape's box as drawn: its bounds, or a nominal box around
-    /// a label's anchor, since a `<text>`'s extent is its font's.
+    private func handleBox(at p: CGPoint, in context: CGContext) {
+        let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
+        context.fill(box)
+        context.stroke(box)
+    }
+
+    /// A selected shape's box as drawn.
     private func selectionBounds(_ id: String) -> CGRect? {
-        guard let shape = document.shape(id: id) else { return nil }
-        if shape.kind == .text, let b = document.bounds(id: id) {
-            return CGRect(x: b.minX - 2, y: b.minY - 12, width: 24, height: 14)
-        }
-        return document.bounds(id: id)
+        document.bounds(id: id)
+    }
+
+    /// A `<line>`'s ends, in user units — its handles; `nil` for any other
+    /// kind.
+    private func endpoints(_ id: String) -> [(End, CGPoint)]? {
+        guard document.shape(id: id)?.kind == .line else { return nil }
+        return [End.from, .to].compactMap { end in document.endPoint(id: id, end).map { (end, $0) } }
     }
 
     /// The box around the whole selection.
@@ -142,10 +162,11 @@ public final class CanvasModel {
         selection.compactMap(selectionBounds).reduce(nil as CGRect?) { acc, r in acc.map { $0.union(r) } ?? r }
     }
 
-    /// Whether a lone selected shape can be resized by its handles.
+    /// Whether a lone selected shape can be resized by its box handles: a
+    /// label is moved, a line is dragged by its ends.
     private var resizable: String? {
         guard selection.count == 1, let id = selection.first,
-              let shape = document.shape(id: id), shape.kind != .text else { return nil }
+              let shape = document.shape(id: id), shape.kind != .text, shape.kind != .line else { return nil }
         return id
     }
 
@@ -157,6 +178,8 @@ public final class CanvasModel {
             return .box(start.offsetBy(dx: delta.dx, dy: delta.dy))
         case .resize(_, let handle, let start, let delta):
             return .box(handle.drag(start, by: delta))
+        case .endpoint(_, _, let other, let to):
+            return .segment(other, to)
         case .create(let from, let to):
             if tool == .line { return .segment(from, to) }
             return .box(CGRect(from: from, to: to))
@@ -174,7 +197,11 @@ public final class CanvasModel {
         let p = userPoint(viewPoint)
         switch tool {
         case .select:
-            if let id = resizable, let b = selectionBounds(id),
+            if selection.count == 1, let id = selection.first, let ends = endpoints(id),
+               let (end, at) = ends.first(where: { abs($0.1.x - p.x) <= userTolerance && abs($0.1.y - p.y) <= userTolerance }),
+               let other = ends.first(where: { $0.0 != end })?.1 {
+                drag = .endpoint(id: id, end: end, other: other, to: at)
+            } else if let id = resizable, let b = selectionBounds(id),
                let h = Handle.at(p, on: b, tolerance: userTolerance) {
                 drag = .resize(id: id, handle: h, start: b, delta: .zero)
             } else if let hit = document.hit(p, tolerance: userTolerance), let hitId = hit.id,
@@ -208,6 +235,8 @@ public final class CanvasModel {
         case .resize(let id, let handle, let start, _):
             let origin = userPoint(startViewPoint ?? viewPoint)
             drag = .resize(id: id, handle: handle, start: start, delta: CGVector(dx: p.x - origin.x, dy: p.y - origin.y))
+        case .endpoint(let id, let end, let other, _):
+            drag = .endpoint(id: id, end: end, other: other, to: p)
         case .create(let from, _):
             drag = .create(from: from, to: p)
         case nil:
@@ -227,6 +256,10 @@ public final class CanvasModel {
             if ids.count == 1 { try? document.move(id: ids[0], by: delta) } else { try? document.move(ids: ids, by: delta) }
         case .resize(let id, let handle, let start, let delta) where delta != .zero:
             try? document.resize(id: id, to: handle.drag(start, by: delta))
+        case .endpoint(let id, let end, _, let to):
+            // Dropped on a shape, the end binds to it and follows it from
+            // now on; dropped on nothing, it is unbound.
+            try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
             guard box.width > 0 || box.height > 0 else { return }

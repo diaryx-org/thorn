@@ -142,4 +142,45 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(doc.source, scene)
         XCTAssertEqual(doc.check().count, 0)
     }
+
+    func testALineIsDraggedByItsEndsAndBindsToWhatItIsDroppedOn() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let context = makeContext()
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        model.tool = .line
+        model.beginPointer(at: CGPoint(x: 140, y: 100)) // user (70, 50)
+        model.pointerDragged(to: CGPoint(x: 200, y: 100)) // user (100, 50)
+        model.pointerUp()
+        XCTAssertEqual(model.selection, ["s3"])
+        XCTAssertEqual(doc.endPoint(id: "s3", .to), CGPoint(x: 100, y: 50))
+
+        // Drag the `to` end onto the circle: it binds, and sits on the rim
+        // facing the other end.
+        model.beginPointer(at: CGPoint(x: 201, y: 101))
+        model.pointerDragged(to: CGPoint(x: 300, y: 100)) // the circle's centre
+        model.pointerUp()
+        XCTAssertEqual(doc.binding(id: "s3", .to), "s2")
+        XCTAssertEqual(doc.endPoint(id: "s3", .to), CGPoint(x: 130, y: 50))
+        XCTAssertNil(doc.binding(id: "s3", .from))
+
+        // The circle moves; the end follows.
+        model.select("s2")
+        model.beginPointer(at: CGPoint(x: 300, y: 100))
+        model.pointerDragged(to: CGPoint(x: 300, y: 140)) // +20 user units down
+        model.pointerUp()
+        let end = try XCTUnwrap(doc.endPoint(id: "s3", .to))
+        XCTAssertEqual(hypot(end.x - 150, end.y - 70), 20, accuracy: 0.05)
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.endPoint(id: "s3", .to), CGPoint(x: 130, y: 50), "one step")
+
+        // Dropped on nothing, the end unbinds and stays where it fell.
+        model.select("s3")
+        model.beginPointer(at: CGPoint(x: 260, y: 100)) // user (130, 50)
+        model.pointerDragged(to: CGPoint(x: 260, y: 180)) // user (130, 90)
+        model.pointerUp()
+        XCTAssertNil(doc.binding(id: "s3", .to))
+        XCTAssertEqual(doc.endPoint(id: "s3", .to), CGPoint(x: 130, y: 90))
+    }
 }

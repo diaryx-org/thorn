@@ -913,6 +913,7 @@ dependencies = [
  "svgtypes",
  "thiserror 2.0.20",
  "twig-doc",
+ "usvg",
 ]
 
 [[package]]

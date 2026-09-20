@@ -19,20 +19,23 @@
 //!   reorder, undo, redo. Each is one twig operation and therefore one undo
 //!   step; the editor keeps no history of its own. [`geometry`] is the
 //!   arithmetic under move and resize; [`hit`] is what is under the pointer
-//!   and the handles a selection is resized by.
+//!   and the handles a selection is resized by; [`measure`] is how a host
+//!   lends the core its fonts, so a `<text>`'s box is the one it draws.
 
 pub mod drawing;
 pub mod geometry;
 pub mod hit;
+pub mod measure;
 pub mod number;
 pub mod path;
 pub mod profile;
 pub mod shape;
 pub mod transform;
 
-pub use drawing::{Drawing, Error, Order, Rect};
+pub use drawing::{Drawing, End, Error, Order, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
+pub use measure::Measure;
 pub use profile::{Finding, Rule};
 pub use shape::{Shape, ShapeKind};
 pub use transform::Transform;

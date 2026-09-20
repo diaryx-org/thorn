@@ -109,6 +109,8 @@ pub struct Shape {
     pub group: Option<String>,
     pub depth: u32,
     pub attrs: Vec<Attribute>,
+    /// A `<text>`'s characters, whitespace collapsed; `None` otherwise.
+    pub text: Option<String>,
 }
 
 impl From<&core::Shape> for Shape {
@@ -126,6 +128,7 @@ impl From<&core::Shape> for Shape {
                     value: value.clone(),
                 })
                 .collect(),
+            text: s.text.clone(),
         }
     }
 }
@@ -249,6 +252,24 @@ pub fn handle_drag(handle: Handle, bounds: Bounds, dx: f64, dy: f64) -> Bounds {
         .into()
 }
 
+/// Mirrors `thorn_svg_core::End`: an end of a `<line>` arrow.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum End {
+    /// `(x1, y1)`, bound by `data-from`.
+    From,
+    /// `(x2, y2)`, bound by `data-to`.
+    To,
+}
+
+impl From<End> for core::End {
+    fn from(e: End) -> Self {
+        match e {
+            End::From => Self::From,
+            End::To => Self::To,
+        }
+    }
+}
+
 /// Mirrors `thorn_svg_core::Order`.
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
 pub enum Order {
@@ -304,10 +325,12 @@ unsafe impl Send for Inner {}
 
 #[uniffi::export]
 impl Drawing {
-    /// Open an SVG's text.
+    /// Open an SVG's text. A `<text>`'s bounds are measured by resvg's
+    /// layout over the system's fonts — the layout the canvas draws with.
     #[uniffi::constructor]
     pub fn open(source: String) -> Result<Arc<Self>, DrawingError> {
-        let inner = core::Drawing::open(&source)?;
+        let mut inner = core::Drawing::open(&source)?;
+        inner.set_measure(Box::new(core::measure::Usvg));
         Ok(Arc::new(Self {
             inner: Mutex::new(Inner(inner)),
         }))
@@ -421,6 +444,34 @@ impl Drawing {
     /// them; returns their ids. One undo step.
     pub fn ungroup(&self, id: String) -> Result<Vec<String>, DrawingError> {
         Ok(self.lock().ungroup(&id)?)
+    }
+
+    /// Where an end of a `<line>` is, in the root's user units; `None`
+    /// for any other kind.
+    pub fn end_point(&self, id: String, end: End) -> Option<Point> {
+        self.lock()
+            .end_point(&id, end.into())
+            .map(|(x, y)| Point { x, y })
+    }
+
+    /// Bind an end of a `<line>` to a shape, the end put on its edge; or,
+    /// with no target, unbind it. One undo step.
+    pub fn bind(&self, id: String, end: End, target: Option<String>) -> Result<(), DrawingError> {
+        Ok(self.lock().bind(&id, end.into(), target.as_deref())?)
+    }
+
+    /// Drop an end of a `<line>` at a point: it goes there, bound to the
+    /// topmost shape within `tolerance` — any but the arrow — or unbound.
+    /// Returns what it was bound to. One undo step.
+    pub fn drop_end(
+        &self,
+        id: String,
+        end: End,
+        x: f64,
+        y: f64,
+        tolerance: f64,
+    ) -> Result<Option<String>, DrawingError> {
+        Ok(self.lock().drop_end(&id, end.into(), x, y, tolerance)?)
     }
 
     /// Fit a shape to `to`.
