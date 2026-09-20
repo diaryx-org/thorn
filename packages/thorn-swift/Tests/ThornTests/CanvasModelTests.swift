@@ -356,4 +356,21 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertTrue(try doc.undo())
         XCTAssertEqual(doc.shapes.count, 2, "one step for the sweep")
     }
+
+    func testTheArrowToolDrawsALineWithAHead() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        model.key("a")
+        XCTAssertEqual(model.tool, .arrow)
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 100))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        XCTAssertEqual(doc.heads(id: id), .end)
+        XCTAssertEqual(doc.shape(id: id)?.kind, .line, "an arrow is a line the canvas drags by its ends")
+        XCTAssertTrue(doc.source.contains("<line x1=\"50\" y1=\"50\" x2=\"100\" y2=\"50\" data-arrow=\"end\" data-id=\"\(id)\"/>"))
+        XCTAssertNil(doc.heads(id: "s1"))
+        XCTAssertTrue(try doc.undo(), "one step")
+    }
 }

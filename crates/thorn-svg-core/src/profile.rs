@@ -11,6 +11,7 @@ use std::collections::HashMap;
 
 use crate::drawing::Drawing;
 use crate::number;
+use crate::shape::Heads;
 
 /// The profile's version, written as the root's `data-diaryx-drawing` value.
 pub const VERSION: &str = "1";
@@ -39,6 +40,9 @@ pub enum Rule {
     /// three decimals, no trailing zeros — so an unedited re-export is
     /// byte-stable.
     NumberFormat,
+    /// `data-arrow` is `end`, `start` or `both`: the values the template's
+    /// `<style>` draws a head for.
+    ArrowHeads,
 }
 
 impl Rule {
@@ -52,6 +56,7 @@ impl Rule {
             Self::NumberFormat => {
                 "every geometry attribute is a number with at most three decimals and no trailing zeros"
             }
+            Self::ArrowHeads => "data-arrow is end, start or both",
         }
     }
 }
@@ -137,6 +142,15 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                     ),
                 });
             }
+        }
+        if let Some(value) = shape.attr("data-arrow")
+            && Heads::from_value(value).is_none()
+        {
+            findings.push(Finding {
+                rule: Rule::ArrowHeads,
+                shape: shape.id.clone(),
+                message: format!("<{tag}> data-arrow={value:?} is not end, start or both"),
+            });
         }
     }
     findings

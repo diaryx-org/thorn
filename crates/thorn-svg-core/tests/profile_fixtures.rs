@@ -1,7 +1,7 @@
 //! Every fixture under `tests/fixtures/` conforms to the profile, opens with
 //! its shapes in paint order, and survives an add and an undo byte for byte.
 
-use thorn_svg_core::{Bounds, Drawing, Order, Rect, ShapeKind};
+use thorn_svg_core::{Bounds, Drawing, Heads, Order, Rect, Rule, ShapeKind};
 
 fn fixtures() -> Vec<(String, String)> {
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
@@ -137,4 +137,36 @@ fn every_gesture_is_one_step_back_to_the_same_bytes() {
             assert_eq!(drawing.source(), src, "{name}: after {kind:?} {id}");
         }
     }
+}
+
+#[test]
+fn an_arrow_is_what_data_arrow_says_or_what_the_file_spells() {
+    let src = include_str!("fixtures/arrow-by-data.svg");
+    let mut drawing = Drawing::open(src).unwrap();
+    assert_eq!(drawing.shape("s3").unwrap().heads(), Some(Heads::End));
+    assert_eq!(drawing.shape("s4").unwrap().heads(), Some(Heads::Both));
+    assert_eq!(drawing.shape("s1").unwrap().heads(), None);
+    // A file that spells `marker-end` itself is an arrow all the same.
+    let spelled = Drawing::open(include_str!("fixtures/boxes-and-arrow.svg")).unwrap();
+    assert_eq!(spelled.shape("s5").unwrap().heads(), Some(Heads::End));
+
+    // The tool's arrow: one line with data-arrow, one step; its ends bind
+    // like any line's.
+    let id = drawing
+        .add_arrow(10.0, 10.0, 60.5, 20.0, Heads::End)
+        .unwrap();
+    assert!(drawing.source().contains(&format!(
+        "<line x1=\"10\" y1=\"10\" x2=\"60.5\" y2=\"20\" data-arrow=\"end\" data-id=\"{id}\"/>"
+    )));
+    assert_eq!(drawing.shape(&id).unwrap().heads(), Some(Heads::End));
+    assert_eq!(drawing.check(), []);
+    assert!(drawing.undo().unwrap());
+    assert_eq!(drawing.source(), src);
+
+    // A value the profile does not admit is a finding.
+    let odd = src.replace("data-arrow=\"both\"", "data-arrow=\"tail\"");
+    let findings = Drawing::open(&odd).unwrap().check();
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].rule, Rule::ArrowHeads);
+    assert_eq!(findings[0].shape.as_deref(), Some("s4"));
 }

@@ -32,7 +32,7 @@ use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
-use crate::shape::{self, Shape, ShapeKind};
+use crate::shape::{self, Heads, Shape, ShapeKind};
 use crate::transform::Transform;
 
 /// Why a gesture or an open refused.
@@ -271,6 +271,34 @@ impl Drawing {
         self.add_shape(
             "line",
             &[("x1", f(x1)), ("y1", f(y1)), ("x2", f(x2)), ("y2", f(y2))],
+            None,
+        )
+    }
+
+    /// Add an arrow from `(x1, y1)` to `(x2, y2)` as the topmost shape: a
+    /// `<line>` with `data-arrow` saying which ends have a head. The head
+    /// itself is drawn by the drawing's `<style>` from that attribute
+    /// (`line[data-arrow] { marker-end: url(#arrow) }` and a `<marker>`),
+    /// which is the template's, like every stroke and fill; the core
+    /// writes what an arrow is, not how it looks. Returns the id.
+    pub fn add_arrow(
+        &mut self,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        heads: Heads,
+    ) -> Result<String, Error> {
+        let f = number::fmt;
+        self.add_shape(
+            "line",
+            &[
+                ("x1", f(x1)),
+                ("y1", f(y1)),
+                ("x2", f(x2)),
+                ("y2", f(y2)),
+                ("data-arrow", heads.value().to_string()),
+            ],
             None,
         )
     }

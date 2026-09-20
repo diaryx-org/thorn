@@ -181,7 +181,7 @@ public final class CanvasModel {
         // it is big enough to add; its first pixel is drawn here.
         if case .create(let from, let to) = drag, !previewed {
             context.setLineDash(phase: 0, lengths: [4, 3])
-            if tool == .line {
+            if tool == .line || tool == .arrow {
                 context.move(to: viewPoint(from))
                 context.addLine(to: viewPoint(to))
                 context.strokePath()
@@ -279,9 +279,9 @@ public final class CanvasModel {
                 onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, fontName: document.font(id: nil)?.postScriptName, wraps: false))
             }
             release()
-        case .rect, .ellipse, .line:
+        case .rect, .ellipse, .arrow, .line:
             drag = .create(from: p, to: p)
-        case .diamond, .arrow, .draw, .note:
+        case .diamond, .draw, .note:
             // Not yet: `Tool.isAvailable` says so, and the toolbar
             // disables each until the core has its gesture.
             break
@@ -361,6 +361,7 @@ public final class CanvasModel {
             case .rect: created = try? document.addRect(box)
             case .ellipse: created = try? document.addEllipse(in: box)
             case .line: created = try? document.addLine(from: from, to: to)
+            case .arrow: created = try? document.addArrow(from: from, to: to)
             default: return false
             }
             return created != nil

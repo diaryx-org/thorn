@@ -100,6 +100,16 @@ public final class DrawingDocument {
         try changed { try inner.addLine(x1: Double(a.x), y1: Double(a.y), x2: Double(b.x), y2: Double(b.y)) }
     }
 
+    /// Add an arrow: a line with a head at `b` (or at both ends), which
+    /// the drawing's `<style>` draws from `data-arrow`.
+    @discardableResult
+    public func addArrow(from a: CGPoint, to b: CGPoint, heads: Heads = .end) throws -> String {
+        try changed { try inner.addArrow(x1: Double(a.x), y1: Double(a.y), x2: Double(b.x), y2: Double(b.y), heads: heads) }
+    }
+
+    /// Which ends of a shape have a head; `nil` for one that is not an arrow.
+    public func heads(id: String) -> Heads? { inner.heads(id: id) }
+
     /// Add a label anchored at a point; returns its `data-id`.
     @discardableResult
     public func addText(_ text: String, at point: CGPoint) throws -> String {

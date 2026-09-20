@@ -266,6 +266,11 @@ void uniffi_thorn_svg_ffi_fn_free_drawing(void*_Nonnull ptr, RustCallStatus *_No
 void*_Nonnull uniffi_thorn_svg_ffi_fn_constructor_drawing_open(RustBuffer source, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ARROW
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ARROW
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustBuffer heads, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
@@ -334,6 +339,11 @@ double uniffi_thorn_svg_ffi_fn_method_drawing_font_size(void*_Nonnull ptr, RustB
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_GROUP
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_GROUP
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_group(void*_Nonnull ptr, RustBuffer ids, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HEADS
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HEADS
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_heads(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HIT
@@ -719,6 +729,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_func_handle_position(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ARROW
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ARROW
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_ADD_ELLIPSE
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse(void
@@ -800,6 +816,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_font_size(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_GROUP
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_GROUP
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_group(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_HEADS
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_HEADS
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_heads(void
     
 );
 #endif

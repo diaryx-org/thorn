@@ -2,12 +2,20 @@
 title: An arrow gesture in the core
 description: A `<line>` with a marker at its head, so the arrow tool draws an arrow and not a bare line; what the marker is depends on the style template
 author: adammharris
-status: open
+status: done
 created: 2026-09-20
 updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # An arrow gesture in the core
+
+**Done 2026-09-20**, the second way below: `Drawing::add_arrow` writes
+`data-arrow` (`end`, `start`, `both`) on a `<line>`, the profile's rule 6
+holds the value to those three, `Shape::heads` reads it — or a
+`marker-start`/`marker-end` a file spells itself — and the template's
+`<style>` draws the head. The Mac app's fresh page carries the rule and
+the `<marker>`; what `New Drawing` in the app writes is still
+[style-template.md](style-template.md)'s.
 
 The toolbar has an arrow (`A` / `5`, `Tool.arrow`) and it is disabled. The
 profile knows an arrow as a `<line>` that may carry `data-from`/`data-to`,

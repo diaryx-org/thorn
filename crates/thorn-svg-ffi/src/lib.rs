@@ -93,6 +93,34 @@ impl From<core::ShapeKind> for ShapeKind {
     }
 }
 
+/// Mirrors `thorn_svg_core::Heads`: which ends of an arrow have a head.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum Heads {
+    End,
+    Start,
+    Both,
+}
+
+impl From<core::Heads> for Heads {
+    fn from(h: core::Heads) -> Self {
+        match h {
+            core::Heads::End => Self::End,
+            core::Heads::Start => Self::Start,
+            core::Heads::Both => Self::Both,
+        }
+    }
+}
+
+impl From<Heads> for core::Heads {
+    fn from(h: Heads) -> Self {
+        match h {
+            Heads::End => Self::End,
+            Heads::Start => Self::Start,
+            Heads::Both => Self::Both,
+        }
+    }
+}
+
 /// One attribute of a shape; a bare attribute has no value.
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct Attribute {
@@ -385,6 +413,28 @@ impl Drawing {
     /// Add a line; returns its `data-id`.
     pub fn add_line(&self, x1: f64, y1: f64, x2: f64, y2: f64) -> Result<String, DrawingError> {
         Ok(self.lock().add_line(x1, y1, x2, y2)?)
+    }
+
+    /// Add an arrow — a line with `data-arrow` saying which ends have a
+    /// head; returns its `data-id`.
+    pub fn add_arrow(
+        &self,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        heads: Heads,
+    ) -> Result<String, DrawingError> {
+        Ok(self.lock().add_arrow(x1, y1, x2, y2, heads.into())?)
+    }
+
+    /// Which ends of a shape have a head, or `None` for a shape that is
+    /// not an arrow.
+    pub fn heads(&self, id: String) -> Option<Heads> {
+        self.lock()
+            .shape(&id)
+            .and_then(|s| s.heads())
+            .map(Heads::from)
     }
 
     /// Add a label anchored at `(x, y)`; returns its `data-id`.

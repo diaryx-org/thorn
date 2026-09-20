@@ -37,5 +37,5 @@ pub use geometry::Bounds;
 pub use hit::Handle;
 pub use measure::Measure;
 pub use profile::{Finding, Rule};
-pub use shape::{Shape, ShapeKind};
+pub use shape::{Heads, Shape, ShapeKind};
 pub use transform::Transform;

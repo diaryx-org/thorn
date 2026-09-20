@@ -73,7 +73,7 @@ history:
 
 | gesture | twig | status |
 |---------|------|--------|
-| add rect, ellipse, line, label | `insert_after` / `insert_child` | done |
+| add rect, ellipse, line, arrow, label | `insert_after` / `insert_child` | done: an arrow is a `<line>` with `data-arrow`, its head the drawing's `<style>` |
 | re-word a label, wrap it | `edit_range` over the `<text>`'s interior | done: `set_text`, and `set_width` flowing the words into `<tspan>` lines at `data-width` (measured by the host's layout); the canvas opens a field on a double-click or at the click with the label tool, and a label's box handles set the width it wraps to |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |

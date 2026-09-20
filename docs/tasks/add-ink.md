@@ -17,7 +17,13 @@ org's proposal (`~/diaryx/docs/proposals/drawing-editor-repository.md`,
 PencilKit's on Apple and the core's own elsewhere, and whether the file
 carries the centreline beside it.
 
-What the tool needs regardless of that answer:
+**Settled 2026-09-20** (recorded in the org proposal's "To settle"): the
+core owns the nib model — centreline and widths in, outline out — so
+there is one writer whatever the stroke came from, and a host's outline
+(PencilKit's) is input it may hand over; the file carries
+`data-centreline` and `data-widths` beside the outline; the first and,
+for now, only nib is monoline, and the profile admits only the nibs the
+core draws. What the tool needs:
 
 - `Drawing::add_path(d: &str, attrs)` — the writer; one `add_shape` with
   `d` in the number format and `data-ink` set. The profile already reads,

@@ -502,6 +502,12 @@ fileprivate struct FfiConverterString: FfiConverter {
 public protocol DrawingProtocol : AnyObject {
     
     /**
+     * Add an arrow — a line with `data-arrow` saying which ends have a
+     * head; returns its `data-id`.
+     */
+    func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads) throws  -> String
+    
+    /**
      * Add an ellipse filling `bounds`; returns its `data-id`.
      */
     func addEllipse(bounds: Bounds) throws  -> String
@@ -580,6 +586,12 @@ public protocol DrawingProtocol : AnyObject {
      * step.
      */
     func group(ids: [String]) throws  -> String
+    
+    /**
+     * Which ends of a shape have a head, or `None` for a shape that is
+     * not an arrow.
+     */
+    func heads(id: String)  -> Heads?
     
     /**
      * The topmost shape within `tolerance` of the point, in paint order. A
@@ -721,6 +733,22 @@ public static func `open`(source: String)throws  -> Drawing {
 }
     
 
+    
+    /**
+     * Add an arrow — a line with `data-arrow` saying which ends have a
+     * head; returns its `data-id`.
+     */
+open func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads)throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(self.uniffiClonePointer(),
+        FfiConverterDouble.lower(x1),
+        FfiConverterDouble.lower(y1),
+        FfiConverterDouble.lower(x2),
+        FfiConverterDouble.lower(y2),
+        FfiConverterTypeHeads.lower(heads),$0
+    )
+})
+}
     
     /**
      * Add an ellipse filling `bounds`; returns its `data-id`.
@@ -890,6 +918,18 @@ open func group(ids: [String])throws  -> String {
     return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_group(self.uniffiClonePointer(),
         FfiConverterSequenceString.lower(ids),$0
+    )
+})
+}
+    
+    /**
+     * Which ends of a shape have a head, or `None` for a shape that is
+     * not an arrow.
+     */
+open func heads(id: String) -> Heads? {
+    return try!  FfiConverterOptionTypeHeads.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_heads(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
     )
 })
 }
@@ -1964,6 +2004,80 @@ extension Handle: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Mirrors `thorn_svg_core::Heads`: which ends of an arrow have a head.
+ */
+
+public enum Heads {
+    
+    case end
+    case start
+    case both
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHeads: FfiConverterRustBuffer {
+    typealias SwiftType = Heads
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Heads {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .end
+        
+        case 2: return .start
+        
+        case 3: return .both
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Heads, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .end:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .start:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .both:
+            writeInt(&buf, Int32(3))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHeads_lift(_ buf: RustBuffer) throws -> Heads {
+    return try FfiConverterTypeHeads.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHeads_lower(_ value: Heads) -> RustBuffer {
+    return FfiConverterTypeHeads.lower(value)
+}
+
+
+
+extension Heads: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Mirrors `thorn_svg_core::Order`.
  */
 
@@ -2336,6 +2450,30 @@ fileprivate struct FfiConverterOptionTypeHandle: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeHeads: FfiConverterRustBuffer {
+    typealias SwiftType = Heads?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHeads.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHeads.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
     typealias SwiftType = [String]
 
@@ -2494,6 +2632,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_func_handle_position() != 51884) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow() != 7662) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse() != 11165) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -2534,6 +2675,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 8832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_heads() != 59389) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 61470) {

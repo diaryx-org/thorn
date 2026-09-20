@@ -102,7 +102,55 @@ pub struct Shape {
     pub text: Option<String>,
 }
 
+/// Which ends of an arrow have a head: the values `data-arrow` takes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Heads {
+    /// A head at `(x2, y2)`: the arrow the tool draws.
+    End,
+    /// A head at `(x1, y1)`.
+    Start,
+    Both,
+}
+
+impl Heads {
+    /// The value `data-arrow` spells this as.
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::End => "end",
+            Self::Start => "start",
+            Self::Both => "both",
+        }
+    }
+
+    /// The heads a `data-arrow` value names, or `None` for a value the
+    /// profile does not admit.
+    pub fn from_value(value: &str) -> Option<Self> {
+        Some(match value.trim() {
+            "end" => Self::End,
+            "start" => Self::Start,
+            "both" => Self::Both,
+            _ => return None,
+        })
+    }
+}
+
 impl Shape {
+    /// Whether this is an arrow, and which ends have a head: what
+    /// `data-arrow` says (the profile's spelling, which the template's
+    /// `<style>` draws), or, failing that, a `marker-end`/`marker-start`
+    /// the file spells itself. `None` for a line with no head.
+    pub fn heads(&self) -> Option<Heads> {
+        if let Some(v) = self.attr("data-arrow") {
+            return Heads::from_value(v);
+        }
+        match (self.attr("marker-start"), self.attr("marker-end")) {
+            (Some(_), Some(_)) => Some(Heads::Both),
+            (Some(_), None) => Some(Heads::Start),
+            (None, Some(_)) => Some(Heads::End),
+            (None, None) => None,
+        }
+    }
+
     /// The value of an attribute, if present and not bare.
     pub fn attr(&self, name: &str) -> Option<&str> {
         self.attrs
