@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" data-diaryx-drawing="1">
+  <!-- Two boxes and an arrow between them: the diagram every editor is asked for first. -->
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+  </defs>
+  <style>
+    rect, ellipse { fill: none; stroke: #222; stroke-width: 2 }
+    line { stroke: #222; stroke-width: 2 }
+    text { font: 14px sans-serif; text-anchor: middle }
+  </style>
+  <rect x="20" y="40" width="100" height="60" rx="6" data-id="s1"/>
+  <text x="70" y="75" data-id="s2">twig</text>
+  <ellipse cx="250" cy="70" rx="50" ry="30" data-id="s3"/>
+  <text x="250" y="75" data-id="s4">svg-editor</text>
+  <line x1="120" y1="70" x2="198" y2="70" marker-end="url(#arrow)" data-id="s5" data-from="s1" data-to="s3"/>
+</svg>

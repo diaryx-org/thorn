@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+description = "The workspace's task runner: `cargo xtask <task>` — CI as a program, and the steps that leave Rust (the UniFFI binding, the Swift tests)."
+# A development harness, never a published artifact.
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }

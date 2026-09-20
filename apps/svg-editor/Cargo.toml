@@ -1,0 +1,17 @@
+[package]
+name = "svg-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "The drawing editor's command line: hold an SVG to the Diaryx drawing profile, list its shapes, and render it to a PNG for a test or a thumbnail."
+keywords = ["svg", "drawing", "cli", "diaryx"]
+categories = ["command-line-utilities", "multimedia::images"]
+
+[dependencies]
+svg-editor-core.workspace = true
+resvg.workspace = true
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }

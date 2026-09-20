@@ -1,0 +1,4 @@
+module svg_editor_ffiFFI {
+    header "svg_editor_ffiFFI.h"
+    export *
+}

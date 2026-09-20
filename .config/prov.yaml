@@ -1,0 +1,52 @@
+title: prov config
+spec: 1
+content_format: markdown
+metadata:
+  format: yaml
+  embed: delimited
+references:
+  notation: markdown
+  path_style: root
+  target: path
+  label: false
+id_storage: both
+updated: ''
+identity: lazy
+fixity: attachments
+recycle_bin: false
+history: off
+about: off
+workspace_id: svg-editor
+root: README.md
+fields:
+  audience:
+    values: closed
+    vocabulary: '[Audiences](/vocab/audiences.md)'
+    reify: true
+  # The org's `tasks` preset — only the Tasks half: this repository keeps
+  # its proposals in the org (the argument for its existence is there), and a
+  # clause under an index that does not exist is a `prov check` finding.
+  status:
+    - under: '[[Tasks]]'
+      values: closed
+      vocabulary: '[Task statuses](/vocab/task-statuses.yaml)'
+      default: open
+  created: { type: date }
+  updated: { type: date }
+views:
+  open-tasks:
+    label: Open tasks
+    group: status
+    under: '[[Tasks]]'
+    where:
+      not: { equals: { status: [done, dropped] } }
+  work:
+    label: All work
+    group: status
+    where: { has: status }
+exports:
+  www:
+    label: svg-editor on diaryx.org
+    gate:
+      field: audience
+      value: public

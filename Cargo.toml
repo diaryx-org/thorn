@@ -1,0 +1,34 @@
+[workspace]
+resolver = "3"
+# Listed rather than globbed: `xtask` reads this line to know what CI covers.
+members = [
+  "crates/svg-editor-core",
+  "crates/svg-editor-ffi",
+  "apps/svg-editor",
+  "xtask",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+# Minimum supported Rust version. Edition 2024 needs 1.85; let-chains 1.88.
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/diaryx-org/svg-editor"
+readme = "README.md"
+
+[workspace.dependencies]
+# The tree editor under everything: parses the SVG as XML, keeps every byte it
+# is not asked to change, and owns undo. By crates.io version, as every
+# cross-repo edge in the org is; `~/diaryx/.cargo/patches.toml` is how to build
+# against a checkout. 3.8 knows the element tree and `insert_child`/`delete`;
+# `set_node_attrs` and `move_node` — the move, resize and reorder gestures —
+# are on twig's unmerged drawing branch (docs/tasks/gestures-need-twig.md).
+twig-doc = "3.8"
+# Rendering for the CLI's `render` and for a test that wants pixels. Same major
+# as leaf-raster and resvg-swift, so a host linking all three gets one copy.
+resvg = "0.46"
+anyhow = "1"
+thiserror = "2"
+# Internal crates.
+svg-editor-core = { path = "crates/svg-editor-core", version = "0.1.0" }
