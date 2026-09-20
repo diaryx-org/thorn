@@ -371,7 +371,7 @@ public final class CanvasModel {
         case .endpoint(let id, let end, _, let to):
             // Dropped on a shape, the end binds to it and follows it from
             // now on; dropped on nothing, it is unbound.
-            try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
+            _ = try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
             return true
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
@@ -517,7 +517,7 @@ public final class CanvasModel {
     /// Reorder a lone selected shape.
     public func reorderSelection(_ order: Order) {
         guard selection.count == 1 else { return }
-        try? document.reorder(id: selection[0], order)
+        _ = try? document.reorder(id: selection[0], order)
     }
 
     /// Wrap the selection in a group, which becomes the selection. Needs two
@@ -545,8 +545,8 @@ public final class CanvasModel {
         selection.count == 1 && document.shape(id: selection[0])?.kind == .group
     }
 
-    public func undo() { try? document.undo() }
-    public func redo() { try? document.redo() }
+    public func undo() { _ = try? document.undo() }
+    public func redo() { _ = try? document.redo() }
 
     /// Select shapes by id (or nothing).
     public func select(_ ids: [String]) {

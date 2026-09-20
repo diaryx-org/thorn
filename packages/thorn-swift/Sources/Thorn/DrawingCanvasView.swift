@@ -51,7 +51,9 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         f.textContainer?.lineFragmentPadding = 0
         // The field grows down with every line typed, and, unless the
         // label wraps at its width, across with every character.
-        let unbounded = CGFloat.greatestFiniteMagnitude
+        // Large, not infinite: AppKit clamps a layout constant past its
+        // limit and logs it, and no field is a hundred thousand points.
+        let unbounded: CGFloat = 100_000
         f.isVerticallyResizable = true
         f.minSize = edit.frame.size
         if edit.wraps {
