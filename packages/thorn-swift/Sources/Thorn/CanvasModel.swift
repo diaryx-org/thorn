@@ -3,12 +3,11 @@
 // drawing of picture + selection + handles into any CGContext. The AppKit
 // and UIKit views are thin over this, and it is testable with a bitmap.
 //
-// During a drag the model keeps the in-flight geometry. A move, a resize
-// or an endpoint drag is applied to the document as the pointer moves, so
-// the picture follows the hand — each application undone before the next,
-// so that when the pointer lifts the gesture is one undo step, as if it
-// had landed once. A shape being created is drawn as an outline and added
-// on pointer-up.
+// During a drag the model keeps the in-flight geometry, and applies it to
+// the document as the pointer moves — a shape moved, resized, dragged by
+// an end, or being created — so the picture follows the hand; each
+// application is undone before the next, so that when the pointer lifts
+// the gesture is one undo step, as if it had landed once.
 
 import CoreGraphics
 import Foundation
@@ -86,6 +85,8 @@ public final class CanvasModel {
     /// Whether the drag in flight has been applied to the document, and so
     /// must be undone before it is applied again or dropped.
     private var previewed = false
+    /// The shape a create drag last added.
+    private var created: String?
 
     public init(document: DrawingDocument) {
         self.document = document
@@ -150,14 +151,16 @@ public final class CanvasModel {
             }
         }
 
-        if let outline = inFlightOutline() {
+        // A shape being created has no box yet the document shows until
+        // it is big enough to add; its first pixel is drawn here.
+        if case .create(let from, let to) = drag, !previewed {
             context.setLineDash(phase: 0, lengths: [4, 3])
-            switch outline {
-            case .box(let r): context.stroke(viewRect(r))
-            case .segment(let a, let b):
-                context.move(to: viewPoint(a))
-                context.addLine(to: viewPoint(b))
+            if tool == .line {
+                context.move(to: viewPoint(from))
+                context.addLine(to: viewPoint(to))
                 context.strokePath()
+            } else {
+                context.stroke(viewRect(CGRect(from: from, to: to)))
             }
             context.setLineDash(phase: 0, lengths: [])
         }
@@ -195,22 +198,6 @@ public final class CanvasModel {
         guard selection.count == 1, let id = selection.first,
               let shape = document.shape(id: id), shape.kind != .line else { return nil }
         return id
-    }
-
-    private enum Outline { case box(CGRect), segment(CGPoint, CGPoint) }
-
-    /// What is drawn over the picture for a drag the document does not
-    /// yet show: a shape being created.
-    private func inFlightOutline() -> Outline? {
-        switch drag {
-        case .move, .resize, .endpoint:
-            return nil
-        case .create(let from, let to):
-            if tool == .line { return .segment(from, to) }
-            return .box(CGRect(from: from, to: to))
-        case nil:
-            return nil
-        }
     }
 
     // MARK: Pointer
@@ -297,6 +284,16 @@ public final class CanvasModel {
             // now on; dropped on nothing, it is unbound.
             try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
             return true
+        case .create(let from, let to):
+            let box = CGRect(from: from, to: to)
+            guard box.width > 0 || box.height > 0 else { return false }
+            switch tool {
+            case .rect: created = try? document.addRect(box)
+            case .ellipse: created = try? document.addEllipse(in: box)
+            case .line: created = try? document.addLine(from: from, to: to)
+            default: return false
+            }
+            return created != nil
         default:
             return false
         }
@@ -308,21 +305,13 @@ public final class CanvasModel {
     /// Pointer up: the gesture in flight lands as one splice — the last
     /// preview, which is already in the document.
     public func pointerUp() {
-        defer { drag = nil; startViewPoint = nil; previewed = false; needsDisplay?() }
+        defer { drag = nil; startViewPoint = nil; previewed = false; created = nil; needsDisplay?() }
         switch drag {
         case .move, .resize, .endpoint:
             if !previewed { previewed = apply() }
-        case .create(let from, let to):
-            let box = CGRect(from: from, to: to)
-            guard box.width > 0 || box.height > 0 else { return }
-            let added: String?
-            switch tool {
-            case .rect: added = try? document.addRect(box)
-            case .ellipse: added = try? document.addEllipse(in: box)
-            case .line: added = try? document.addLine(from: from, to: to)
-            default: added = nil
-            }
-            selection = added.map { [$0] } ?? []
+        case .create:
+            if !previewed { previewed = apply() }
+            selection = previewed ? created.map { [$0] } ?? [] : []
             tool = .select
         default:
             break

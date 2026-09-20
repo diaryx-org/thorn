@@ -37,10 +37,10 @@ Foundation types at the edges — and no view. The canvas is:
   select; forward and back; group and ungroup; delete; undo and redo.
 - **In-flight geometry.** During a drag the view keeps the numbers and draws
   the shape itself over the picture; the gesture lands as one splice on
-  pointer-up. *(Revised: a move, resize or endpoint drag is applied to the
-  document as the pointer moves, each application undone before the next,
-  so the picture follows the hand and the gesture is still one undo step.
-  A shape being created is drawn as an outline until pointer-up.)*
+  pointer-up. *(Revised: every drag — a move, a resize, an endpoint, a
+  shape being created — is applied to the document as the pointer moves,
+  each application undone before the next, so the picture follows the
+  hand and the gesture is still one undo step.)*
 
 The app's `AttachmentDetail` opens this as its own document; nothing here
 embeds in leaf's editing surface.

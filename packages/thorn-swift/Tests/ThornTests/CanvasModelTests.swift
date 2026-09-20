@@ -133,6 +133,8 @@ final class CanvasModelTests: XCTestCase {
 
         model.tool = .ellipse
         model.beginPointer(at: CGPoint(x: 200, y: 20))
+        model.pointerDragged(to: CGPoint(x: 220, y: 40))
+        XCTAssertEqual(doc.bounds(id: "s3"), CGRect(x: 100, y: 10, width: 10, height: 10), "drawn as it is dragged out")
         model.pointerDragged(to: CGPoint(x: 240, y: 60))
         model.pointerUp()
         XCTAssertEqual(model.tool, .select, "a create tool is one-shot")
