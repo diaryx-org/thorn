@@ -96,8 +96,9 @@ pub struct Shape {
     /// Every attribute, in source order, bare ones as `None`.
     pub attrs: Vec<(String, Option<String>)>,
     /// A `<text>`'s characters — every text node inside it, `<tspan>`s
-    /// included, whitespace collapsed as SVG lays it out. `None` for every
-    /// other kind, and for an empty label.
+    /// included, whitespace collapsed as SVG lays it out; a `<tspan>`
+    /// carrying `data-break` starts a new line, `\n` here. `None` for
+    /// every other kind, and for an empty label.
     pub text: Option<String>,
 }
 
@@ -167,11 +168,15 @@ fn walk(
 }
 
 /// The characters under an element, whitespace runs collapsed to one
-/// space and the ends trimmed.
+/// space and the ends trimmed, on each line a `data-break` starts.
 fn characters(nodes: &[FlatNode], parent: NodeId) -> String {
     let mut raw = String::new();
     gather(nodes, parent, &mut raw);
-    raw.split_whitespace().collect::<Vec<_>>().join(" ")
+    raw.split('\n')
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn gather(nodes: &[FlatNode], parent: NodeId, out: &mut String) {
@@ -185,7 +190,11 @@ fn gather(nodes: &[FlatNode], parent: NodeId, out: &mut String) {
             // A `<tspan>` is a run of its own — a wrapped label's line —
             // so a word does not run into the next one's.
             Kind::Container => {
-                out.push(' ');
+                out.push(if attr_of(node, "data-break").is_some() {
+                    '\n'
+                } else {
+                    ' '
+                });
                 gather(nodes, id, out);
                 out.push(' ');
             }

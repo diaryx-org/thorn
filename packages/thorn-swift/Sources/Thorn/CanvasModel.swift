@@ -342,8 +342,9 @@ public final class CanvasModel {
     }
 
     /// What was typed: a new label at the edit's anchor, or the label's
-    /// characters replaced. Empty text adds nothing, and deletes a label
-    /// being re-worded. One undo step either way.
+    /// characters replaced; a newline is a line break of the label's own.
+    /// Empty text adds nothing, and deletes a label being re-worded. One
+    /// undo step either way.
     public func commitTextEdit(_ edit: TextEdit, text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if let id = edit.id {

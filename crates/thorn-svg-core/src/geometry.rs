@@ -90,17 +90,24 @@ fn nominal_text(shape: &Shape) -> Bounds {
         .attr("font-size")
         .and_then(|v| v.trim().trim_end_matches("px").parse::<f64>().ok())
         .unwrap_or(DEFAULT_FONT_SIZE);
-    let chars = shape.text.as_deref().map_or(0, |t| t.chars().count());
-    let mut width = 0.6 * size * chars as f64;
-    // Wrapped to `data-width`: as many lines as that takes, 1.2 sizes apart.
-    let mut lines = 1.0;
-    if let Some(wrap) = shape
-        .number("data-width")
-        .filter(|w| *w > 0.0 && *w < width)
-    {
-        lines = (width / wrap).ceil();
-        width = wrap;
+    // A line per `\n`, and, wrapped to `data-width`, as many more as that
+    // takes; lines are 1.2 sizes apart.
+    let wrap = shape.number("data-width").filter(|w| *w > 0.0);
+    let (mut width, mut lines) = (0.0f64, 0.0f64);
+    for paragraph in shape.text.as_deref().unwrap_or("").lines() {
+        let needed = 0.6 * size * paragraph.chars().count() as f64;
+        match wrap {
+            Some(w) if w < needed => {
+                lines += (needed / w).ceil();
+                width = width.max(w);
+            }
+            _ => {
+                lines += 1.0;
+                width = width.max(needed);
+            }
+        }
     }
+    let lines = lines.max(1.0);
     let left = match shape.attr("text-anchor").map(str::trim) {
         Some("middle") => x - width / 2.0,
         Some("end") => x - width,

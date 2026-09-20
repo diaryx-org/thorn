@@ -81,11 +81,12 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         closeField(commit: true)
     }
 
-    /// Return commits; Escape leaves the label as it was. A label is one
-    /// paragraph — it wraps to its width, and has no line breaks of its own.
+    /// Return commits; Shift-Return breaks the line; Escape leaves the
+    /// label as it was.
     public func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(insertNewline(_:)): closeField(commit: true)
+        case #selector(insertLineBreak(_:)): textView.insertText("\n", replacementRange: textView.selectedRange())
         case #selector(cancelOperation(_:)): closeField(commit: false)
         default: return false
         }

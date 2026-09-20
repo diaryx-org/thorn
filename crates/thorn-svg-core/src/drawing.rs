@@ -484,43 +484,65 @@ impl Drawing {
         0.6 * size * line.chars().count() as f64
     }
 
-    /// A label's interior for `text`: one escaped run, or, when the label
-    /// carries `data-width`, its words flowed into that width as one
-    /// `<tspan>` per line — each at the anchor's `x`, each after the first
-    /// a line down (`dy="1.2em"`) — the longest word a line of its own
-    /// when nothing shorter fits.
+    /// A label's interior for `text`: one escaped run when it is one line
+    /// and the label has no `data-width`; otherwise one `<tspan>` per line
+    /// — each at the anchor's `x`, each after the first a line down
+    /// (`dy="1.2em"`). A `\n` in `text` breaks a line, and the `<tspan>`
+    /// it starts carries `data-break="hard"` so it reads back as one; with
+    /// `data-width` each such paragraph's words are flowed into that width
+    /// besides, the longest word a line of its own when nothing shorter
+    /// fits.
     fn flowed(&self, shape: &Shape, text: &str) -> String {
-        let Some(width) = shape.number("data-width").filter(|w| *w > 0.0) else {
-            return escape(text);
-        };
-        let x = number::fmt(shape.number("x").unwrap_or(0.0));
-        let mut lines: Vec<String> = Vec::new();
-        let mut line = String::new();
-        for word in text.split_whitespace() {
-            let candidate = if line.is_empty() {
-                word.to_string()
-            } else {
-                format!("{line} {word}")
-            };
-            if line.is_empty() || self.line_width(shape, &candidate) <= width {
-                line = candidate;
-            } else {
-                lines.push(std::mem::replace(&mut line, word.to_string()));
-            }
+        let width = shape.number("data-width").filter(|w| *w > 0.0);
+        let paragraphs: Vec<&str> = text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect();
+        if width.is_none() && paragraphs.len() <= 1 {
+            return escape(text.trim());
         }
-        if !line.is_empty() {
-            lines.push(line);
+        let x = number::fmt(shape.number("x").unwrap_or(0.0));
+        // Each line, and whether it starts a paragraph.
+        let mut lines: Vec<(String, bool)> = Vec::new();
+        for paragraph in paragraphs {
+            let first = lines.len();
+            let mut line = String::new();
+            for word in paragraph.split_whitespace() {
+                let candidate = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if line.is_empty() || width.is_none_or(|w| self.line_width(shape, &candidate) <= w)
+                {
+                    line = candidate;
+                } else {
+                    lines.push((std::mem::replace(&mut line, word.to_string()), false));
+                }
+            }
+            if !line.is_empty() {
+                lines.push((line, false));
+            }
+            if let Some(l) = lines.get_mut(first) {
+                l.1 = true;
+            }
         }
         lines
             .iter()
             .enumerate()
-            .map(|(i, l)| {
+            .map(|(i, (l, starts))| {
                 let dy = if i == 0 {
                     String::new()
                 } else {
                     format!(" dy=\"{}em\"", number::fmt(geometry::LINE_HEIGHT))
                 };
-                format!("<tspan x=\"{x}\"{dy}>{}</tspan>", escape(l))
+                let hard = if *starts && i > 0 {
+                    " data-break=\"hard\""
+                } else {
+                    ""
+                };
+                format!("<tspan x=\"{x}\"{dy}{hard}>{}</tspan>", escape(l))
             })
             .collect()
     }
@@ -2356,6 +2378,39 @@ mod tests {
             (pitch - 12.0).abs() < 0.5,
             "1.2em of 10 between lines: {b:?}, {lines} lines"
         );
+    }
+
+    #[test]
+    fn a_newline_in_a_label_is_a_line_of_its_own_and_reads_back() {
+        let mut d = Drawing::open(
+            "<svg viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" data-id=\"t\">one</text>\n</svg>\n",
+        )
+        .unwrap();
+        d.set_text("t", "first line\nsecond\n\n  third  ").unwrap();
+        assert!(d.source().contains(
+            "<text x=\"10\" y=\"20\" data-id=\"t\"><tspan x=\"10\">first line</tspan><tspan x=\"10\" dy=\"1.2em\" data-break=\"hard\">second</tspan><tspan x=\"10\" dy=\"1.2em\" data-break=\"hard\">third</tspan></text>"
+        ));
+        assert_eq!(
+            d.shape("t").unwrap().text.as_deref(),
+            Some("first line\nsecond\nthird")
+        );
+        // Wrapped narrow, a hard break stays hard and a soft one is not.
+        d.set_width("t", Some(40.0)).unwrap();
+        assert!(d.source().contains(
+            "<tspan x=\"10\">first</tspan><tspan x=\"10\" dy=\"1.2em\">line</tspan><tspan x=\"10\" dy=\"1.2em\" data-break=\"hard\">second</tspan>"
+        ));
+        assert_eq!(
+            d.shape("t").unwrap().text.as_deref(),
+            Some("first line\nsecond\nthird")
+        );
+        d.set_width("t", None).unwrap();
+        assert_eq!(d.source().matches("<tspan").count(), 3);
+        d.set_text("t", "one line").unwrap();
+        assert!(
+            d.source().contains("data-id=\"t\">one line</text>"),
+            "no tspans for one line unwrapped"
+        );
+        assert_eq!(d.check(), []);
     }
 
     #[test]
