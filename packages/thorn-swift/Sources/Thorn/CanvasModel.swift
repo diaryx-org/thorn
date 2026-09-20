@@ -3,9 +3,12 @@
 // drawing of picture + selection + handles into any CGContext. The AppKit
 // and UIKit views are thin over this, and it is testable with a bitmap.
 //
-// During a drag the model keeps the in-flight geometry and draws it as an
-// outline over the picture; the gesture lands as one splice on pointer-up.
-// Nothing is written to the document while the pointer is down.
+// During a drag the model keeps the in-flight geometry. A move, a resize
+// or an endpoint drag is applied to the document as the pointer moves, so
+// the picture follows the hand — each application undone before the next,
+// so that when the pointer lifts the gesture is one undo step, as if it
+// had landed once. A shape being created is drawn as an outline and added
+// on pointer-up.
 
 import CoreGraphics
 import Foundation
@@ -80,6 +83,9 @@ public final class CanvasModel {
         case create(from: CGPoint, to: CGPoint)
     }
     private var drag: Drag?
+    /// Whether the drag in flight has been applied to the document, and so
+    /// must be undone before it is applied again or dropped.
+    private var previewed = false
 
     public init(document: DrawingDocument) {
         self.document = document
@@ -193,14 +199,12 @@ public final class CanvasModel {
 
     private enum Outline { case box(CGRect), segment(CGPoint, CGPoint) }
 
+    /// What is drawn over the picture for a drag the document does not
+    /// yet show: a shape being created.
     private func inFlightOutline() -> Outline? {
         switch drag {
-        case .move(_, let start, let delta):
-            return .box(start.offsetBy(dx: delta.dx, dy: delta.dy))
-        case .resize(_, let handle, let start, let delta):
-            return .box(handle.drag(start, by: delta))
-        case .endpoint(_, _, let other, let to):
-            return .segment(other, to)
+        case .move, .resize, .endpoint:
+            return nil
         case .create(let from, let to):
             if tool == .line { return .segment(from, to) }
             return .box(CGRect(from: from, to: to))
@@ -268,24 +272,46 @@ public final class CanvasModel {
         case nil:
             return
         }
+        preview()
         needsDisplay?()
+    }
+
+    /// Apply the drag in flight to the document, the previous application
+    /// undone first, so the picture shows the gesture as it stands.
+    private func preview() {
+        if previewed { _ = try? document.undo() }
+        previewed = apply()
+    }
+
+    /// Apply the drag in flight; `true` when it wrote something.
+    private func apply() -> Bool {
+        switch drag {
+        case .move(let ids, _, let delta) where delta != .zero:
+            if ids.count == 1 { try? document.move(id: ids[0], by: delta) } else { try? document.move(ids: ids, by: delta) }
+            return true
+        case .resize(let id, let handle, let start, let delta) where delta != .zero:
+            try? document.resize(id: id, to: handle.drag(start, by: delta))
+            return true
+        case .endpoint(let id, let end, _, let to):
+            // Dropped on a shape, the end binds to it and follows it from
+            // now on; dropped on nothing, it is unbound.
+            try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
+            return true
+        default:
+            return false
+        }
     }
 
     /// The view point the drag began at, remembered by `pointerDown`.
     private var startViewPoint: CGPoint?
 
-    /// Pointer up: the gesture in flight lands as one splice.
+    /// Pointer up: the gesture in flight lands as one splice — the last
+    /// preview, which is already in the document.
     public func pointerUp() {
-        defer { drag = nil; startViewPoint = nil; needsDisplay?() }
+        defer { drag = nil; startViewPoint = nil; previewed = false; needsDisplay?() }
         switch drag {
-        case .move(let ids, _, let delta) where delta != .zero:
-            if ids.count == 1 { try? document.move(id: ids[0], by: delta) } else { try? document.move(ids: ids, by: delta) }
-        case .resize(let id, let handle, let start, let delta) where delta != .zero:
-            try? document.resize(id: id, to: handle.drag(start, by: delta))
-        case .endpoint(let id, let end, _, let to):
-            // Dropped on a shape, the end binds to it and follows it from
-            // now on; dropped on nothing, it is unbound.
-            try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
+        case .move, .resize, .endpoint:
+            if !previewed { previewed = apply() }
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
             guard box.width > 0 || box.height > 0 else { return }

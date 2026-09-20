@@ -48,11 +48,16 @@ final class CanvasModelTests: XCTestCase {
 
         model.beginPointer(at: CGPoint(x: 40, y: 40))
         XCTAssertEqual(model.selection, ["s1"])
-        model.pointerDragged(to: CGPoint(x: 60, y: 50)) // +10, +5 user units
-        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 10, y: 10), "nothing lands mid-drag")
+        model.pointerDragged(to: CGPoint(x: 50, y: 45)) // +5, +2.5 user units
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 15, y: 12.5), "the picture follows the drag")
+        model.pointerDragged(to: CGPoint(x: 60, y: 50)) // +10, +5
         model.pointerUp()
         XCTAssertEqual(doc.bounds(id: "s1"), CGRect(x: 20, y: 15, width: 40, height: 20))
         XCTAssertTrue(doc.source.contains("<rect x=\"20\" y=\"15\" width=\"40\" height=\"20\" fill=\"#ff0000\" data-id=\"s1\"/>"))
+        XCTAssertTrue(try doc.undo(), "one step for the whole drag")
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 10, y: 10))
+        XCTAssertFalse(try doc.undo())
+        XCTAssertTrue(try doc.redo())
 
         model.beginPointer(at: CGPoint(x: 390, y: 190)) // empty
         XCTAssertEqual(model.selection, [])
