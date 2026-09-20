@@ -384,6 +384,11 @@ impl Drawing {
         Ok(self.lock().add_text(x, y, &text)?)
     }
 
+    /// Replace a `<text>`'s characters; plain text, written escaped.
+    pub fn set_text(&self, id: String, text: String) -> Result<(), DrawingError> {
+        Ok(self.lock().set_text(&id, &text)?)
+    }
+
     /// Delete the shape with this `data-id`.
     pub fn delete(&self, id: String) -> Result<(), DrawingError> {
         Ok(self.lock().delete(&id)?)

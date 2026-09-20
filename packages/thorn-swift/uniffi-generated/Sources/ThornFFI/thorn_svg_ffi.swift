@@ -611,6 +611,11 @@ public protocol DrawingProtocol : AnyObject {
     func resize(id: String, to: Bounds) throws 
     
     /**
+     * Replace a `<text>`'s characters; plain text, written escaped.
+     */
+    func setText(id: String, text: String) throws 
+    
+    /**
      * The shapes, in paint order.
      */
     func shapes()  -> [Shape]
@@ -935,6 +940,17 @@ open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConver
     uniffi_thorn_svg_ffi_fn_method_drawing_resize(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterTypeBounds.lower(to),$0
+    )
+}
+}
+    
+    /**
+     * Replace a `<text>`'s characters; plain text, written escaped.
+     */
+open func setText(id: String, text: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_text(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterString.lower(text),$0
     )
 }
 }
@@ -2355,6 +2371,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 64941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_shapes() != 26790) {

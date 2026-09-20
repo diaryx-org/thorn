@@ -18,8 +18,20 @@ public enum Tool: Equatable {
     case rect
     case ellipse
     case line
-    /// Place a label with this text.
-    case text(String)
+    /// Place a label: with this text, or, with `nil`, one the user types
+    /// into a field the view opens at the click (see `TextEdit`).
+    case text(String? = nil)
+}
+
+/// A label being typed: what the view puts a text field over. `id` is
+/// the label being re-worded, or `nil` for a new one at `anchor`; `frame`
+/// and `fontSize` are in view points, where the field goes.
+public struct TextEdit: Equatable {
+    public let id: String?
+    public let anchor: CGPoint
+    public let text: String
+    public let frame: CGRect
+    public let fontSize: CGFloat
 }
 
 /// The canvas as a value: everything a view needs to draw and to answer a
@@ -43,6 +55,10 @@ public final class CanvasModel {
     public var onSelectionChange: (([String]) -> Void)?
     /// Called when the picture or overlay needs redrawing.
     public var needsDisplay: (() -> Void)?
+    /// Called to open a text field for a label — a double-click on one, or
+    /// a click with the label tool. The view calls `commitTextEdit` with
+    /// what was typed, or nothing to leave the label as it was.
+    public var onTextEdit: ((TextEdit) -> Void)?
 
     /// How far, in view points, a click may miss a stroke or a handle.
     public var tolerance: CGFloat = 4
@@ -217,7 +233,12 @@ public final class CanvasModel {
                 selection = []
             }
         case .text(let text):
-            selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
+            if let text {
+                selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
+            } else {
+                selection = []
+                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: defaultFontSize * fit.a))
+            }
             tool = .select
         case .rect, .ellipse, .line:
             drag = .create(from: p, to: p)
@@ -275,6 +296,46 @@ public final class CanvasModel {
         default:
             break
         }
+    }
+
+    /// A double-click at a view point: on a label, opens it for editing.
+    public func doubleClick(at viewPoint: CGPoint) {
+        guard tool == .select, let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance),
+              hit.kind == .text, let id = hit.id else { return }
+        editText(id: id)
+    }
+
+    /// Open a label for editing.
+    public func editText(id: String) {
+        guard let shape = document.shape(id: id), shape.kind == .text, let bounds = document.bounds(id: id) else { return }
+        selection = [id]
+        let size = shape.attrs.first { $0.name == "font-size" }?.value.flatMap { Double($0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "px", with: "")) }
+        let fontSize = CGFloat(size ?? Double(bounds.height / 1.2)) * fit.a
+        var frame = viewRect(bounds)
+        frame.size.width = max(frame.width + fontSize, fontSize * 4)
+        onTextEdit?(TextEdit(id: id, anchor: bounds.origin, text: shape.text ?? "", frame: frame, fontSize: fontSize))
+    }
+
+    /// What was typed: a new label at the edit's anchor, or the label's
+    /// characters replaced. Empty text adds nothing, and deletes a label
+    /// being re-worded. One undo step either way.
+    public func commitTextEdit(_ edit: TextEdit, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let id = edit.id {
+            if trimmed.isEmpty { try? document.delete(id: id) } else if trimmed != edit.text { try? document.setText(id: id, trimmed) }
+        } else if !trimmed.isEmpty {
+            selection = (try? document.addText(trimmed, at: edit.anchor)).map { [$0] } ?? []
+        }
+        needsDisplay?()
+    }
+
+    /// The size a label lays out at when nothing says: usvg's default.
+    private let defaultFontSize: CGFloat = 12
+
+    /// Where a field for a new label goes: its baseline at the click.
+    private func fieldFrame(at viewPoint: CGPoint) -> CGRect {
+        let size = defaultFontSize * fit.a
+        return CGRect(x: viewPoint.x, y: viewPoint.y - size, width: size * 8, height: size * 1.3)
     }
 
     // MARK: Commands

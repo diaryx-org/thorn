@@ -599,6 +599,44 @@ impl Drawing {
         self.settle(&[id], &mut steps)
     }
 
+    /// Replace a `<text>`'s characters: one `edit_range` over its interior,
+    /// one undo step, the attributes untouched. `text` is plain text,
+    /// written escaped; whatever markup the interior held — a `<tspan>`
+    /// — is replaced with it. A self-closed `<text/>` is opened. Since the
+    /// measured box is keyed by the interior, the label measures afresh.
+    /// `Unsupported` for what is not a `<text>`.
+    pub fn set_text(&mut self, id: &str, text: &str) -> Result<(), Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        if shape.kind != ShapeKind::Text {
+            return Err(Error::Unsupported {
+                gesture: "set text",
+                kind: shape.kind,
+            });
+        }
+        let node = self.node(shape.node);
+        let (start, end, markup) = match node.content_span.clone() {
+            Some(content) => (content.start, content.end, escape(text)),
+            None => {
+                // `<text …/>`: the open tag's bytes, less the `/>`.
+                let span = node.span.clone();
+                let open = self.source[span.clone()]
+                    .strip_suffix("/>")
+                    .expect("a self-closed element ends in />");
+                (
+                    span.start,
+                    span.end,
+                    format!("{open}>{}</text>", escape(text)),
+                )
+            }
+        };
+        self.editor
+            .edit_range(start, end, &markup)
+            .map_err(Error::Edit)?;
+        self.reload()
+    }
+
     /// Wrap shapes in a new `<g>`, minting its `data-id`, which is returned.
     /// The shapes must share a parent (`NotSiblings` otherwise); they are
     /// taken in paint order, and one that is not adjacent to the others is
@@ -2019,6 +2057,37 @@ mod tests {
         assert_eq!(line.attr("x1"), Some("110"));
         assert!(d.undo().unwrap());
         assert_eq!(d.shape("s3").unwrap().attr("data-from"), Some(&*g));
+    }
+
+    #[test]
+    fn set_text_replaces_the_characters_and_nothing_else() {
+        let mut d = Drawing::open(LABELLED).unwrap();
+        d.set_text("t", "Ho & <hum>").unwrap();
+        assert!(d.source().contains(
+            "<text x=\"10\" y=\"50\" transform=\"scale(2)\" data-id=\"t\">Ho &amp; &lt;hum&gt;</text>"
+        ));
+        assert_eq!(d.shape("t").unwrap().text.as_deref(), Some("Ho & <hum>"));
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), LABELLED);
+        assert!(matches!(
+            d.set_text("g", "x"),
+            Err(Error::Unsupported {
+                gesture: "set text",
+                ..
+            })
+        ));
+
+        let mut d = Drawing::open(
+            "<svg viewBox=\"0 0 9 9\">\n  <text x=\"1\" y=\"2\" data-id=\"t\"/>\n</svg>\n",
+        )
+        .unwrap();
+        d.set_text("t", "Hi").unwrap();
+        assert_eq!(
+            d.source(),
+            "<svg viewBox=\"0 0 9 9\">\n  <text x=\"1\" y=\"2\" data-id=\"t\">Hi</text>\n</svg>\n"
+        );
+        d.set_text("t", "").unwrap();
+        assert_eq!(d.shape("t").unwrap().text, None);
     }
 
     #[test]

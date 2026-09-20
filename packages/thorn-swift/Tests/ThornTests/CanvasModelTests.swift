@@ -183,4 +183,49 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertNil(doc.binding(id: "s3", .to))
         XCTAssertEqual(doc.endPoint(id: "s3", .to), CGPoint(x: 130, y: 90))
     }
+
+    func testALabelIsTypedIntoAFieldAndReWordedByDoubleClick() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let context = makeContext()
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        var edits: [TextEdit] = []
+        model.onTextEdit = { edits.append($0) }
+
+        // The label tool opens an empty field at the click; what is typed
+        // becomes the label, in one step. Nothing typed, nothing added.
+        model.tool = .text()
+        model.beginPointer(at: CGPoint(x: 100, y: 100)) // user (50, 50)
+        model.pointerUp()
+        XCTAssertEqual(model.tool, .select)
+        let fresh = try XCTUnwrap(edits.last)
+        XCTAssertNil(fresh.id)
+        XCTAssertEqual(fresh.anchor, CGPoint(x: 50, y: 50))
+        XCTAssertEqual(fresh.fontSize, 24, "12 user units at 2 points each")
+        model.commitTextEdit(fresh, text: "  ")
+        XCTAssertEqual(doc.shapes.count, 2)
+        model.commitTextEdit(fresh, text: "Hello")
+        XCTAssertEqual(model.selection, ["s3"])
+        XCTAssertTrue(doc.source.contains("<text x=\"50\" y=\"50\" data-id=\"s3\">Hello</text>"))
+
+        // A double-click on it opens it with its words, over its box.
+        let box = try XCTUnwrap(doc.bounds(id: "s3"))
+        model.doubleClick(at: model.viewPoint(CGPoint(x: box.midX, y: box.midY)))
+        let again = try XCTUnwrap(edits.last)
+        XCTAssertEqual(again.id, "s3")
+        XCTAssertEqual(again.text, "Hello")
+        XCTAssertEqual(again.frame.origin, model.viewPoint(box.origin))
+        model.commitTextEdit(again, text: "Hello")
+        model.commitTextEdit(again, text: "Bye")
+        XCTAssertTrue(doc.source.contains(">Bye</text>"))
+        XCTAssertTrue(try doc.undo(), "an unchanged commit wrote nothing")
+        XCTAssertTrue(doc.source.contains(">Hello</text>"))
+        // Emptied, the label goes.
+        model.commitTextEdit(again, text: "")
+        XCTAssertNil(doc.shape(id: "s3"))
+        XCTAssertEqual(model.selection, [])
+        // A double-click on nothing, or on a box, opens nothing.
+        model.doubleClick(at: CGPoint(x: 40, y: 40))
+        XCTAssertEqual(edits.count, 2)
+    }
 }

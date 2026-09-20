@@ -37,7 +37,7 @@ public struct DrawingEditor: View {
                 toolButton("Rectangle", "rectangle", .rect)
                 toolButton("Ellipse", "oval", .ellipse)
                 toolButton("Line", "line.diagonal", .line)
-                toolButton("Label", "textformat", .text("Label"))
+                toolButton("Label", "textformat", .text())
                 Divider().frame(height: 16)
                 Button { state.model.reorderSelection(.forward) } label: { Image(systemName: "square.2.layers.3d.top.filled") }
                     .help("Bring forward").disabled(state.selection.count != 1)

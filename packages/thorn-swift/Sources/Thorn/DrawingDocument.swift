@@ -106,6 +106,12 @@ public final class DrawingDocument {
         try changed { try inner.addText(x: Double(point.x), y: Double(point.y), text: text) }
     }
 
+    /// Replace a label's characters; plain text, written escaped. One undo
+    /// step.
+    public func setText(id: String, _ text: String) throws {
+        try changed { try inner.setText(id: id, text: text) }
+    }
+
     /// Delete the shape with this `data-id`.
     public func delete(id: String) throws {
         try changed { try inner.delete(id: id) }
