@@ -123,6 +123,11 @@ public final class DrawingDocument {
     /// what the stylesheet gave it; with `nil`, a new label's.
     public func fontSize(id: String?) -> CGFloat { CGFloat(inner.fontSize(id: id)) }
 
+    /// The face a label lays out in, as resvg resolved it from the
+    /// stylesheet — the PostScript name a platform font API instantiates
+    /// exactly — and its size; with `nil`, a new label's.
+    public func font(id: String?) -> Font? { inner.font(id: id) }
+
     /// The width a label wraps to, if it does.
     public func width(id: String) -> CGFloat? {
         shape(id: id)?.attrs.first { $0.name == "data-width" }?.value.flatMap { Double($0) }.map { CGFloat($0) }

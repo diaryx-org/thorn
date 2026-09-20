@@ -89,6 +89,9 @@ final class DrawingDocumentTests: XCTestCase {
         let styled = try DrawingDocument(source: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 9 9\"><style>text { font: 16px sans-serif }</style><text x=\"1\" y=\"2\" data-id=\"t\">Hi</text></svg>")
         XCTAssertEqual(styled.fontSize(id: "t"), 16)
         XCTAssertEqual(styled.fontSize(id: nil), 16, "a new label's too")
+        let font = try XCTUnwrap(styled.font(id: "t"))
+        XCTAssertNotEqual(font.family, "sans-serif", "resolved to a face: \(font)")
+        XCTAssertFalse(font.postScriptName.isEmpty)
     }
 
     func testAnArrowBoundToAShapeFollowsIt() throws {

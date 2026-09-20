@@ -33,6 +33,8 @@ public struct TextEdit: Equatable {
     public let text: String
     public let frame: CGRect
     public let fontSize: CGFloat
+    /// The face's PostScript name, when the layout could say.
+    public let fontName: String?
     public let wraps: Bool
 }
 
@@ -240,7 +242,7 @@ public final class CanvasModel {
                 selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
             } else {
                 selection = []
-                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, wraps: false))
+                onTextEdit?(TextEdit(id: nil, anchor: p, text: "", frame: fieldFrame(at: viewPoint), fontSize: document.fontSize(id: nil) * fit.a, fontName: document.font(id: nil)?.postScriptName, wraps: false))
             }
             tool = .select
         case .rect, .ellipse, .line:
@@ -321,7 +323,7 @@ public final class CanvasModel {
         } else {
             frame.size.width = max(frame.width + fontSize, fontSize * 4)
         }
-        onTextEdit?(TextEdit(id: id, anchor: bounds.origin, text: shape.text ?? "", frame: frame, fontSize: fontSize, wraps: width != nil))
+        onTextEdit?(TextEdit(id: id, anchor: bounds.origin, text: shape.text ?? "", frame: frame, fontSize: fontSize, fontName: document.font(id: id)?.postScriptName, wraps: width != nil))
     }
 
     /// What was typed: a new label at the edit's anchor, or the label's

@@ -321,6 +321,11 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(void*_Nonnull ptr, Ru
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_end_point(void*_Nonnull ptr, RustBuffer id, RustBuffer end, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_font(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT_SIZE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT_SIZE
 double uniffi_thorn_svg_ffi_fn_method_drawing_font_size(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
@@ -777,6 +782,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_END_POINT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_END_POINT
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_end_point(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FONT
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FONT
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_font(void
     
 );
 #endif

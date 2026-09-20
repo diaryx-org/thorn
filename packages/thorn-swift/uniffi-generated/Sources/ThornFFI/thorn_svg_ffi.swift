@@ -563,6 +563,13 @@ public protocol DrawingProtocol : AnyObject {
     func endPoint(id: String, end: End)  -> Point?
     
     /**
+     * The face and size a label lays out in, as resvg resolved them —
+     * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
+     * label's. `None` when the label lays out to nothing.
+     */
+    func font(id: String?)  -> Font?
+    
+    /**
      * The size a label lays out at, in user units — its `font-size`, or
      * what a stylesheet gave it; with `None`, a new label's.
      */
@@ -846,6 +853,19 @@ open func endPoint(id: String, end: End) -> Point? {
     uniffi_thorn_svg_ffi_fn_method_drawing_end_point(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterTypeEnd.lower(end),$0
+    )
+})
+}
+    
+    /**
+     * The face and size a label lays out in, as resvg resolved them —
+     * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
+     * label's. `None` when the label lays out to nothing.
+     */
+open func font(id: String?) -> Font? {
+    return try!  FfiConverterOptionTypeFont.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_font(self.uniffiClonePointer(),
+        FfiConverterOptionString.lower(id),$0
     )
 })
 }
@@ -1316,6 +1336,83 @@ public func FfiConverterTypeFinding_lift(_ buf: RustBuffer) throws -> Finding {
 #endif
 public func FfiConverterTypeFinding_lower(_ value: Finding) -> RustBuffer {
     return FfiConverterTypeFinding.lower(value)
+}
+
+
+/**
+ * Mirrors `thorn_svg_core::measure::Font`: the face a label lays out in.
+ */
+public struct Font {
+    public var size: Double
+    public var family: String
+    public var postScriptName: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(size: Double, family: String, postScriptName: String) {
+        self.size = size
+        self.family = family
+        self.postScriptName = postScriptName
+    }
+}
+
+
+
+extension Font: Equatable, Hashable {
+    public static func ==(lhs: Font, rhs: Font) -> Bool {
+        if lhs.size != rhs.size {
+            return false
+        }
+        if lhs.family != rhs.family {
+            return false
+        }
+        if lhs.postScriptName != rhs.postScriptName {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(size)
+        hasher.combine(family)
+        hasher.combine(postScriptName)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeFont: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Font {
+        return
+            try Font(
+                size: FfiConverterDouble.read(from: &buf), 
+                family: FfiConverterString.read(from: &buf), 
+                postScriptName: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Font, into buf: inout [UInt8]) {
+        FfiConverterDouble.write(value.size, into: &buf)
+        FfiConverterString.write(value.family, into: &buf)
+        FfiConverterString.write(value.postScriptName, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFont_lift(_ buf: RustBuffer) throws -> Font {
+    return try FfiConverterTypeFont.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeFont_lower(_ value: Font) -> RustBuffer {
+    return FfiConverterTypeFont.lower(value)
 }
 
 
@@ -2143,6 +2240,30 @@ fileprivate struct FfiConverterOptionTypeBounds: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeFont: FfiConverterRustBuffer {
+    typealias SwiftType = Font?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeFont.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeFont.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypePoint: FfiConverterRustBuffer {
     typealias SwiftType = Point?
 
@@ -2404,6 +2525,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 45968) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 674) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_font_size() != 35813) {

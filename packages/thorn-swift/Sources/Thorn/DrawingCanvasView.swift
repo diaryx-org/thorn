@@ -44,7 +44,7 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         closeField(commit: true)
         let f = NSTextView(frame: edit.frame)
         f.string = edit.text
-        f.font = .systemFont(ofSize: edit.fontSize)
+        f.font = edit.fontName.flatMap { NSFont(name: $0, size: edit.fontSize) } ?? .systemFont(ofSize: edit.fontSize)
         f.backgroundColor = .textBackgroundColor
         f.isRichText = false
         f.textContainerInset = .zero
@@ -151,7 +151,7 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
         closeField(commit: true)
         let f = UITextView(frame: edit.frame)
         f.text = edit.text
-        f.font = .systemFont(ofSize: edit.fontSize)
+        f.font = edit.fontName.flatMap { UIFont(name: $0, size: edit.fontSize) } ?? .systemFont(ofSize: edit.fontSize)
         f.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
         f.textContainerInset = .zero
         f.textContainer.lineFragmentPadding = 0

@@ -14,6 +14,19 @@
 
 use crate::geometry::Bounds;
 
+/// The face a label lays out in, as the host resolved it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Font {
+    /// The size, in the label's user units.
+    pub size: f64,
+    /// The face's family name — `Helvetica`, not the `sans-serif` that
+    /// asked for it.
+    pub family: String,
+    /// The face's PostScript name — `Helvetica-Bold` — which a platform's
+    /// font API instantiates exactly.
+    pub post_script_name: String,
+}
+
 /// A host's text layout, asked for a label's box.
 pub trait Measure: Send + Sync {
     /// The box of the one `<text>` in `svg` — a small document the drawing
@@ -24,10 +37,11 @@ pub trait Measure: Send + Sync {
     /// when the label lays out to nothing — no characters, no face at all.
     fn measure(&self, svg: &str) -> Option<Bounds>;
 
-    /// The size the one `<text>` in `svg` lays out at, in its user units
-    /// — what a stylesheet gave it, when its attributes do not say. `None`
-    /// when the host cannot tell; the drawing then takes the nominal 12.
-    fn font_size(&self, svg: &str) -> Option<f64> {
+    /// The face and size the one `<text>` in `svg` lays out in — what a
+    /// stylesheet gave it, resolved to a face the host has, which its
+    /// attributes cannot say. `None` when the host cannot tell; the
+    /// drawing then takes the nominal 12, in no face in particular.
+    fn font(&self, svg: &str) -> Option<Font> {
         let _ = svg;
         None
     }
@@ -55,12 +69,21 @@ impl Measure for Usvg {
         })
     }
 
-    fn font_size(&self, svg: &str) -> Option<f64> {
+    fn font(&self, svg: &str) -> Option<Font> {
         let tree = parse(svg)?;
         let text = first_text(tree.root())?;
-        text.layouted()
-            .first()
-            .map(|span| span.font_size.get() as f64)
+        let span = text.layouted().first()?;
+        let glyph = span.positioned_glyphs.first()?;
+        let face = tree.fontdb().face(glyph.font)?;
+        Some(Font {
+            size: span.font_size.get() as f64,
+            family: face
+                .families
+                .first()
+                .map(|(name, _)| name.clone())
+                .unwrap_or_default(),
+            post_script_name: face.post_script_name.clone(),
+        })
     }
 }
 
@@ -113,10 +136,17 @@ mod tests {
             "the cap height is above the baseline: {b:?}"
         );
         assert!(b.y + b.height >= -1.0, "{b:?}");
-        assert_eq!(Usvg.font_size(doc), Some(20.0));
+        let font = Usvg.font(doc).unwrap();
+        assert_eq!(font.size, 20.0);
+        assert!(
+            !font.family.is_empty() && !font.post_script_name.is_empty(),
+            "{font:?}"
+        );
         let styled = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\">\
                       <style>text { font: 16px sans-serif }</style><text>Hello</text></svg>";
-        assert_eq!(Usvg.font_size(styled), Some(16.0), "from the stylesheet");
+        let font = Usvg.font(styled).unwrap();
+        assert_eq!(font.size, 16.0, "from the stylesheet");
+        assert_ne!(font.family, "sans-serif", "resolved to a face: {font:?}");
         assert!(
             Usvg.measure("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"1\"/>")
                 .is_none()

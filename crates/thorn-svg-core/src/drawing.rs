@@ -28,7 +28,7 @@ use std::fmt::Write as _;
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
 use crate::geometry::{self, Bounds, Update};
-use crate::measure::Measure;
+use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
@@ -448,6 +448,14 @@ impl Drawing {
         {
             return size;
         }
+        self.font(id).map_or(12.0, |f| f.size)
+    }
+
+    /// The face and size a label lays out in, as the host's layout
+    /// resolved them; `None` without a host layout, or when the label lays
+    /// out to nothing. With `None`, a new label's, directly under `<svg>`.
+    pub fn font(&self, id: Option<&str>) -> Option<Font> {
+        let shape = id.and_then(|id| self.shape(id));
         let doc = match shape {
             Some(shape) => self.label_document(shape, "x"),
             None => {
@@ -463,10 +471,7 @@ impl Drawing {
                 self.label_document(&probe, "x")
             }
         };
-        self.measure
-            .as_ref()
-            .and_then(|m| m.font_size(&doc))
-            .unwrap_or(12.0)
+        self.measure.as_ref()?.font(&doc)
     }
 
     /// How wide a line of `shape`'s label would lay out — measured, or by

@@ -224,6 +224,14 @@ impl From<core::Handle> for Handle {
     }
 }
 
+/// Mirrors `thorn_svg_core::measure::Font`: the face a label lays out in.
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct Font {
+    pub size: f64,
+    pub family: String,
+    pub post_script_name: String,
+}
+
 /// A point in user units.
 #[derive(Clone, Copy, Debug, uniffi::Record)]
 pub struct Point {
@@ -393,6 +401,17 @@ impl Drawing {
     /// what a stylesheet gave it; with `None`, a new label's.
     pub fn font_size(&self, id: Option<String>) -> f64 {
         self.lock().font_size(id.as_deref())
+    }
+
+    /// The face and size a label lays out in, as resvg resolved them —
+    /// `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
+    /// label's. `None` when the label lays out to nothing.
+    pub fn font(&self, id: Option<String>) -> Option<Font> {
+        self.lock().font(id.as_deref()).map(|f| Font {
+            size: f.size,
+            family: f.family,
+            post_script_name: f.post_script_name,
+        })
     }
 
     /// Wrap a label to `width` user units, its words flowed into `<tspan>`
