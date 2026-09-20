@@ -53,6 +53,15 @@ An element with one of these tags, at any depth under `<svg>` except inside
 `path`, `text`, `image`, and `g`. A `<g>` is a shape (selectable, movable as
 one) *and* a container of shapes; its members follow it in paint order.
 
+A shape may carry a `transform`, and the editor honours one wherever it
+finds it — in hit-testing, in the box it draws, in where a drag lands. It
+*writes* one only for a `<path>` or a `<g>`, which have no position in
+their attributes to move or resize by: `translate(x y)` when that is all it
+is, `matrix(a b c d e f)` otherwise, each number in the profile's format,
+and none at all for the identity. Ungrouping pushes a group's `transform`
+down onto its members — a shift of a plain shape's attributes where it can
+be, a `transform` of their own where it cannot — so nothing moves.
+
 Everything else — `<defs>`, `<style>`, `<title>`, `<desc>`, `<metadata>`, a
 comment, a processing instruction, an element the editor has never heard of
 — is preserved exactly and never modelled. The editor edits through twig,

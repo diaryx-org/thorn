@@ -910,6 +910,7 @@ dependencies = [
 name = "thorn-svg-core"
 version = "0.1.0"
 dependencies = [
+ "svgtypes",
  "thiserror 2.0.20",
  "twig-doc",
 ]

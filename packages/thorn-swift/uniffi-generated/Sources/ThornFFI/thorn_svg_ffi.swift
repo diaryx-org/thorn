@@ -522,7 +522,9 @@ public protocol DrawingProtocol : AnyObject {
     func addText(x: Double, y: Double, text: String) throws  -> String
     
     /**
-     * The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+     * A shape's extent in the root's user units, through its transform
+     * chain; a `<g>`'s is its members'. `None` for an empty group or a
+     * shape missing what its kind needs.
      */
     func bounds(id: String)  -> Bounds?
     
@@ -537,14 +539,41 @@ public protocol DrawingProtocol : AnyObject {
     func delete(id: String) throws 
     
     /**
-     * The topmost shape within `tolerance` of the point, in paint order.
+     * Delete several shapes as one undo step.
+     */
+    func deleteAll(ids: [String]) throws 
+    
+    /**
+     * Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
+     * step.
+     */
+    func group(ids: [String]) throws  -> String
+    
+    /**
+     * The topmost shape within `tolerance` of the point, in paint order. A
+     * member of a group is returned itself; `outermost` names the group.
      */
     func hit(x: Double, y: Double, tolerance: Double)  -> Shape?
+    
+    /**
+     * The shapes directly inside a `<g>`, in paint order.
+     */
+    func members(id: String)  -> [Shape]
+    
+    /**
+     * Move several shapes by `(dx, dy)` as one undo step.
+     */
+    func moveAll(ids: [String], dx: Double, dy: Double) throws 
     
     /**
      * Move a shape by `(dx, dy)`.
      */
     func moveBy(id: String, dx: Double, dy: Double) throws 
+    
+    /**
+     * The outermost group a shape is in, or the shape itself.
+     */
+    func outermost(id: String)  -> Shape?
     
     /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
@@ -576,6 +605,12 @@ public protocol DrawingProtocol : AnyObject {
      * Undo the last gesture; `false` when there was nothing to undo.
      */
     func undo() throws  -> Bool
+    
+    /**
+     * Replace a `<g>` with its members, its transform pushed down onto
+     * them; returns their ids. One undo step.
+     */
+    func ungroup(id: String) throws  -> [String]
     
 }
 
@@ -693,7 +728,9 @@ open func addText(x: Double, y: Double, text: String)throws  -> String {
 }
     
     /**
-     * The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+     * A shape's extent in the root's user units, through its transform
+     * chain; a `<g>`'s is its members'. `None` for an empty group or a
+     * shape missing what its kind needs.
      */
 open func bounds(id: String) -> Bounds? {
     return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
@@ -724,7 +761,30 @@ open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawi
 }
     
     /**
-     * The topmost shape within `tolerance` of the point, in paint order.
+     * Delete several shapes as one undo step.
+     */
+open func deleteAll(ids: [String])throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_delete_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),$0
+    )
+}
+}
+    
+    /**
+     * Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
+     * step.
+     */
+open func group(ids: [String])throws  -> String {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_group(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),$0
+    )
+})
+}
+    
+    /**
+     * The topmost shape within `tolerance` of the point, in paint order. A
+     * member of a group is returned itself; `outermost` names the group.
      */
 open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
     return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
@@ -737,6 +797,29 @@ open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
 }
     
     /**
+     * The shapes directly inside a `<g>`, in paint order.
+     */
+open func members(id: String) -> [Shape] {
+    return try!  FfiConverterSequenceTypeShape.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_members(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * Move several shapes by `(dx, dy)` as one undo step.
+     */
+open func moveAll(ids: [String], dx: Double, dy: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_move_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterDouble.lower(dx),
+        FfiConverterDouble.lower(dy),$0
+    )
+}
+}
+    
+    /**
      * Move a shape by `(dx, dy)`.
      */
 open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
@@ -746,6 +829,17 @@ open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithErr
         FfiConverterDouble.lower(dy),$0
     )
 }
+}
+    
+    /**
+     * The outermost group a shape is in, or the shape itself.
+     */
+open func outermost(id: String) -> Shape? {
+    return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_outermost(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
 }
     
     /**
@@ -808,6 +902,18 @@ open func source() -> String {
 open func undo()throws  -> Bool {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_undo(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * Replace a `<g>` with its members, its transform pushed down onto
+     * them; returns their ids. One undo step.
+     */
+open func ungroup(id: String)throws  -> [String] {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
     )
 })
 }
@@ -1360,6 +1466,7 @@ public enum DrawingError {
     )
     case Unsupported(gesture: String, kind: ShapeKind
     )
+    case NotSiblings
     case Edit(message: String
     )
 }
@@ -1389,7 +1496,8 @@ public struct FfiConverterTypeDrawingError: FfiConverterRustBuffer {
             gesture: try FfiConverterString.read(from: &buf), 
             kind: try FfiConverterTypeShapeKind.read(from: &buf)
             )
-        case 5: return .Edit(
+        case 5: return .NotSiblings
+        case 6: return .Edit(
             message: try FfiConverterString.read(from: &buf)
             )
 
@@ -1424,8 +1532,12 @@ public struct FfiConverterTypeDrawingError: FfiConverterRustBuffer {
             FfiConverterTypeShapeKind.write(kind, into: &buf)
             
         
-        case let .Edit(message):
+        case .NotSiblings:
             writeInt(&buf, Int32(5))
+        
+        
+        case let .Edit(message):
+            writeInt(&buf, Int32(6))
             FfiConverterString.write(message, into: &buf)
             
         }
@@ -1853,6 +1965,31 @@ fileprivate struct FfiConverterOptionTypeHandle: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceString: FfiConverterRustBuffer {
+    typealias SwiftType = [String]
+
+    public static func write(_ value: [String], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterString.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [String] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [String]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterString.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeAttribute: FfiConverterRustBuffer {
     typealias SwiftType = [Attribute]
 
@@ -1998,7 +2135,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 58303) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 43624) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 7686) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_check() != 12937) {
@@ -2007,10 +2144,25 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 53757) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 42489) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete_all() != 13572) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 8832) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 61470) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_members() != 17237) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_all() != 2740) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_by() != 4199) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_outermost() != 20228) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_redo() != 64887) {
@@ -2029,6 +2181,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 51363) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 51814) {

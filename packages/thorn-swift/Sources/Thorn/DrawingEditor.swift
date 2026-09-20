@@ -22,7 +22,7 @@ public struct DrawingCanvas: PlatformViewRepresentable {
 }
 
 /// The canvas with a toolbar: select, rectangle, ellipse, line, label;
-/// forward and back; delete; undo and redo.
+/// forward and back; group and ungroup; delete; undo and redo.
 public struct DrawingEditor: View {
     @ObservedObject private var state: EditorState
 
@@ -40,11 +40,15 @@ public struct DrawingEditor: View {
                 toolButton("Label", "textformat", .text("Label"))
                 Divider().frame(height: 16)
                 Button { state.model.reorderSelection(.forward) } label: { Image(systemName: "square.2.layers.3d.top.filled") }
-                    .help("Bring forward").disabled(state.selection == nil)
+                    .help("Bring forward").disabled(state.selection.count != 1)
                 Button { state.model.reorderSelection(.backward) } label: { Image(systemName: "square.2.layers.3d.bottom.filled") }
-                    .help("Send backward").disabled(state.selection == nil)
+                    .help("Send backward").disabled(state.selection.count != 1)
+                Button { state.model.groupSelection() } label: { Image(systemName: "rectangle.3.group") }
+                    .help("Group").keyboardShortcut("g").disabled(!state.model.canGroup)
+                Button { state.model.ungroupSelection() } label: { Image(systemName: "rectangle.3.group.bubble") }
+                    .help("Ungroup").keyboardShortcut("g", modifiers: [.command, .shift]).disabled(!state.model.canUngroup)
                 Button { state.model.deleteSelection() } label: { Image(systemName: "trash") }
-                    .help("Delete").disabled(state.selection == nil)
+                    .help("Delete").disabled(state.selection.isEmpty)
                 Divider().frame(height: 16)
                 Button { state.model.undo() } label: { Image(systemName: "arrow.uturn.backward") }.help("Undo")
                 Button { state.model.redo() } label: { Image(systemName: "arrow.uturn.forward") }.help("Redo")
@@ -71,13 +75,13 @@ public struct DrawingEditor: View {
 final class EditorState: ObservableObject {
     let model: CanvasModel
     @Published var tool: Tool
-    @Published var selection: String?
+    @Published var selection: [String]
 
     init(model: CanvasModel) {
         self.model = model
         tool = model.tool
         selection = model.selection
-        model.onSelectionChange = { [weak self] id in self?.selection = id }
+        model.onSelectionChange = { [weak self] ids in self?.selection = ids }
         model.onToolChange = { [weak self] tool in self?.tool = tool }
     }
 

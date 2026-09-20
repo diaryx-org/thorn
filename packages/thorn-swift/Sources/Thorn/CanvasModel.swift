@@ -33,12 +33,14 @@ public final class CanvasModel {
     /// back to select on its own, so a toolbar has to be told.
     public var onToolChange: ((Tool) -> Void)?
 
-    /// The selected shape's `data-id`, if any.
-    public private(set) var selection: String? {
-        didSet { onSelectionChange?(selection) }
+    /// The selected shapes' `data-id`s, in the order they were picked. A
+    /// click on a member of a group selects the outermost group; a
+    /// shift-click adds to or takes from the selection.
+    public private(set) var selection: [String] = [] {
+        didSet { if selection != oldValue { onSelectionChange?(selection) } }
     }
     /// Called when the selection changes.
-    public var onSelectionChange: ((String?) -> Void)?
+    public var onSelectionChange: (([String]) -> Void)?
     /// Called when the picture or overlay needs redrawing.
     public var needsDisplay: (() -> Void)?
 
@@ -50,7 +52,8 @@ public final class CanvasModel {
     private var fit: CGAffineTransform = .identity
 
     private enum Drag {
-        case move(id: String, start: CGRect, delta: CGVector)
+        /// The selection moving as one; `start` is the box around it all.
+        case move(ids: [String], start: CGRect, delta: CGVector)
         case resize(id: String, handle: Handle, start: CGRect, delta: CGVector)
         case create(from: CGPoint, to: CGPoint)
     }
@@ -60,7 +63,7 @@ public final class CanvasModel {
         self.document = document
         document.onChange = { [weak self] in
             guard let self else { return }
-            if let id = selection, document.shape(id: id) == nil { selection = nil }
+            selection = selection.filter { document.shape(id: $0) != nil }
             needsDisplay?()
         }
     }
@@ -92,10 +95,14 @@ public final class CanvasModel {
         context.setStrokeColor(accent)
         context.setLineWidth(1)
 
-        if let id = selection, let bounds = selectionBounds(id) {
+        context.setLineDash(phase: 0, lengths: [])
+        for id in selection {
+            guard let bounds = selectionBounds(id) else { continue }
             let r = viewRect(bounds)
-            context.setLineDash(phase: 0, lengths: [])
             context.stroke(r)
+            // Handles on a lone selection; a group of shapes moves as one
+            // and is resized one at a time.
+            guard selection.count == 1 else { continue }
             context.setFillColor(CGColor(gray: 1, alpha: 1))
             for h in Handle.all {
                 let p = h.position(on: r)
@@ -120,14 +127,26 @@ public final class CanvasModel {
 
     private func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
 
-    /// The selection's box as drawn: its stated bounds, or a nominal box
-    /// around a label's anchor, since a `<text>`'s extent is its font's.
+    /// A selected shape's box as drawn: its bounds, or a nominal box around
+    /// a label's anchor, since a `<text>`'s extent is its font's.
     private func selectionBounds(_ id: String) -> CGRect? {
         guard let shape = document.shape(id: id) else { return nil }
         if shape.kind == .text, let b = document.bounds(id: id) {
             return CGRect(x: b.minX - 2, y: b.minY - 12, width: 24, height: 14)
         }
         return document.bounds(id: id)
+    }
+
+    /// The box around the whole selection.
+    private func selectionBounds() -> CGRect? {
+        selection.compactMap(selectionBounds).reduce(nil as CGRect?) { acc, r in acc.map { $0.union(r) } ?? r }
+    }
+
+    /// Whether a lone selected shape can be resized by its handles.
+    private var resizable: String? {
+        guard selection.count == 1, let id = selection.first,
+              let shape = document.shape(id: id), shape.kind != .text else { return nil }
+        return id
     }
 
     private enum Outline { case box(CGRect), segment(CGPoint, CGPoint) }
@@ -148,22 +167,30 @@ public final class CanvasModel {
 
     // MARK: Pointer
 
-    /// Pointer down at a view point.
-    public func pointerDown(at viewPoint: CGPoint) {
+    /// Pointer down at a view point. `extending` is the shift key: the hit
+    /// shape joins or leaves the selection instead of replacing it, and
+    /// nothing drags.
+    public func pointerDown(at viewPoint: CGPoint, extending: Bool = false) {
         let p = userPoint(viewPoint)
         switch tool {
         case .select:
-            if let id = selection, let b = selectionBounds(id),
-               let h = Handle.at(p, on: b, tolerance: userTolerance), document.shape(id: id)?.kind != .text {
+            if let id = resizable, let b = selectionBounds(id),
+               let h = Handle.at(p, on: b, tolerance: userTolerance) {
                 drag = .resize(id: id, handle: h, start: b, delta: .zero)
-            } else if let hit = document.hit(p, tolerance: userTolerance), let id = hit.id {
-                selection = id
-                if let b = selectionBounds(id) { drag = .move(id: id, start: b, delta: .zero) }
-            } else {
-                selection = nil
+            } else if let hit = document.hit(p, tolerance: userTolerance), let hitId = hit.id,
+                      let id = document.outermost(id: hitId)?.id {
+                if extending {
+                    if let at = selection.firstIndex(of: id) { selection.remove(at: at) } else { selection.append(id) }
+                } else {
+                    // A click on what is already selected drags the lot.
+                    if !selection.contains(id) { selection = [id] }
+                    if let b = selectionBounds() { drag = .move(ids: selection, start: b, delta: .zero) }
+                }
+            } else if !extending {
+                selection = []
             }
         case .text(let text):
-            selection = try? document.addText(text, at: p)
+            selection = (try? document.addText(text, at: p)).map { [$0] } ?? []
             tool = .select
         case .rect, .ellipse, .line:
             drag = .create(from: p, to: p)
@@ -175,9 +202,9 @@ public final class CanvasModel {
     public func pointerDragged(to viewPoint: CGPoint) {
         let p = userPoint(viewPoint)
         switch drag {
-        case .move(let id, let start, _):
+        case .move(let ids, let start, _):
             let origin = userPoint(startViewPoint ?? viewPoint)
-            drag = .move(id: id, start: start, delta: CGVector(dx: p.x - origin.x, dy: p.y - origin.y))
+            drag = .move(ids: ids, start: start, delta: CGVector(dx: p.x - origin.x, dy: p.y - origin.y))
         case .resize(let id, let handle, let start, _):
             let origin = userPoint(startViewPoint ?? viewPoint)
             drag = .resize(id: id, handle: handle, start: start, delta: CGVector(dx: p.x - origin.x, dy: p.y - origin.y))
@@ -196,19 +223,21 @@ public final class CanvasModel {
     public func pointerUp() {
         defer { drag = nil; startViewPoint = nil; needsDisplay?() }
         switch drag {
-        case .move(let id, _, let delta) where delta != .zero:
-            try? document.move(id: id, by: delta)
+        case .move(let ids, _, let delta) where delta != .zero:
+            if ids.count == 1 { try? document.move(id: ids[0], by: delta) } else { try? document.move(ids: ids, by: delta) }
         case .resize(let id, let handle, let start, let delta) where delta != .zero:
             try? document.resize(id: id, to: handle.drag(start, by: delta))
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
             guard box.width > 0 || box.height > 0 else { return }
+            let added: String?
             switch tool {
-            case .rect: selection = try? document.addRect(box)
-            case .ellipse: selection = try? document.addEllipse(in: box)
-            case .line: selection = try? document.addLine(from: from, to: to)
-            default: break
+            case .rect: added = try? document.addRect(box)
+            case .ellipse: added = try? document.addEllipse(in: box)
+            case .line: added = try? document.addLine(from: from, to: to)
+            default: added = nil
             }
+            selection = added.map { [$0] } ?? []
             tool = .select
         default:
             break
@@ -217,34 +246,64 @@ public final class CanvasModel {
 
     // MARK: Commands
 
-    /// Delete the selection.
+    /// Delete the selection, as one undo step.
     public func deleteSelection() {
-        guard let id = selection else { return }
-        try? document.delete(id: id)
+        guard !selection.isEmpty else { return }
+        if selection.count == 1 { try? document.delete(id: selection[0]) } else { try? document.delete(ids: selection) }
     }
 
-    /// Reorder the selection.
+    /// Reorder a lone selected shape.
     public func reorderSelection(_ order: Order) {
-        guard let id = selection else { return }
-        try? document.reorder(id: id, order)
+        guard selection.count == 1 else { return }
+        try? document.reorder(id: selection[0], order)
+    }
+
+    /// Wrap the selection in a group, which becomes the selection. Needs two
+    /// or more shapes with one parent; otherwise nothing happens.
+    public func groupSelection() {
+        guard selection.count >= 2, let id = try? document.group(ids: selection) else { return }
+        selection = [id]
+    }
+
+    /// Replace a lone selected group with its members, which become the
+    /// selection.
+    public func ungroupSelection() {
+        guard selection.count == 1, let members = try? document.ungroup(id: selection[0]) else { return }
+        selection = members
+    }
+
+    /// Whether `groupSelection` would do something.
+    public var canGroup: Bool {
+        selection.count >= 2 && Set(selection.compactMap { document.shape(id: $0)?.group }).count <= 1
+            && selection.allSatisfy { document.shape(id: $0) != nil }
+    }
+
+    /// Whether `ungroupSelection` would do something.
+    public var canUngroup: Bool {
+        selection.count == 1 && document.shape(id: selection[0])?.kind == .group
     }
 
     public func undo() { try? document.undo() }
     public func redo() { try? document.redo() }
 
-    /// Select a shape by id (or nothing).
-    public func select(_ id: String?) {
-        selection = id
+    /// Select shapes by id (or nothing).
+    public func select(_ ids: [String]) {
+        selection = ids
         needsDisplay?()
+    }
+
+    /// Select one shape by id (or nothing).
+    public func select(_ id: String?) {
+        select(id.map { [$0] } ?? [])
     }
 }
 
 extension CanvasModel {
     /// Pointer down, remembering where, so a drag reports its delta from
     /// here. Views call this rather than `pointerDown(at:)`.
-    public func beginPointer(at viewPoint: CGPoint) {
+    public func beginPointer(at viewPoint: CGPoint, extending: Bool = false) {
         startViewPoint = viewPoint
-        pointerDown(at: viewPoint)
+        pointerDown(at: viewPoint, extending: extending)
     }
 }
 

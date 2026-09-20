@@ -28,6 +28,11 @@ twig-doc = "3.8.1"
 # Rendering for the CLI's `render` and for a test that wants pixels. Same major
 # as leaf-raster and resvg-swift, so a host linking all three gets one copy.
 resvg = "0.46"
+# Parses a `<path>`'s `d` (into absolute lines and curves) and a `transform`
+# list (into one matrix) for the core's hit-testing. The resvg family's own
+# parser, so the extent the editor computes is over the segments resvg
+# draws; kurbo comes with it and nothing else.
+svgtypes = "0.16"
 anyhow = "1"
 thiserror = "2"
 # Internal crates.

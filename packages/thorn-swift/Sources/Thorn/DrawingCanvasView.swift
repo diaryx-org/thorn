@@ -31,7 +31,7 @@ public final class DrawingCanvasView: NSView {
 
     public override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
-        model.beginPointer(at: convert(event.locationInWindow, from: nil))
+        model.beginPointer(at: convert(event.locationInWindow, from: nil), extending: event.modifierFlags.contains(.shift))
     }
 
     public override func mouseDragged(with event: NSEvent) {
@@ -52,6 +52,8 @@ public final class DrawingCanvasView: NSView {
     @objc public func undo(_ sender: Any?) { model.undo() }
     @objc public func redo(_ sender: Any?) { model.redo() }
     @objc public func delete(_ sender: Any?) { model.deleteSelection() }
+    @objc public func group(_ sender: Any?) { model.groupSelection() }
+    @objc public func ungroup(_ sender: Any?) { model.ungroupSelection() }
 }
 
 #elseif canImport(UIKit)

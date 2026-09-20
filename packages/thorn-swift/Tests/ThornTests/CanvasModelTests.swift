@@ -47,7 +47,7 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(model.userPoint(CGPoint(x: 40, y: 40)), CGPoint(x: 20, y: 20))
 
         model.beginPointer(at: CGPoint(x: 40, y: 40))
-        XCTAssertEqual(model.selection, "s1")
+        XCTAssertEqual(model.selection, ["s1"])
         model.pointerDragged(to: CGPoint(x: 60, y: 50)) // +10, +5 user units
         XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 10, y: 10), "nothing lands mid-drag")
         model.pointerUp()
@@ -55,8 +55,62 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertTrue(doc.source.contains("<rect x=\"20\" y=\"15\" width=\"40\" height=\"20\" fill=\"#ff0000\" data-id=\"s1\"/>"))
 
         model.beginPointer(at: CGPoint(x: 390, y: 190)) // empty
-        XCTAssertNil(model.selection)
+        XCTAssertEqual(model.selection, [])
         model.pointerUp()
+    }
+
+    func testShiftClickSelectsSeveralAndGroupsThem() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let context = makeContext()
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        model.beginPointer(at: CGPoint(x: 40, y: 40)) // s1
+        model.pointerUp()
+        model.beginPointer(at: CGPoint(x: 300, y: 100), extending: true) // + s2
+        model.pointerUp()
+        XCTAssertEqual(model.selection, ["s1", "s2"])
+        XCTAssertTrue(model.canGroup)
+        XCTAssertFalse(model.canUngroup)
+
+        // Dragging one of them moves both, as one step.
+        model.beginPointer(at: CGPoint(x: 40, y: 40))
+        model.pointerDragged(to: CGPoint(x: 60, y: 40)) // +10 user units
+        model.pointerUp()
+        XCTAssertEqual(model.selection, ["s1", "s2"])
+        XCTAssertEqual(doc.bounds(id: "s1")?.minX, 20)
+        XCTAssertEqual(doc.bounds(id: "s2")?.minX, 140)
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.source, scene)
+
+        model.groupSelection()
+        XCTAssertEqual(model.selection, ["s3"])
+        XCTAssertTrue(model.canUngroup)
+        XCTAssertEqual(doc.shape(id: "s3")?.kind, .group)
+        // A click on a member selects the group, and moves it by transform.
+        model.beginPointer(at: CGPoint(x: 300, y: 100))
+        XCTAssertEqual(model.selection, ["s3"])
+        model.pointerDragged(to: CGPoint(x: 310, y: 100))
+        model.pointerUp()
+        XCTAssertTrue(doc.source.contains("<g data-id=\"s3\" transform=\"translate(5 0)\">"))
+        XCTAssertEqual(doc.bounds(id: "s1")?.minX, 15)
+
+        model.ungroupSelection()
+        XCTAssertEqual(model.selection, ["s1", "s2"])
+        XCTAssertNil(doc.shape(id: "s3"))
+        XCTAssertEqual(doc.bounds(id: "s1")?.minX, 15, "the transform went down onto the members")
+        XCTAssertTrue(try doc.undo()) // ungroup
+        XCTAssertTrue(try doc.undo()) // move
+        XCTAssertTrue(try doc.undo()) // group
+        XCTAssertEqual(doc.source, scene)
+
+        // Shift-click on a selected shape takes it out.
+        model.select(["s1", "s2"])
+        model.beginPointer(at: CGPoint(x: 40, y: 40), extending: true)
+        model.pointerUp()
+        XCTAssertEqual(model.selection, ["s2"])
+        model.deleteSelection()
+        XCTAssertEqual(model.selection, [])
     }
 
     func testHandleResizeAndCreateLandAsOneStepEach() throws {
@@ -77,11 +131,11 @@ final class CanvasModelTests: XCTestCase {
         model.pointerDragged(to: CGPoint(x: 240, y: 60))
         model.pointerUp()
         XCTAssertEqual(model.tool, .select, "a create tool is one-shot")
-        XCTAssertEqual(model.selection, "s3")
+        XCTAssertEqual(model.selection, ["s3"])
         XCTAssertEqual(doc.bounds(id: "s3"), CGRect(x: 100, y: 10, width: 20, height: 20))
 
         model.deleteSelection()
-        XCTAssertNil(model.selection, "the selection follows the document")
+        XCTAssertEqual(model.selection, [], "the selection follows the document")
         XCTAssertTrue(try doc.undo()) // delete
         XCTAssertTrue(try doc.undo()) // create
         XCTAssertTrue(try doc.undo()) // resize

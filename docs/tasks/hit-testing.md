@@ -12,9 +12,15 @@ part_of: '[Tasks](tasks.md)'
 **In progress.** `hit::hits`, `Drawing::hit`, `Handle` (position, `at`,
 `drag`) landed 2026-09-20 for every attribute-stated kind: a stroke counts
 as its centreline within a tolerance, a fill as its interior, a polygon by
-even-odd. What is left is below: a `<path>` and a `<g>` (their `d` and
-their members), measured `<text>` bounds (the core uses a nominal box
-around the anchor), and arrow bindings.
+even-odd. The same day, in the commit that added group and ungroup: a
+`<path>` through its `d` flattened (`path::flatten`, over svgtypes'
+simplifying parser), a `<g>` through its members (`Drawing::bounds` is
+their union, `Drawing::outermost` is what a click on a member selects), and
+`transform` — parsed into one matrix (`transform.rs`), composed up the
+group chain, honoured by `bounds`, `hit`, `move_by` and `resize` for every
+kind, and written by `move_by`/`resize` for a `<path>` or a `<g>`. What is
+left: measured `<text>` bounds (the core uses a nominal box around the
+anchor), and arrow bindings.
 
 The core knows what a rectangle is; it should also know whether a point is
 inside one. Pure geometry over the shape list, so the Mac, iOS and the
@@ -30,8 +36,10 @@ composer share one answer and it is tested against fixtures with no screen:
   target moves, the arrow's endpoint is recomputed to the target's edge.
 
 Also here, because it is the same geometry: **moving a `<path>` or a `<g>`.**
-Neither has a position in its attributes, so `Drawing::move_by` reports
-`Unsupported` for them. The gesture is a `transform="translate(dx dy)"` —
-composed onto whatever `transform` is already there, which means parsing
-the transform list — and `bounds` for a `<path>` is its `d` parsed for its
-extent, with the transform applied.
+Neither has a position in its attributes. The gesture is a
+`transform="translate(dx dy)"` — composed onto whatever `transform` is
+already there, which means parsing the transform list — and `bounds` for a
+`<path>` is its `d` parsed for its extent, with the transform applied.
+*(Done, as above.)* One limit stands: a shape under a rotation or a skew
+has no axis-aligned box to fit, so `resize` reports `Unsupported` for it;
+the handles are still drawn on the box around its rotated outline.

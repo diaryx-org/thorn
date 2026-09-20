@@ -46,15 +46,23 @@ public final class DrawingDocument {
     /// Hold the drawing to the profile. Empty means it conforms.
     public func check() -> [Finding] { inner.check() }
 
-    /// The bounds a shape's attributes state; `nil` for a `<path>` or `<g>`.
+    /// A shape's extent in user units, through its transform chain; a
+    /// `<g>`'s is its members'. `nil` for an empty group.
     public func bounds(id: String) -> CGRect? {
         inner.bounds(id: id).map(CGRect.init)
     }
 
-    /// The topmost shape within `tolerance` user units of a point.
+    /// The topmost shape within `tolerance` user units of a point. A member
+    /// of a group is returned itself; `outermost(id:)` is what to select.
     public func hit(_ point: CGPoint, tolerance: CGFloat) -> Shape? {
         inner.hit(x: Double(point.x), y: Double(point.y), tolerance: Double(tolerance))
     }
+
+    /// The outermost group a shape is in, or the shape itself.
+    public func outermost(id: String) -> Shape? { inner.outermost(id: id) }
+
+    /// The shapes directly inside a `<g>`, in paint order.
+    public func members(id: String) -> [Shape] { inner.members(id: id) }
 
     // MARK: Gestures
 
@@ -89,9 +97,33 @@ public final class DrawingDocument {
         try changed { try inner.delete(id: id) }
     }
 
+    /// Delete several shapes as one undo step.
+    public func delete(ids: [String]) throws {
+        try changed { try inner.deleteAll(ids: ids) }
+    }
+
     /// Move a shape by a vector.
     public func move(id: String, by delta: CGVector) throws {
         try changed { try inner.moveBy(id: id, dx: Double(delta.dx), dy: Double(delta.dy)) }
+    }
+
+    /// Move several shapes by a vector as one undo step.
+    public func move(ids: [String], by delta: CGVector) throws {
+        try changed { try inner.moveAll(ids: ids, dx: Double(delta.dx), dy: Double(delta.dy)) }
+    }
+
+    /// Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
+    /// step. Throws `DrawingError.NotSiblings` for shapes in different groups.
+    @discardableResult
+    public func group(ids: [String]) throws -> String {
+        try changed { try inner.group(ids: ids) }
+    }
+
+    /// Replace a `<g>` with its members, nothing moving; returns their ids.
+    /// One undo step.
+    @discardableResult
+    public func ungroup(id: String) throws -> [String] {
+        try changed { try inner.ungroup(id: id) }
     }
 
     /// Fit a shape to a box.

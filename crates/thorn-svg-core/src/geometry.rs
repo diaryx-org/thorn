@@ -1,9 +1,13 @@
 //! Geometry the gestures compute: a shape's bounds from its attributes, and
 //! the attributes a moved or resized shape carries. Pure functions over
-//! strings and numbers; the tree is not touched here.
+//! strings and numbers; the tree is not touched here. Everything is in the
+//! shape's own coordinates — its `transform` and its groups' are
+//! [`Drawing`](crate::Drawing)'s to compose, since only it knows the chain.
 
 use crate::number;
+use crate::path::{self, Subpath};
 use crate::shape::{Shape, ShapeKind};
+use crate::transform::Transform;
 
 /// An axis-aligned box in user units.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -14,9 +18,9 @@ pub struct Bounds {
     pub height: f64,
 }
 
-/// The bounds a shape's own attributes state. `None` for a kind whose extent
-/// is not in its attributes — a `<path>`'s `d`, a `<g>`'s members — or a
-/// shape missing the attributes its kind needs. Ignores `transform`.
+/// The bounds a shape's own attributes state — a `<path>`'s from its `d`
+/// flattened. `None` for a `<g>`, whose extent is its members', or a shape
+/// missing the attributes its kind needs. Ignores `transform`.
 pub fn bounds(shape: &Shape) -> Option<Bounds> {
     let n = |name: &str| shape.number(name);
     let or0 = |name: &str| n(name).unwrap_or(0.0);
@@ -56,19 +60,11 @@ pub fn bounds(shape: &Shape) -> Option<Bounds> {
         }
         ShapeKind::Polyline | ShapeKind::Polygon => {
             let pts = points(shape.attr("points")?)?;
-            let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
-            for (x, y) in &pts {
-                x0 = x0.min(*x);
-                y0 = y0.min(*y);
-                x1 = x1.max(*x);
-                y1 = y1.max(*y);
-            }
-            Bounds {
-                x: x0,
-                y: y0,
-                width: x1 - x0,
-                height: y1 - y0,
-            }
+            Bounds::around(pts.iter().copied())?
+        }
+        ShapeKind::Path => {
+            let subs = path::flatten(shape.attr("d")?)?;
+            Bounds::around(subs.iter().flat_map(|s| s.points.iter().copied()))?
         }
         // A label's extent is its font's to say; its anchor is all the
         // attributes carry.
@@ -78,29 +74,137 @@ pub fn bounds(shape: &Shape) -> Option<Bounds> {
             width: 0.0,
             height: 0.0,
         },
-        ShapeKind::Path | ShapeKind::Group => return None,
+        ShapeKind::Group => return None,
     })
 }
 
-/// The geometry attributes of `shape` moved by `(dx, dy)`, as `(name,
-/// value)` pairs to write back. `None` for a kind whose position is not in
-/// its attributes — a `<path>` or a `<g>` moves by `transform`, which is not
-/// yet a gesture (docs/tasks/hit-testing.md).
-pub fn moved(shape: &Shape, dx: f64, dy: f64) -> Option<Vec<(&'static str, String)>> {
-    let shift = |name: &'static str, by: f64| -> Option<(&'static str, String)> {
-        shape.number(name).map(|v| (name, number::fmt(v + by)))
+impl Bounds {
+    /// The smallest box around the points; `None` for none.
+    pub fn around(points: impl IntoIterator<Item = (f64, f64)>) -> Option<Bounds> {
+        let mut it = points.into_iter();
+        let (mut x0, mut y0) = it.next()?;
+        let (mut x1, mut y1) = (x0, y0);
+        for (x, y) in it {
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x);
+            y1 = y1.max(y);
+        }
+        Some(Bounds {
+            x: x0,
+            y: y0,
+            width: x1 - x0,
+            height: y1 - y0,
+        })
+    }
+
+    /// The smallest box around both.
+    pub fn union(&self, other: &Bounds) -> Bounds {
+        let x0 = self.x.min(other.x);
+        let y0 = self.y.min(other.y);
+        let x1 = (self.x + self.width).max(other.x + other.width);
+        let y1 = (self.y + self.height).max(other.y + other.height);
+        Bounds {
+            x: x0,
+            y: y0,
+            width: x1 - x0,
+            height: y1 - y0,
+        }
+    }
+
+    /// The box around this box's corners after `t` — its extent in the
+    /// space `t` maps into. Exact for a translate or a scale; a rotation
+    /// gets the box around the rotated box.
+    pub fn transformed(&self, t: &Transform) -> Bounds {
+        let (x1, y1) = (self.x + self.width, self.y + self.height);
+        Bounds::around([
+            t.apply(self.x, self.y),
+            t.apply(x1, self.y),
+            t.apply(x1, y1),
+            t.apply(self.x, y1),
+        ])
+        .expect("four corners")
+    }
+}
+
+/// The shape's silhouette as polylines in its own coordinates, for an
+/// extent under a transform that is not a box's to keep — a rotated
+/// ellipse is not the box around its rotated box. `None` for a `<g>` and
+/// for what does not parse; a label is its anchor, since its extent is its
+/// font's.
+pub fn outline(shape: &Shape) -> Option<Vec<Subpath>> {
+    let n = |name: &str| shape.number(name).unwrap_or(0.0);
+    let closed = |points| Subpath {
+        points,
+        closed: true,
+    };
+    Some(match shape.kind {
+        ShapeKind::Rect | ShapeKind::Image | ShapeKind::Text => {
+            let b = bounds(shape)?;
+            let (x1, y1) = (b.x + b.width, b.y + b.height);
+            vec![closed(vec![(b.x, b.y), (x1, b.y), (x1, y1), (b.x, y1)])]
+        }
+        ShapeKind::Ellipse | ShapeKind::Circle => {
+            let b = bounds(shape)?;
+            let (rx, ry) = (b.width / 2.0, b.height / 2.0);
+            let (cx, cy) = (n("cx"), n("cy"));
+            // Enough chords that a selection box around a rotated ellipse
+            // is within a hair of it.
+            let pts = (0..48)
+                .map(|i| {
+                    let t = i as f64 / 48.0 * std::f64::consts::TAU;
+                    (cx + rx * t.cos(), cy + ry * t.sin())
+                })
+                .collect();
+            vec![closed(pts)]
+        }
+        ShapeKind::Line => vec![Subpath {
+            points: vec![(n("x1"), n("y1")), (n("x2"), n("y2"))],
+            closed: false,
+        }],
+        ShapeKind::Polyline | ShapeKind::Polygon => vec![Subpath {
+            points: points(shape.attr("points")?)?,
+            closed: shape.kind == ShapeKind::Polygon,
+        }],
+        ShapeKind::Path => path::flatten(shape.attr("d")?)?,
+        ShapeKind::Group => return None,
+    })
+}
+
+/// The shape's own `transform`, the identity when absent or unparseable.
+pub fn own_transform(shape: &Shape) -> Transform {
+    shape
+        .attr("transform")
+        .and_then(Transform::parse)
+        .unwrap_or_default()
+}
+
+/// One attribute to write back: a value, or `None` to take the attribute
+/// off — how an identity `transform` is written.
+pub type Update = (&'static str, Option<String>);
+
+/// The attributes of `shape` moved by `(dx, dy)`. A kind with its position
+/// in its attributes shifts them, and the delta is in the shape's own
+/// coordinates; a `<path>` or a `<g>` has none, so it gets a `translate`
+/// composed onto its `transform`, and the delta is in its parent's. `None`
+/// for a points list that does not parse.
+pub fn moved(shape: &Shape, dx: f64, dy: f64) -> Option<Vec<Update>> {
+    let shift = |name: &'static str, by: f64| -> Option<Update> {
+        shape
+            .number(name)
+            .map(|v| (name, Some(number::fmt(v + by))))
     };
     Some(match shape.kind {
         ShapeKind::Rect | ShapeKind::Image | ShapeKind::Text => {
             // An absent `x` or `y` is 0 and stays absent when the shift is 0.
             let x = shape.number("x").unwrap_or(0.0) + dx;
             let y = shape.number("y").unwrap_or(0.0) + dy;
-            vec![("x", number::fmt(x)), ("y", number::fmt(y))]
+            vec![("x", Some(number::fmt(x))), ("y", Some(number::fmt(y)))]
         }
         ShapeKind::Ellipse | ShapeKind::Circle => {
             let cx = shape.number("cx").unwrap_or(0.0) + dx;
             let cy = shape.number("cy").unwrap_or(0.0) + dy;
-            vec![("cx", number::fmt(cx)), ("cy", number::fmt(cy))]
+            vec![("cx", Some(number::fmt(cx))), ("cy", Some(number::fmt(cy)))]
         }
         ShapeKind::Line => ["x1", "x2"]
             .into_iter()
@@ -111,19 +215,36 @@ pub fn moved(shape: &Shape, dx: f64, dy: f64) -> Option<Vec<(&'static str, Strin
             let pts = points(shape.attr("points")?)?;
             vec![(
                 "points",
-                fmt_points(pts.iter().map(|(x, y)| (x + dx, y + dy))),
+                Some(fmt_points(pts.iter().map(|(x, y)| (x + dx, y + dy)))),
             )]
         }
-        ShapeKind::Path | ShapeKind::Group => return None,
+        ShapeKind::Path | ShapeKind::Group => {
+            let t = own_transform(shape).then(&Transform::translate(dx, dy));
+            vec![("transform", t.fmt())]
+        }
     })
 }
 
-/// The geometry attributes of `shape` fitted to `to`, as `(name, value)`
-/// pairs to write back. A line keeps its direction (which corner each end
-/// is at); a circle takes the smaller side; a label moves its anchor and
-/// has no size. `None` as for [`moved`].
-pub fn resized(shape: &Shape, to: Bounds) -> Option<Vec<(&'static str, String)>> {
-    let f = number::fmt;
+/// The transform that takes the box `from` to the box `to`: a scale about
+/// `from`'s corner, then a move. A zero side is left alone, since nothing
+/// scales a line's width into a width.
+pub fn fit(from: Bounds, to: Bounds) -> Transform {
+    let ratio = |to: f64, from: f64| if from == 0.0 { 1.0 } else { to / from };
+    Transform::translate(-from.x, -from.y)
+        .then(&Transform::scale(
+            ratio(to.width, from.width),
+            ratio(to.height, from.height),
+        ))
+        .then(&Transform::translate(to.x, to.y))
+}
+
+/// The geometry attributes of `shape` fitted to `to`, in the shape's own
+/// coordinates. A line keeps its direction (which corner each end is at); a
+/// circle takes the smaller side; a label moves its anchor and has no size.
+/// `None` for a `<path>` or a `<g>`, which fit by [`fitted`], and for a
+/// points list that does not parse.
+pub fn resized(shape: &Shape, to: Bounds) -> Option<Vec<Update>> {
+    let f = |v: f64| Some(number::fmt(v));
     Some(match shape.kind {
         ShapeKind::Rect | ShapeKind::Image => vec![
             ("x", f(to.x)),
@@ -172,10 +293,9 @@ pub fn resized(shape: &Shape, to: Bounds) -> Option<Vec<(&'static str, String)>>
             };
             vec![(
                 "points",
-                fmt_points(
-                    pts.iter()
-                        .map(|(x, y)| (to.x + (x - from.x) * sx, to.y + (y - from.y) * sy)),
-                ),
+                Some(fmt_points(pts.iter().map(|(x, y)| {
+                    (to.x + (x - from.x) * sx, to.y + (y - from.y) * sy)
+                }))),
             )]
         }
         ShapeKind::Path | ShapeKind::Group => return None,
@@ -290,11 +410,17 @@ mod tests {
         let m = |k, a: &[(&str, &str)]| moved(&shape(k, a), 1.5, -2.0).unwrap();
         assert_eq!(
             m(ShapeKind::Rect, &[("x", "1"), ("width", "3")]),
-            [("x", "2.5".to_string()), ("y", "-2".to_string())]
+            [
+                ("x", Some("2.5".to_string())),
+                ("y", Some("-2".to_string()))
+            ]
         );
         assert_eq!(
             m(ShapeKind::Circle, &[("cx", "5"), ("cy", "5"), ("r", "2")]),
-            [("cx", "6.5".to_string()), ("cy", "3".to_string())]
+            [
+                ("cx", Some("6.5".to_string())),
+                ("cy", Some("3".to_string()))
+            ]
         );
         assert_eq!(
             m(
@@ -302,17 +428,101 @@ mod tests {
                 &[("x1", "0"), ("y1", "0"), ("x2", "4"), ("y2", "4")]
             ),
             [
-                ("x1", "1.5".to_string()),
-                ("x2", "5.5".to_string()),
-                ("y1", "-2".to_string()),
-                ("y2", "2".to_string())
+                ("x1", Some("1.5".to_string())),
+                ("x2", Some("5.5".to_string())),
+                ("y1", Some("-2".to_string())),
+                ("y2", Some("2".to_string()))
             ]
         );
         assert_eq!(
             m(ShapeKind::Polyline, &[("points", "0 0, 4,0")]),
-            [("points", "1.5,-2 5.5,-2".to_string())]
+            [("points", Some("1.5,-2 5.5,-2".to_string()))]
         );
-        assert!(moved(&shape(ShapeKind::Group, &[]), 1.0, 1.0).is_none());
+        assert_eq!(
+            m(ShapeKind::Group, &[]),
+            [("transform", Some("translate(1.5 -2)".to_string()))]
+        );
+        assert_eq!(
+            m(
+                ShapeKind::Path,
+                &[("d", "M0 0"), ("transform", "translate(-1.5 2)")]
+            ),
+            [("transform", None)],
+            "moved back where it was, the attribute comes off"
+        );
+        assert_eq!(
+            m(ShapeKind::Path, &[("d", "M0 0"), ("transform", "scale(2)")]),
+            [("transform", Some("matrix(2 0 0 2 1.5 -2)".to_string()))],
+            "the delta is in the parent's space, so it is not scaled"
+        );
+    }
+
+    #[test]
+    fn bounds_of_a_path_are_its_flattened_extent_and_a_group_has_none() {
+        assert_eq!(
+            bounds(&shape(ShapeKind::Path, &[("d", "M10 10 h20 v5 z")])),
+            Some(Bounds {
+                x: 10.0,
+                y: 10.0,
+                width: 20.0,
+                height: 5.0
+            })
+        );
+        assert!(bounds(&shape(ShapeKind::Path, &[("d", "nope")])).is_none());
+        assert!(bounds(&shape(ShapeKind::Group, &[])).is_none());
+        assert!(outline(&shape(ShapeKind::Group, &[])).is_none());
+    }
+
+    #[test]
+    fn a_transformed_extent_is_around_the_outline() {
+        let t = Transform::parse("rotate(90)").unwrap();
+        let b = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 4.0,
+        };
+        let r = b.transformed(&t);
+        assert!((r.x + 4.0).abs() < 1e-9 && r.y.abs() < 1e-9);
+        assert!((r.width - 4.0).abs() < 1e-9 && (r.height - 10.0).abs() < 1e-9);
+        assert_eq!(
+            b.union(&Bounds {
+                x: 5.0,
+                y: -1.0,
+                width: 10.0,
+                height: 1.0
+            }),
+            Bounds {
+                x: 0.0,
+                y: -1.0,
+                width: 15.0,
+                height: 5.0
+            }
+        );
+        let circle = shape(ShapeKind::Circle, &[("cx", "0"), ("cy", "0"), ("r", "1")]);
+        let pts = outline(&circle).unwrap().remove(0).points;
+        assert_eq!(pts.len(), 48);
+        assert!(pts.iter().all(|(x, y)| (x * x + y * y - 1.0).abs() < 1e-9));
+    }
+
+    #[test]
+    fn fit_scales_about_the_old_corner() {
+        let from = Bounds {
+            x: 10.0,
+            y: 10.0,
+            width: 10.0,
+            height: 10.0,
+        };
+        let to = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 20.0,
+            height: 5.0,
+        };
+        let t = fit(from, to);
+        assert_eq!(t.apply(10.0, 10.0), (0.0, 0.0));
+        assert_eq!(t.apply(20.0, 20.0), (20.0, 5.0));
+        assert!(fit(from, from).is_identity());
     }
 
     #[test]
@@ -327,18 +537,18 @@ mod tests {
         assert_eq!(
             r(ShapeKind::Ellipse, &[("rx", "1"), ("ry", "1")]),
             [
-                ("cx", "14".to_string()),
-                ("cy", "22".to_string()),
-                ("rx", "4".to_string()),
-                ("ry", "2".to_string())
+                ("cx", Some("14".to_string())),
+                ("cy", Some("22".to_string())),
+                ("rx", Some("4".to_string())),
+                ("ry", Some("2".to_string()))
             ]
         );
         assert_eq!(
             r(ShapeKind::Circle, &[("r", "1")]),
             [
-                ("cx", "12".to_string()),
-                ("cy", "22".to_string()),
-                ("r", "2".to_string())
+                ("cx", Some("12".to_string())),
+                ("cy", Some("22".to_string())),
+                ("r", Some("2".to_string()))
             ]
         );
         assert_eq!(
@@ -347,15 +557,15 @@ mod tests {
                 &[("x1", "9"), ("y1", "0"), ("x2", "0"), ("y2", "9")]
             ),
             [
-                ("x1", "18".to_string()),
-                ("y1", "20".to_string()),
-                ("x2", "10".to_string()),
-                ("y2", "24".to_string())
+                ("x1", Some("18".to_string())),
+                ("y1", Some("20".to_string())),
+                ("x2", Some("10".to_string())),
+                ("y2", Some("24".to_string()))
             ]
         );
         assert_eq!(
             r(ShapeKind::Polygon, &[("points", "0,0 4,0 4,3")]),
-            [("points", "10,20 18,20 18,24".to_string())]
+            [("points", Some("10,20 18,20 18,24".to_string()))]
         );
     }
 }

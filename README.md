@@ -76,10 +76,10 @@ history:
 | add rect, ellipse, line, label | `insert_after` / `insert_child` | done |
 | delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
 | undo, redo | `undo` / `redo` | done |
-| move, resize | `set_node_attrs` | done for rect, ellipse, circle, line, polyline, polygon, text, image; a `<path>` or `<g>` moves by `transform`, [not yet](docs/tasks/hit-testing.md) |
+| move, resize | `set_node_attrs` | done: the attributes for rect, ellipse, circle, line, polyline, polygon, text, image; a `transform` for a `<path>` or a `<g>` |
 | forward, back, to front, to back | `move_before` / `move_after` | done, among sibling shapes |
-| group, ungroup | `insert_child` with a `<g>` / `unwrap_node` | not yet |
-| select, hit-test, handles | — (pure geometry) | done for the attribute-stated kinds; [`<path>`, `<g>`, measured text](docs/tasks/hit-testing.md) not yet |
+| group, ungroup | `edit_range` around the members / over the `<g>`, `move_after` to bring a stray member up, folded into one undo step | done; a group's `transform` is pushed down onto its members on ungroup |
+| select, hit-test, handles | — (pure geometry) | done, through `transform` chains; [measured text](docs/tasks/hit-testing.md) not yet |
 | arrow bindings, freehand ink | — | reserved in the profile |
 
 ## Building

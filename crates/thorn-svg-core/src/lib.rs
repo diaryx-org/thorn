@@ -25,11 +25,14 @@ pub mod drawing;
 pub mod geometry;
 pub mod hit;
 pub mod number;
+pub mod path;
 pub mod profile;
 pub mod shape;
+pub mod transform;
 
 pub use drawing::{Drawing, Error, Order, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
 pub use profile::{Finding, Rule};
 pub use shape::{Shape, ShapeKind};
+pub use transform::Transform;

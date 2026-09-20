@@ -32,6 +32,8 @@ pub enum DrawingError {
     NoSuchShape { id: String },
     #[error("{gesture} is not defined for this kind of shape")]
     Unsupported { gesture: String, kind: ShapeKind },
+    #[error("the shapes to group are not siblings")]
+    NotSiblings,
     #[error("{message}")]
     Edit { message: String },
 }
@@ -48,6 +50,7 @@ impl From<core::Error> for DrawingError {
                 gesture: gesture.to_string(),
                 kind: kind.into(),
             },
+            core::Error::NotSiblings => Self::NotSiblings,
             core::Error::Edit(inner) => Self::Edit {
                 message: format!("{inner:?}"),
             },
@@ -363,19 +366,61 @@ impl Drawing {
         Ok(self.lock().delete(&id)?)
     }
 
-    /// The bounds a shape's attributes state; `None` for a `<path>` or `<g>`.
+    /// Delete several shapes as one undo step.
+    pub fn delete_all(&self, ids: Vec<String>) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().delete_all(&ids)?)
+    }
+
+    /// A shape's extent in the root's user units, through its transform
+    /// chain; a `<g>`'s is its members'. `None` for an empty group or a
+    /// shape missing what its kind needs.
     pub fn bounds(&self, id: String) -> Option<Bounds> {
         self.lock().bounds(&id).map(Into::into)
     }
 
-    /// The topmost shape within `tolerance` of the point, in paint order.
+    /// The topmost shape within `tolerance` of the point, in paint order. A
+    /// member of a group is returned itself; `outermost` names the group.
     pub fn hit(&self, x: f64, y: f64, tolerance: f64) -> Option<Shape> {
         self.lock().hit(x, y, tolerance).map(Shape::from)
+    }
+
+    /// The outermost group a shape is in, or the shape itself.
+    pub fn outermost(&self, id: String) -> Option<Shape> {
+        self.lock().outermost(&id).map(Shape::from)
+    }
+
+    /// The shapes directly inside a `<g>`, in paint order.
+    pub fn members(&self, id: String) -> Vec<Shape> {
+        self.lock()
+            .members(&id)
+            .into_iter()
+            .map(Shape::from)
+            .collect()
     }
 
     /// Move a shape by `(dx, dy)`.
     pub fn move_by(&self, id: String, dx: f64, dy: f64) -> Result<(), DrawingError> {
         Ok(self.lock().move_by(&id, dx, dy)?)
+    }
+
+    /// Move several shapes by `(dx, dy)` as one undo step.
+    pub fn move_all(&self, ids: Vec<String>, dx: f64, dy: f64) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().move_all(&ids, dx, dy)?)
+    }
+
+    /// Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
+    /// step.
+    pub fn group(&self, ids: Vec<String>) -> Result<String, DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().group(&ids)?)
+    }
+
+    /// Replace a `<g>` with its members, its transform pushed down onto
+    /// them; returns their ids. One undo step.
+    pub fn ungroup(&self, id: String) -> Result<Vec<String>, DrawingError> {
+        Ok(self.lock().ungroup(&id)?)
     }
 
     /// Fit a shape to `to`.

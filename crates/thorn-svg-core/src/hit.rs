@@ -3,6 +3,7 @@
 //! platform asks these the same question and draws the same answer.
 
 use crate::geometry::{self, Bounds};
+use crate::path::{self, Subpath};
 use crate::shape::{Shape, ShapeKind};
 
 /// One of the eight resize handles on a selection's bounds.
@@ -81,11 +82,11 @@ impl Handle {
     }
 }
 
-/// Whether `(x, y)` is on `shape`, within `tolerance` user units of its
-/// silhouette. A stroke counts as its centreline; a fill counts as its
-/// interior. `false` for a kind whose silhouette is not in its attributes
-/// (a `<path>`, a `<g>`), which the canvas hits through its members or
-/// not at all until docs/tasks/hit-testing.md.
+/// Whether `(x, y)` is on `shape`, within `tolerance` of its silhouette, in
+/// the shape's own coordinates — [`Drawing::hit`](crate::Drawing::hit) maps
+/// the point through the shape's transform first. A stroke counts as its
+/// centreline; a fill counts as its interior, a closed subpath's by
+/// even-odd. `false` for a `<g>`, which is hit through its members.
 pub fn hits(shape: &Shape, x: f64, y: f64, tolerance: f64) -> bool {
     let n = |name: &str| shape.number(name).unwrap_or(0.0);
     match shape.kind {
@@ -112,18 +113,18 @@ pub fn hits(shape: &Shape, x: f64, y: f64, tolerance: f64) -> bool {
             let Some(pts) = geometry::points(shape.attr("points").unwrap_or("")) else {
                 return false;
             };
-            let closed = shape.kind == ShapeKind::Polygon;
-            if closed && point_in_polygon(&pts, (x, y)) {
-                return true;
-            }
-            let edges = pts.windows(2).map(|w| (w[0], w[1]));
-            let closing = closed
-                .then(|| pts.first().zip(pts.last()).map(|(a, b)| (*b, *a)))
-                .flatten();
-            edges
-                .chain(closing)
-                .any(|(a, b)| segment_distance(a, b, (x, y)) <= tolerance)
+            hits_subpath(
+                &Subpath {
+                    points: pts,
+                    closed: shape.kind == ShapeKind::Polygon,
+                },
+                x,
+                y,
+                tolerance,
+            )
         }
+        ShapeKind::Path => path::flatten(shape.attr("d").unwrap_or(""))
+            .is_some_and(|subs| subs.iter().any(|s| hits_subpath(s, x, y, tolerance))),
         // A label's extent is its font's to say; until the host says, a box
         // around the anchor is what a click can land on.
         ShapeKind::Text => {
@@ -135,8 +136,24 @@ pub fn hits(shape: &Shape, x: f64, y: f64, tolerance: f64) -> bool {
             };
             b.expanded(tolerance).contains(x, y)
         }
-        ShapeKind::Path | ShapeKind::Group => false,
+        ShapeKind::Group => false,
     }
+}
+
+/// On the polyline's edges within `tolerance`, or inside it when closed.
+fn hits_subpath(sub: &Subpath, x: f64, y: f64, tolerance: f64) -> bool {
+    let pts = &sub.points;
+    if sub.closed && point_in_polygon(pts, (x, y)) {
+        return true;
+    }
+    let edges = pts.windows(2).map(|w| (w[0], w[1]));
+    let closing = sub
+        .closed
+        .then(|| pts.first().zip(pts.last()).map(|(a, b)| (*b, *a)))
+        .flatten();
+    edges
+        .chain(closing)
+        .any(|(a, b)| segment_distance(a, b, (x, y)) <= tolerance)
 }
 
 /// How far around a `<text>` anchor a click counts, in user units, until
@@ -259,12 +276,21 @@ mod tests {
         assert!(hits(&text, 105.0, 95.0, 0.0));
         assert!(!hits(&text, 100.0, 120.0, 0.0));
 
+        let stroke = shape(ShapeKind::Path, &[("d", "M0 0h10")]);
+        assert!(hits(&stroke, 5.0, 0.5, 1.0));
+        assert!(!hits(&stroke, 5.0, 3.0, 1.0));
+        let filled = shape(ShapeKind::Path, &[("d", "M0 0h10v10h-10z")]);
+        assert!(
+            hits(&filled, 5.0, 5.0, 0.0),
+            "a closed subpath has an interior"
+        );
         assert!(!hits(
-            &shape(ShapeKind::Path, &[("d", "M0 0h10")]),
-            5.0,
+            &shape(ShapeKind::Path, &[("d", "M0 0")]),
+            0.0,
             0.0,
             5.0
         ));
+        assert!(!hits(&shape(ShapeKind::Group, &[]), 0.0, 0.0, 5.0));
     }
 
     #[test]

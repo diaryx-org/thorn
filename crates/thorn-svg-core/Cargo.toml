@@ -12,4 +12,5 @@ categories = ["multimedia::images", "text-editors"]
 
 [dependencies]
 twig-doc.workspace = true
+svgtypes.workspace = true
 thiserror.workspace = true
