@@ -778,6 +778,19 @@ public protocol DrawingProtocol : AnyObject {
     func setText(id: String, text: String) throws 
     
     /**
+     * Say how heavy a stroked shape's stroke is, or with `None` the
+     * template's width. One undo step; `Unsupported` for what is not
+     * stroked.
+     */
+    func setWeight(id: String, weight: Weight?) throws 
+    
+    /**
+     * `set_weight` over a selection as one undo step, what is not stroked
+     * left as it is.
+     */
+    func setWeightAll(ids: [String], weight: Weight?) throws 
+    
+    /**
      * Wrap a label to `width` user units, its words flowed into `<tspan>`
      * lines; or, with `None`, put them back on one line. One undo step.
      */
@@ -818,6 +831,11 @@ public protocol DrawingProtocol : AnyObject {
     func takesFill(id: String)  -> Bool
     
     /**
+     * Whether a weight means anything on a shape: as `takes_dash`.
+     */
+    func takesWeight(id: String)  -> Bool
+    
+    /**
      * Undo the last gesture; `false` when there was nothing to undo.
      */
     func undo() throws  -> Bool
@@ -827,6 +845,12 @@ public protocol DrawingProtocol : AnyObject {
      * them; returns their ids. One undo step.
      */
     func ungroup(id: String) throws  -> [String]
+    
+    /**
+     * How heavy a shape's stroke is — a group's, what its stroked members
+     * agree on — or `None` for the template's width.
+     */
+    func weight(id: String)  -> Weight?
     
 }
 
@@ -1482,6 +1506,31 @@ open func setText(id: String, text: String)throws  {try rustCallWithError(FfiCon
 }
     
     /**
+     * Say how heavy a stroked shape's stroke is, or with `None` the
+     * template's width. One undo step; `Unsupported` for what is not
+     * stroked.
+     */
+open func setWeight(id: String, weight: Weight?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionTypeWeight.lower(weight),$0
+    )
+}
+}
+    
+    /**
+     * `set_weight` over a selection as one undo step, what is not stroked
+     * left as it is.
+     */
+open func setWeightAll(ids: [String], weight: Weight?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionTypeWeight.lower(weight),$0
+    )
+}
+}
+    
+    /**
      * Wrap a label to `width` user units, its words flowed into `<tspan>`
      * lines; or, with `None`, put them back on one line. One undo step.
      */
@@ -1562,6 +1611,17 @@ open func takesFill(id: String) -> Bool {
 }
     
     /**
+     * Whether a weight means anything on a shape: as `takes_dash`.
+     */
+open func takesWeight(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_weight(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * Undo the last gesture; `false` when there was nothing to undo.
      */
 open func undo()throws  -> Bool {
@@ -1578,6 +1638,18 @@ open func undo()throws  -> Bool {
 open func ungroup(id: String)throws  -> [String] {
     return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * How heavy a shape's stroke is — a group's, what its stroked members
+     * agree on — or `None` for the template's width.
+     */
+open func weight(id: String) -> Weight? {
+    return try!  FfiConverterOptionTypeWeight.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_weight(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 })
@@ -2109,13 +2181,15 @@ public struct Pen {
     public var dash: Dash?
     public var hue: Hue?
     public var fill: Hue?
+    public var weight: Weight?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(dash: Dash?, hue: Hue?, fill: Hue?) {
+    public init(dash: Dash?, hue: Hue?, fill: Hue?, weight: Weight?) {
         self.dash = dash
         self.hue = hue
         self.fill = fill
+        self.weight = weight
     }
 }
 
@@ -2132,6 +2206,9 @@ extension Pen: Equatable, Hashable {
         if lhs.fill != rhs.fill {
             return false
         }
+        if lhs.weight != rhs.weight {
+            return false
+        }
         return true
     }
 
@@ -2139,6 +2216,7 @@ extension Pen: Equatable, Hashable {
         hasher.combine(dash)
         hasher.combine(hue)
         hasher.combine(fill)
+        hasher.combine(weight)
     }
 }
 
@@ -2152,7 +2230,8 @@ public struct FfiConverterTypePen: FfiConverterRustBuffer {
             try Pen(
                 dash: FfiConverterOptionTypeDash.read(from: &buf), 
                 hue: FfiConverterOptionTypeHue.read(from: &buf), 
-                fill: FfiConverterOptionTypeHue.read(from: &buf)
+                fill: FfiConverterOptionTypeHue.read(from: &buf), 
+                weight: FfiConverterOptionTypeWeight.read(from: &buf)
         )
     }
 
@@ -2160,6 +2239,7 @@ public struct FfiConverterTypePen: FfiConverterRustBuffer {
         FfiConverterOptionTypeDash.write(value.dash, into: &buf)
         FfiConverterOptionTypeHue.write(value.hue, into: &buf)
         FfiConverterOptionTypeHue.write(value.fill, into: &buf)
+        FfiConverterOptionTypeWeight.write(value.weight, into: &buf)
     }
 }
 
@@ -3239,6 +3319,73 @@ extension ShapeKind: Equatable, Hashable {}
 
 
 
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Mirrors `thorn_svg_core::Weight`: how heavy a stroke is.
+ */
+
+public enum Weight {
+    
+    case thin
+    case bold
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeWeight: FfiConverterRustBuffer {
+    typealias SwiftType = Weight
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Weight {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .thin
+        
+        case 2: return .bold
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Weight, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .thin:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .bold:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWeight_lift(_ buf: RustBuffer) throws -> Weight {
+    return try FfiConverterTypeWeight.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeWeight_lower(_ value: Weight) -> RustBuffer {
+    return FfiConverterTypeWeight.lower(value)
+}
+
+
+
+extension Weight: Equatable, Hashable {}
+
+
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -3522,6 +3669,30 @@ fileprivate struct FfiConverterOptionTypeHue: FfiConverterRustBuffer {
         switch try readInt(&buf) as Int8 {
         case 0: return nil
         case 1: return try FfiConverterTypeHue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterOptionTypeWeight: FfiConverterRustBuffer {
+    typealias SwiftType = Weight?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeWeight.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeWeight.read(from: &buf)
         default: throw UniffiInternalError.unexpectedOptionalTag
         }
     }
@@ -3973,6 +4144,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight() != 25555) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight_all() != 8124) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_width() != 1447) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3994,10 +4171,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_fill() != 19718) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_weight() != 29894) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 51363) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_weight() != 64778) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_fresh() != 15554) {

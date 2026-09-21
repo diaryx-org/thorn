@@ -140,9 +140,21 @@ public struct DrawingEditor: View {
         }
         if dash || heads {
             HStack(spacing: 8) {
-                if dash { ToolCluster { dashTiles } }
+                if dash { ToolCluster { weightTiles }; ToolCluster { dashTiles } }
                 if heads { ToolCluster { headsTiles } }
             }
+        }
+    }
+
+    /// How heavy the stroke is: thin, the template's, bold.
+    @ViewBuilder private var weightTiles: some View {
+        let current: Weight?? = state.selection.isEmpty ? .some(state.model.weight) : state.model.selectionWeight
+        ForEach(WeightChoice.all, id: \.self) { choice in
+            Button { state.model.setWeight(choice.weight) } label: {
+                Label { Text(choice.name) } icon: { StrokeGlyph(width: choice.glyphWidth) }
+            }
+            .buttonStyle(ToolTile(on: current == .some(choice.weight)))
+            .help(choice.name)
         }
     }
 
@@ -483,6 +495,50 @@ extension Hue {
         case .pink: "Pink"
         case .grey: "Grey"
         }
+    }
+}
+
+/// The choices for how heavy a stroke is, as the options strip offers
+/// them: the values of `data-weight`, and the template's width between.
+enum WeightChoice: Hashable {
+    case thin, regular, bold
+
+    static let all: [WeightChoice] = [.thin, .regular, .bold]
+
+    var weight: Weight? {
+        switch self {
+        case .thin: .thin
+        case .regular: nil
+        case .bold: .bold
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .thin: "Thin"
+        case .regular: "Regular"
+        case .bold: "Bold"
+        }
+    }
+
+    /// The line the tile shows, in points.
+    var glyphWidth: CGFloat {
+        switch self {
+        case .thin: 1
+        case .regular: 2
+        case .bold: 4
+        }
+    }
+}
+
+/// A short horizontal line of a given width: the weight tile's glyph,
+/// drawn in the tile's foreground so it lights with it.
+struct StrokeGlyph: View {
+    let width: CGFloat
+
+    var body: some View {
+        Capsule()
+            .frame(width: ToolTile.glyph + 2, height: width)
     }
 }
 

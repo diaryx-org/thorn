@@ -246,6 +246,25 @@ public final class DrawingDocument {
         try changed { try inner.setDashAll(ids: ids, dash: dash) }
     }
 
+    /// Whether a weight means anything on a shape: as `takesDash`.
+    public func takesWeight(id: String) -> Bool { inner.takesWeight(id: id) }
+
+    /// How heavy a shape's stroke is — a group's, what its members agree
+    /// on; `nil` for the template's width.
+    public func weight(id: String) -> Weight? { inner.weight(id: id) }
+
+    /// Say how heavy a stroked shape's stroke is, or with `nil` the
+    /// template's width. One undo step.
+    public func setWeight(id: String, _ weight: Weight?) throws {
+        try changed { try inner.setWeight(id: id, weight: weight) }
+    }
+
+    /// `setWeight` over a selection as one undo step; what is not stroked
+    /// is left as it is.
+    public func setWeight(ids: [String], _ weight: Weight?) throws {
+        try changed { try inner.setWeightAll(ids: ids, weight: weight) }
+    }
+
     /// Say which ends of a connector have a head, or with `nil` none — a
     /// plain line. One undo step.
     public func setHeads(id: String, _ heads: Heads?) throws {

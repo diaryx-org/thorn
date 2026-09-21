@@ -196,6 +196,12 @@ pub(crate) const DASH_RULES: &[&str] = &[
     "[data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }",
 ];
 
+/// The rules the template draws a `data-weight` by.
+pub(crate) const WEIGHT_RULES: &[&str] = &[
+    "[data-weight=\"thin\"] { stroke-width: 1 }",
+    "[data-weight=\"bold\"] { stroke-width: 4 }",
+];
+
 /// The rules the template draws a `data-color` and a `data-fill` by, one
 /// block per hue — the `color` the word sets, on the shape and on the
 /// arrowhead marker that hue has; the tint a fill is; and which marker a

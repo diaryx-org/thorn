@@ -13,7 +13,7 @@ use crate::connector::Connector;
 use crate::drawing::Drawing;
 use crate::ink::{self, Nib};
 use crate::number;
-use crate::shape::{Dash, Heads, Hue, ShapeKind};
+use crate::shape::{Dash, Heads, Hue, ShapeKind, Weight};
 
 /// The profile's version, written as the root's `data-diaryx-drawing` value.
 pub const VERSION: &str = "1";
@@ -74,6 +74,8 @@ pub enum Rule {
     /// `data-dash` is `dashed` or `dotted`, on a stroked shape: the values
     /// the template's `<style>` breaks a stroke for.
     Dash,
+    /// `data-weight` is `thin` or `bold`, on a stroked shape.
+    Weight,
     /// `data-color` is a hue of the palette, on a shape the template draws
     /// in `currentColor` — anything but a group or an image.
     Color,
@@ -105,6 +107,7 @@ impl Rule {
                 "data-arrow, data-from and data-to are on a <line> or a <path> of one segment"
             }
             Self::Dash => "data-dash is dashed or dotted, on a stroked shape",
+            Self::Weight => "data-weight is thin or bold, on a stroked shape",
             Self::Color => {
                 "data-color is a hue of the palette, on a shape that is not a group or an image"
             }
@@ -221,21 +224,36 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                 ),
             });
         }
-        if let Some(value) = shape.attr("data-dash") {
-            let wrong = if Dash::from_value(value).is_none() {
-                Some(format!(
-                    "<{tag}> data-dash={value:?} is not dashed or dotted"
-                ))
+        for (name, rule, admitted, values) in [
+            (
+                "data-dash",
+                Rule::Dash,
+                shape.attr("data-dash").and_then(Dash::from_value).is_some(),
+                "dashed or dotted",
+            ),
+            (
+                "data-weight",
+                Rule::Weight,
+                shape
+                    .attr("data-weight")
+                    .and_then(Weight::from_value)
+                    .is_some(),
+                "thin or bold",
+            ),
+        ] {
+            let Some(value) = shape.attr(name) else {
+                continue;
+            };
+            let wrong = if !admitted {
+                Some(format!("<{tag}> {name}={value:?} is not {values}"))
             } else if !shape.is_stroked() {
-                Some(format!(
-                    "<{tag}> carries data-dash but is not a stroked shape"
-                ))
+                Some(format!("<{tag}> carries {name} but is not a stroked shape"))
             } else {
                 None
             };
             if let Some(message) = wrong {
                 findings.push(Finding {
-                    rule: Rule::Dash,
+                    rule,
                     shape: shape.id.clone(),
                     message,
                 });

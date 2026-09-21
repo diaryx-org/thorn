@@ -146,6 +146,31 @@ impl From<Dash> for core::Dash {
     }
 }
 
+/// Mirrors `thorn_svg_core::Weight`: how heavy a stroke is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum Weight {
+    Thin,
+    Bold,
+}
+
+impl From<core::Weight> for Weight {
+    fn from(w: core::Weight) -> Self {
+        match w {
+            core::Weight::Thin => Self::Thin,
+            core::Weight::Bold => Self::Bold,
+        }
+    }
+}
+
+impl From<Weight> for core::Weight {
+    fn from(w: Weight) -> Self {
+        match w {
+            Weight::Thin => Self::Thin,
+            Weight::Bold => Self::Bold,
+        }
+    }
+}
+
 /// Mirrors `thorn_svg_core::Hue`: a colour of the palette, by name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, uniffi::Enum)]
 pub enum Hue {
@@ -215,6 +240,7 @@ pub struct Pen {
     pub dash: Option<Dash>,
     pub hue: Option<Hue>,
     pub fill: Option<Hue>,
+    pub weight: Option<Weight>,
 }
 
 impl From<core::Pen> for Pen {
@@ -223,6 +249,7 @@ impl From<core::Pen> for Pen {
             dash: p.dash.map(Into::into),
             hue: p.hue.map(Into::into),
             fill: p.fill.map(Into::into),
+            weight: p.weight.map(Into::into),
         }
     }
 }
@@ -233,6 +260,7 @@ impl From<Pen> for core::Pen {
             dash: p.dash.map(Into::into),
             hue: p.hue.map(Into::into),
             fill: p.fill.map(Into::into),
+            weight: p.weight.map(Into::into),
         }
     }
 }
@@ -885,6 +913,35 @@ impl Drawing {
     pub fn set_fill_all(&self, ids: Vec<String>, hue: Option<Hue>) -> Result<(), DrawingError> {
         let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
         Ok(self.lock().set_fill_all(&ids, hue.map(Into::into))?)
+    }
+
+    /// Whether a weight means anything on a shape: as `takes_dash`.
+    pub fn takes_weight(&self, id: String) -> bool {
+        self.lock().takes_weight(&id)
+    }
+
+    /// How heavy a shape's stroke is — a group's, what its stroked members
+    /// agree on — or `None` for the template's width.
+    pub fn weight(&self, id: String) -> Option<Weight> {
+        self.lock().weight(&id).map(Weight::from)
+    }
+
+    /// Say how heavy a stroked shape's stroke is, or with `None` the
+    /// template's width. One undo step; `Unsupported` for what is not
+    /// stroked.
+    pub fn set_weight(&self, id: String, weight: Option<Weight>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_weight(&id, weight.map(Into::into))?)
+    }
+
+    /// `set_weight` over a selection as one undo step, what is not stroked
+    /// left as it is.
+    pub fn set_weight_all(
+        &self,
+        ids: Vec<String>,
+        weight: Option<Weight>,
+    ) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_weight_all(&ids, weight.map(Into::into))?)
     }
 
     /// The rules the drawing keeps for a darker page — the body of its

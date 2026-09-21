@@ -647,6 +647,17 @@ final class CanvasModelTests: XCTestCase {
         model.select([label])
         XCTAssertNil(model.selectionDash)
         XCTAssertTrue(model.selectedStroked.isEmpty)
+
+        // A weight goes the same way: the pen's, then the selection's.
+        model.select([])
+        model.setWeight(.bold)
+        XCTAssertEqual(model.weight, .bold)
+        model.select([id])
+        XCTAssertEqual(model.selectionWeight, .some(nil))
+        model.setWeight(.thin)
+        XCTAssertEqual(doc.weight(id: id), .thin)
+        XCTAssertEqual(model.weight, .bold, "the pen is untouched")
+        XCTAssertTrue(doc.source.contains("data-weight=\"thin\""))
     }
 
     func testAColourIsTheNextShapesOrTheSelectionsAndFollowsTheAppearance() throws {

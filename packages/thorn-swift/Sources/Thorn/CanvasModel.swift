@@ -106,6 +106,16 @@ public final class CanvasModel {
             onOptionsChange?()
         }
     }
+    /// How heavy the next stroked shape's stroke is; `nil` is the
+    /// template's width.
+    public var weight: Weight? {
+        get { document.pen.weight }
+        set {
+            guard newValue != document.pen.weight else { return }
+            document.pen.weight = newValue
+            onOptionsChange?()
+        }
+    }
     /// Called when what an options strip shows may have changed: the
     /// pen, or the document after any edit — an undo can take a head off
     /// the selected arrow.
@@ -936,6 +946,24 @@ public final class CanvasModel {
             self.fill = hue
         } else {
             try? document.setFill(ids: shapes, hue)
+        }
+    }
+
+    /// The weight the selected stroked shapes agree on: `.some(nil)` when
+    /// every one is the template's, `nil` when none is stroked or they
+    /// differ.
+    public var selectionWeight: Weight?? {
+        agreed(selectedStroked.map { document.weight(id: $0) })
+    }
+
+    /// A weight: the selected stroked shapes, as one undo step, when there
+    /// are any; otherwise the next drawn.
+    public func setWeight(_ weight: Weight?) {
+        let stroked = selectedStroked
+        if stroked.isEmpty {
+            self.weight = weight
+        } else {
+            try? document.setWeight(ids: stroked, weight)
         }
     }
 

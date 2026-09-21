@@ -162,6 +162,34 @@ impl Dash {
     }
 }
 
+/// How heavy a stroke is: the values `data-weight` takes. The template's
+/// width is the word's absence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Weight {
+    Thin,
+    Bold,
+}
+
+impl Weight {
+    /// The value `data-weight` spells this as.
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Thin => "thin",
+            Self::Bold => "bold",
+        }
+    }
+
+    /// The weight a `data-weight` value names, or `None` for a value the
+    /// profile does not admit.
+    pub fn from_value(value: &str) -> Option<Self> {
+        Some(match value.trim() {
+            "thin" => Self::Thin,
+            "bold" => Self::Bold,
+            _ => return None,
+        })
+    }
+}
+
 /// A colour of the palette: the values `data-color` and `data-fill` take.
 /// A name, not a hex, so the drawing's `<style>` can say what red is on a
 /// light page and on a dark one (docs/proposals/shape-style.md).
@@ -283,6 +311,12 @@ impl Shape {
     /// which is coloured through its members, and an image.
     pub fn takes_color(&self) -> bool {
         !matches!(self.kind, ShapeKind::Group | ShapeKind::Image)
+    }
+
+    /// How heavy the stroke is, from `data-weight`; `None` for the
+    /// template's width, or a value the profile does not admit.
+    pub fn weight(&self) -> Option<Weight> {
+        self.attr("data-weight").and_then(Weight::from_value)
     }
 
     /// The hue of `data-color`; `None` for the drawing's ink, or a value

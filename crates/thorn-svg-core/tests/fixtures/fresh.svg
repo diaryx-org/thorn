@@ -39,6 +39,8 @@
     text { font: 16px sans-serif; fill: currentColor }
     [data-dash="dashed"] { stroke-dasharray: 8 6 }
     [data-dash="dotted"] { stroke-dasharray: 1 5; stroke-linecap: round }
+    [data-weight="thin"] { stroke-width: 1 }
+    [data-weight="bold"] { stroke-width: 4 }
     [data-color="red"], #arrow-red { color: #c62828 }
     [data-fill="red"] { fill: #ffcdd2 }
     [data-arrow="end"][data-color="red"], [data-arrow="both"][data-color="red"] { marker-end: url(#arrow-red) }

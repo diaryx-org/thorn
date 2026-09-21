@@ -45,7 +45,7 @@ use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
-use crate::shape::{self, Dash, Heads, Hue, Shape, ShapeKind};
+use crate::shape::{self, Dash, Heads, Hue, Shape, ShapeKind, Weight};
 use crate::style;
 use crate::transform::Transform;
 
@@ -166,6 +166,8 @@ pub struct Pen {
     pub hue: Option<Hue>,
     /// `data-fill` on a closed shape.
     pub fill: Option<Hue>,
+    /// `data-weight` on a stroked shape.
+    pub weight: Option<Weight>,
 }
 
 impl Pen {
@@ -190,6 +192,9 @@ impl Pen {
         if closed && let Some(fill) = self.fill {
             out.push(("data-fill", fill.value().to_string()));
         }
+        if stroked && let Some(weight) = self.weight {
+            out.push(("data-weight", weight.value().to_string()));
+        }
         out
     }
 
@@ -209,6 +214,7 @@ enum Word {
     Dash,
     Color,
     Fill,
+    Weight,
 }
 
 impl Word {
@@ -217,6 +223,7 @@ impl Word {
             Self::Dash => "data-dash",
             Self::Color => "data-color",
             Self::Fill => "data-fill",
+            Self::Weight => "data-weight",
         }
     }
 
@@ -225,12 +232,13 @@ impl Word {
             Self::Dash => "set_dash",
             Self::Color => "set_color",
             Self::Fill => "set_fill",
+            Self::Weight => "set_weight",
         }
     }
 
     fn applies(self, shape: &Shape) -> bool {
         match self {
-            Self::Dash => shape.is_stroked(),
+            Self::Dash | Self::Weight => shape.is_stroked(),
             Self::Color => shape.takes_color(),
             Self::Fill => shape.is_closed(),
         }
@@ -631,6 +639,7 @@ impl Drawing {
         for (name, _) in words {
             match *name {
                 "data-dash" => self.style_word("[data-dash", style::DASH_RULES, steps)?,
+                "data-weight" => self.style_word("[data-weight", style::WEIGHT_RULES, steps)?,
                 "data-color" | "data-fill" => {
                     self.style_word("[data-color", &style::color_rules(), steps)?;
                     self.defs_markers(steps)?;
@@ -1624,6 +1633,35 @@ impl Drawing {
     /// agree on. `None` for none, and for members that differ.
     pub fn fill(&self, id: &str) -> Option<Hue> {
         self.agreed(id, Word::Fill).and_then(Hue::from_value)
+    }
+
+    /// Say how heavy a stroked shape's stroke is — `data-weight`, `thin`
+    /// or `bold` against the template's width — or, with `None`, the
+    /// template's. On a group it is the stroked members'. The stylesheet
+    /// gains the template's rules when it has none. One undo step;
+    /// `Unsupported` for what is not stroked.
+    pub fn set_weight(&mut self, id: &str, weight: Option<Weight>) -> Result<(), Error> {
+        let mut steps = 0;
+        self.set_word_one(id, Word::Weight, weight.map(Weight::value), &mut steps)
+    }
+
+    /// `set_weight` over a selection, as one undo step, what is not
+    /// stroked left as it is.
+    pub fn set_weight_all(&mut self, ids: &[&str], weight: Option<Weight>) -> Result<(), Error> {
+        self.set_word_all(ids, Word::Weight, weight.map(Weight::value))
+    }
+
+    /// How heavy a shape's stroke is — a group's, what its stroked
+    /// members agree on. `None` for the template's width, and for
+    /// members that differ.
+    pub fn weight(&self, id: &str) -> Option<Weight> {
+        self.agreed(id, Word::Weight).and_then(Weight::from_value)
+    }
+
+    /// Whether `set_weight` on this shape would land anywhere: as
+    /// `takes_dash`.
+    pub fn takes_weight(&self, id: &str) -> bool {
+        self.takes(id, Word::Weight)
     }
 
     /// The rules the drawing keeps for a darker page — the body of its
@@ -3464,10 +3502,10 @@ mod tests {
     #[test]
     fn a_colour_lands_on_a_shape_or_a_groups_members_and_brings_the_palette_with_it() {
         // A drawing from the template as it was before the palette — the
-        // dash rules there, nothing of colour, one marker.
+        // dash and weight rules there, nothing of colour, one marker.
         let before = crate::profile::TEMPLATE;
         let style_start = before.find("<style>").unwrap();
-        let old_style = "<style>\n    @media (prefers-color-scheme: dark) { svg { color: #e6e6e6 } }\n    rect, ellipse, polygon { fill: none; stroke: currentColor; stroke-width: 2 }\n    line, path { fill: none; stroke: currentColor; stroke-width: 2 }\n    line[data-arrow=\"end\"], line[data-arrow=\"both\"], path[data-arrow=\"end\"], path[data-arrow=\"both\"] { marker-end: url(#arrow) }\n    line[data-arrow=\"start\"], line[data-arrow=\"both\"], path[data-arrow=\"start\"], path[data-arrow=\"both\"] { marker-start: url(#arrow) }\n    marker path { fill: currentColor; stroke: none }\n    path[data-ink] { fill: currentColor; stroke: none }\n    text { font: 16px sans-serif; fill: currentColor }\n    [data-dash=\"dashed\"] { stroke-dasharray: 8 6 }\n    [data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }\n  </style>\n</svg>\n";
+        let old_style = "<style>\n    @media (prefers-color-scheme: dark) { svg { color: #e6e6e6 } }\n    rect, ellipse, polygon { fill: none; stroke: currentColor; stroke-width: 2 }\n    line, path { fill: none; stroke: currentColor; stroke-width: 2 }\n    line[data-arrow=\"end\"], line[data-arrow=\"both\"], path[data-arrow=\"end\"], path[data-arrow=\"both\"] { marker-end: url(#arrow) }\n    line[data-arrow=\"start\"], line[data-arrow=\"both\"], path[data-arrow=\"start\"], path[data-arrow=\"both\"] { marker-start: url(#arrow) }\n    marker path { fill: currentColor; stroke: none }\n    path[data-ink] { fill: currentColor; stroke: none }\n    text { font: 16px sans-serif; fill: currentColor }\n    [data-dash=\"dashed\"] { stroke-dasharray: 8 6 }\n    [data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }\n    [data-weight=\"thin\"] { stroke-width: 1 }\n    [data-weight=\"bold\"] { stroke-width: 4 }\n  </style>\n</svg>\n";
         let defs_end = before.find("  </defs>").unwrap();
         let first_marker_end = before.find("</marker>").unwrap() + "</marker>\n".len();
         let old = format!(
@@ -3558,6 +3596,56 @@ mod tests {
     }
 
     #[test]
+    fn a_weight_is_a_word_on_a_stroke_with_the_templates_rules_behind_it() {
+        let mut d = Drawing::fresh();
+        let r = d
+            .add_rect(Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            })
+            .unwrap();
+        let t = d.add_text(0.0, 50.0, "hi").unwrap();
+        let g = d.group(&[&r, &t]).unwrap();
+        d.set_weight(&g, Some(Weight::Bold)).unwrap();
+        assert_eq!(d.shape(&r).unwrap().weight(), Some(Weight::Bold));
+        assert_eq!(d.shape(&t).unwrap().attr("data-weight"), None);
+        assert_eq!(d.weight(&g), Some(Weight::Bold));
+        assert!(d.takes_weight(&g) && !d.takes_weight(&t));
+        assert_eq!(d.check(), []);
+        assert_eq!(
+            d.source().matches("[data-weight=\"bold\"]").count(),
+            1,
+            "the template has the rule; nothing is added"
+        );
+        d.set_weight(&r, None).unwrap();
+        assert_eq!(d.weight(&g), None);
+        assert!(matches!(
+            d.set_weight(&t, Some(Weight::Thin)),
+            Err(Error::Unsupported {
+                gesture: "set_weight",
+                ..
+            })
+        ));
+        // A stylesheet without the rule gains it.
+        let mut old = Drawing::open(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 9 9\" data-diaryx-drawing=\"1\">\n  <style>\n    rect { fill: none }\n  </style>\n  <rect x=\"1\" y=\"1\" width=\"2\" height=\"2\" data-id=\"s1\"/>\n</svg>\n",
+        )
+        .unwrap();
+        old.set_weight("s1", Some(Weight::Thin)).unwrap();
+        assert!(
+            old.source().contains(
+                "    rect { fill: none }\n    [data-weight=\"thin\"] { stroke-width: 1 }\n    [data-weight=\"bold\"] { stroke-width: 4 }\n  </style>"
+            ),
+            "{}",
+            old.source()
+        );
+        old.undo().unwrap();
+        assert!(!old.source().contains("data-weight"), "one step");
+    }
+
+    #[test]
     fn the_pen_writes_its_words_into_a_shape_as_it_is_added() {
         let mut d = Drawing::fresh();
         assert_eq!(d.pen(), Pen::default());
@@ -3565,6 +3653,7 @@ mod tests {
             dash: Some(Dash::Dotted),
             hue: Some(Hue::Blue),
             fill: Some(Hue::Yellow),
+            weight: Some(Weight::Bold),
         });
         let r = d
             .add_rect(Rect {
@@ -3592,7 +3681,9 @@ mod tests {
             .unwrap();
         for id in [&r, &l] {
             assert_eq!(d.shape(id).unwrap().dash(), Some(Dash::Dotted), "{id}");
+            assert_eq!(d.shape(id).unwrap().weight(), Some(Weight::Bold), "{id}");
         }
+        assert_eq!(d.shape(&t).unwrap().attr("data-weight"), None);
         for id in [&t, &i, &n] {
             assert_eq!(d.shape(id).unwrap().attr("data-dash"), None, "{id}");
         }

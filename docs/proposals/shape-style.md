@@ -31,6 +31,7 @@ land.
   `line[data-arrow="end"]`. The editor in dark mode applies the file's own
   `@media` rules, hoisted (`Drawing::dark_rules`), rather than a light ink
   of its own, so a hue's dark variant is the stylesheet's to say.
+- `data-weight`: the commit that closes this line, as the table says.
 
 ## The question
 
