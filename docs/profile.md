@@ -27,9 +27,21 @@ same list as code.
 1. **Marker.** `<svg>` carries `data-diaryx-drawing="1"` — the profile
    version. A file without it is still SVG; it is just not claiming to be a
    Diaryx drawing, and the editor's gestures still work on it.
-2. **Page-shaped.** `<svg>` carries `viewBox`. The embed and the site want a
-   size without laying the drawing out, and a page that grows changes its
-   `viewBox` rather than having none.
+2. **Page-shaped, and the page follows the shapes.** `<svg>` carries
+   `viewBox`. The embed and the site want a size without laying the drawing
+   out, and a page that grows changes its `viewBox` rather than having none.
+   There is no page size to set: the editor fits the `viewBox` around the
+   box of every shape, sixteen user units out (`PAGE_MARGIN`), at the end of
+   every gesture that changes what is on the page — an add, a delete, a
+   move, a resize, a re-wording — in that gesture's undo step and only when
+   it would change a byte. `width` and `height` follow it when each is a
+   plain number (unitless or `px`), so a viewer still shows one user unit
+   per pixel; a `%` or a `mm` is left alone. A page with nothing on it keeps
+   its size, since there is nothing to fit to, and opening a file writes
+   nothing — a hand-written page that does not fit its shapes is fitted by
+   the first gesture, and `<svg>` with no `viewBox` at all is given one then.
+   An editor's canvas is not the page: it draws the page as a sheet on a
+   desk and lets a shape be dragged off the edge, and the sheet follows.
 3. **Every shape has an id.** Every shape element carries `data-id`, a
    non-empty string. This is how the editor, an arrow's binding and a remark
    address a shape across edits; the element's position in the tree is not

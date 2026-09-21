@@ -320,6 +320,68 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(model.selection, [])
     }
 
+    func testThePageFollowsAShapeDraggedOffItAndNothingOnScreenMoves() throws {
+        // A square page in a wide view: fitted at 2 points per unit, it
+        // spans view x 100…300, with desk either side.
+        let doc = try DrawingDocument(source: """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" data-diaryx-drawing="1">
+              <rect x="10" y="10" width="40" height="20" fill="#ff0000" data-id="s1"/>
+              <circle cx="70" cy="50" r="15" fill="#0000ff" data-id="s2"/>
+            </svg>
+
+            """)
+        let model = CanvasModel(document: doc)
+        let view = CGRect(x: 0, y: 0, width: 400, height: 200)
+        var context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(model.fitted, CGRect(x: 0, y: 0, width: 100, height: 100))
+        XCTAssertEqual(model.userPoint(CGPoint(x: 240, y: 100)), CGPoint(x: 70, y: 50))
+        let desk = pixel(context, 10, 10)
+        XCTAssertNotEqual([desk.0, desk.1, desk.2], [255, 255, 255], "the desk is not the sheet")
+        var (r, g, b) = pixel(context, 110, 10)
+        XCTAssertEqual([r, g, b], [255, 255, 255], "the sheet")
+        (r, g, b) = pixel(context, 240, 100)
+        XCTAssertEqual([r, g, b], [0, 0, 255])
+
+        // The circle dragged 30 units right, half of it past the page's
+        // edge: the page grows to hold it, the mapping stays where it
+        // was, the rect stays where it was, and the circle is painted
+        // where it went rather than cut at the old edge.
+        model.beginPointer(at: CGPoint(x: 240, y: 100))
+        XCTAssertEqual(model.selection, ["s2"])
+        model.pointerDragged(to: CGPoint(x: 300, y: 100))
+        model.pointerUp()
+        XCTAssertEqual(doc.bounds(id: "s2"), CGRect(x: 85, y: 35, width: 30, height: 30))
+        XCTAssertEqual(doc.page, CGRect(x: -6, y: -6, width: 137, height: 87), "the shapes' box, 16 out")
+        XCTAssertTrue(doc.source.contains("viewBox=\"-6 -6 137 87\" width=\"137\" height=\"87\""))
+        XCTAssertEqual(model.fitted, CGRect(x: 0, y: 0, width: 100, height: 100), "pinned until a zoom to fit")
+        context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(CGPoint(x: 240, y: 100)), CGPoint(x: 70, y: 50), "nothing on screen moved")
+        (r, g, b) = pixel(context, 140, 40)
+        XCTAssertEqual([r, g, b], [255, 0, 0], "the rect, where it was")
+        (r, g, b) = pixel(context, 320, 100)
+        XCTAssertEqual([r, g, b], [0, 0, 255], "the circle, past the old edge")
+        (r, g, b) = pixel(context, 95, 100)
+        XCTAssertEqual([r, g, b], [255, 255, 255], "the sheet reaches the new page's edge")
+        (r, g, b) = pixel(context, 10, 10)
+        XCTAssertEqual([r, g, b], [desk.0, desk.1, desk.2])
+        XCTAssertTrue(try doc.undo(), "the move and the page are one step")
+        XCTAssertEqual(doc.page, CGRect(x: 0, y: 0, width: 100, height: 100))
+        XCTAssertTrue(try doc.redo())
+
+        // Cmd-0 fits the page as it stands now.
+        model.zoomToFit()
+        XCTAssertEqual(model.fitted, CGRect(x: -6, y: -6, width: 137, height: 87))
+        context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        let scale = min(400 / 137.0, 200 / 87.0)
+        XCTAssertEqual(model.viewPoint(CGPoint(x: -6, y: -6)).y, (200 - 87 * scale) / 2, accuracy: 1e-9)
+        let centre = model.viewPoint(CGPoint(x: 100, y: 50))
+        (r, g, b) = pixel(context, Int(centre.x), Int(centre.y))
+        XCTAssertEqual([r, g, b], [0, 0, 255])
+    }
+
     func testAPinchZoomsAboutItsPointAndTouchesNothing() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

@@ -69,6 +69,20 @@ public final class DrawingDocument {
         inner.bounds(id: id).map(CGRect.init)
     }
 
+    /// The page: the root's `viewBox`, in user units. It follows the
+    /// shapes — every gesture that changes what is on the page fits it
+    /// around them all, `pageMargin` out, in that gesture's undo step —
+    /// so there is no page size to set; an empty drawing keeps the page
+    /// it has. `nil` when the root has no `viewBox` it can read.
+    public var page: CGRect? { inner.page().map(CGRect.init) }
+
+    /// The box around every shape, in user units — what the page is
+    /// fitted to. `nil` for an empty drawing.
+    public var extent: CGRect? { inner.extent().map(CGRect.init) }
+
+    /// The margin the page keeps around the shapes, in user units.
+    public static var pageMargin: CGFloat { CGFloat(ThornFFI.pageMargin()) }
+
     /// The topmost shape within `tolerance` user units of a point. A member
     /// of a group is returned itself; `outermost(id:)` is what to select.
     public func hit(_ point: CGPoint, tolerance: CGFloat) -> Shape? {

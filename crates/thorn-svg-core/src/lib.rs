@@ -35,7 +35,7 @@ pub mod shape;
 pub mod transform;
 
 pub use connector::{Connector, End};
-pub use drawing::{Drawing, Error, NOTE_PAD, Note, Order, Rect};
+pub use drawing::{Drawing, Error, NOTE_PAD, Note, Order, PAGE_MARGIN, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
 pub use ink::Nib;

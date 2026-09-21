@@ -304,6 +304,13 @@ pub fn template() -> String {
     core::profile::TEMPLATE.to_string()
 }
 
+/// The margin the page keeps around the shapes, in user units:
+/// `thorn_svg_core::PAGE_MARGIN`.
+#[uniffi::export]
+pub fn page_margin() -> f64 {
+    core::PAGE_MARGIN
+}
+
 /// Whether `source` is a drawing of the profile — an `<svg>` whose root
 /// carries `data-diaryx-drawing`. A host's sniff for which surface opens an
 /// `.svg`; not a conformance check, which is [`Drawing::check`].
@@ -596,6 +603,21 @@ impl Drawing {
     /// shape missing what its kind needs.
     pub fn bounds(&self, id: String) -> Option<Bounds> {
         self.lock().bounds(&id).map(Into::into)
+    }
+
+    /// The page: the root's `viewBox` as a box in user units. Every
+    /// gesture that changes what is on the page fits it around every
+    /// shape, [`page_margin`] out, in that gesture's undo step; an empty
+    /// drawing keeps the page it has. `None` when there is no `viewBox`,
+    /// or it is not four numbers.
+    pub fn page(&self) -> Option<Bounds> {
+        self.lock().page().map(Into::into)
+    }
+
+    /// The box around every shape, in the root's user units — what the
+    /// page is fitted to. `None` for an empty drawing.
+    pub fn extent(&self) -> Option<Bounds> {
+        self.lock().extent().map(Into::into)
     }
 
     /// The topmost shape within `tolerance` of the point, in paint order. A

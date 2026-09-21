@@ -21,6 +21,16 @@
 //! that shape's edge: every gesture that moves a shape ends by settling the
 //! arrows bound to it, in the same undo step, and deleting a shape takes
 //! the bindings to it off.
+//!
+//! The page follows the shapes. Every gesture that changes what is on the
+//! page ends by fitting the root's `viewBox` — and its `width` and `height`,
+//! when they are plain numbers — around every shape, [`PAGE_MARGIN`] out
+//! from their box, in the same undo step and only when it would change.
+//! There is no page to set: a drawing is as big as what is drawn on it, as
+//! in Excalidraw, and its `viewBox` is what a viewer with no editor shows.
+//! An empty drawing keeps the page it has, since there is nothing to fit,
+//! and opening a file writes nothing — a page that does not fit its shapes
+//! is fitted by the first gesture.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -130,6 +140,11 @@ pub enum Order {
 /// The space between a note's box and its label, in user units.
 pub const NOTE_PAD: f64 = 8.0;
 
+/// The margin the page keeps around the shapes, in user units: what a
+/// gesture's fit of the `viewBox` leaves between the shapes' box and the
+/// page's edge. Enough for a stroke's width, an arrowhead, and air.
+pub const PAGE_MARGIN: f64 = 16.0;
+
 /// A note's members: the `<rect>` that is its box and the `<text>` that
 /// is its label, by `data-id`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -212,6 +227,44 @@ impl Drawing {
     /// The `<svg>` element's attributes, in source order.
     pub fn root_attrs(&self) -> &[(String, Option<String>)] {
         &self.node(self.root).attrs
+    }
+
+    /// The page: the root's `viewBox` as a box in user units. `None` when
+    /// there is none, or it is not four numbers.
+    pub fn page(&self) -> Option<Bounds> {
+        let value = self.root_attr("viewBox")?;
+        let nums: Vec<f64> = value
+            .split(|c: char| c.is_whitespace() || c == ',')
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse::<f64>())
+            .collect::<Result<_, _>>()
+            .ok()?;
+        match nums[..] {
+            [x, y, width, height] => Some(Bounds {
+                x,
+                y,
+                width,
+                height,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The box around every shape, in the root's user units: what the page
+    /// is fitted to. `None` when no shape has a box — an empty drawing.
+    pub fn extent(&self) -> Option<Bounds> {
+        self.shapes
+            .iter()
+            .filter(|s| s.group.is_none())
+            .filter_map(|s| self.bounds_of(s))
+            .reduce(|a, b| a.union(&b))
+    }
+
+    fn root_attr(&self, name: &str) -> Option<&str> {
+        self.root_attrs()
+            .iter()
+            .find(|(k, _)| k == name)
+            .and_then(|(_, v)| v.as_deref())
     }
 
     /// Hold the drawing to the profile. Empty means it conforms.
@@ -383,10 +436,11 @@ impl Drawing {
         self.append_to_root(&markup)?;
         // The words are flowed into the width now the label exists to be
         // measured; folded into the insert.
+        let mut steps = 1;
         if !text.trim().is_empty() {
-            let mut steps = 1;
             self.rewrap(&label, Some(inner), &mut steps)?;
         }
+        self.follow_page(&mut steps)?;
         Ok(group)
     }
 
@@ -434,7 +488,8 @@ impl Drawing {
             &note.label,
             Some((width - 2.0 * NOTE_PAD).max(1.0)),
             &mut steps,
-        )
+        )?;
+        self.follow_page(&mut steps)
     }
 
     /// Write one element — `attrs`, then the minted `data-id`, then
@@ -458,6 +513,7 @@ impl Drawing {
         }
         .expect("writing to a String");
         self.append_to_root(&markup)?;
+        self.follow_page(&mut 1)?;
         Ok(id)
     }
 
@@ -485,7 +541,8 @@ impl Drawing {
             self.reload()?;
             self.fold(&mut steps)?;
         }
-        self.unbind_dangling(&mut steps)
+        self.unbind_dangling(&mut steps)?;
+        self.follow_page(&mut steps)
     }
 
     /// A shape's extent in the root's user units — its attributes' box
@@ -864,6 +921,7 @@ impl Drawing {
             if (to.width - from.width).abs() > 1e-9 {
                 let mut steps = 1;
                 self.rewrap(id, Some(to.width), &mut steps)?;
+                self.follow_page(&mut steps)?;
             }
             return Ok(());
         }
@@ -909,7 +967,8 @@ impl Drawing {
     pub fn set_text(&mut self, id: &str, text: &str) -> Result<(), Error> {
         let shape = self.label(id, "set text")?;
         let markup = self.flowed(shape, text);
-        self.write_interior(shape.node, &markup)
+        self.write_interior(shape.node, &markup)?;
+        self.follow_page(&mut 1)
     }
 
     /// Wrap a label to `width` user units — `data-width` written and its
@@ -918,7 +977,8 @@ impl Drawing {
     pub fn set_width(&mut self, id: &str, width: Option<f64>) -> Result<(), Error> {
         self.label(id, "set width")?;
         let mut steps = 0;
-        self.rewrap(id, width, &mut steps)
+        self.rewrap(id, width, &mut steps)?;
+        self.follow_page(&mut steps)
     }
 
     fn rewrap(&mut self, id: &str, width: Option<f64>, steps: &mut usize) -> Result<(), Error> {
@@ -1311,8 +1371,8 @@ impl Drawing {
 
     /// Put every arrow that `affected` reaches — one of them, or bound to
     /// one of them or to a shape inside one of them — back on its targets'
-    /// edges, folded into the gesture's step. Only an end that would move
-    /// is written.
+    /// edges, and then the page around it all, folded into the gesture's
+    /// step. Only an end that would move is written.
     fn settle(&mut self, affected: &[&str], steps: &mut usize) -> Result<(), Error> {
         let mut reached: HashSet<String> = HashSet::new();
         for id in affected {
@@ -1342,7 +1402,7 @@ impl Drawing {
                 self.fold(steps)?;
             }
         }
-        Ok(())
+        self.follow_page(steps)
     }
 
     /// `id` and every shape inside it.
@@ -1649,6 +1709,62 @@ impl Drawing {
         self.reload()
     }
 
+    /// Fit the page around the shapes, [`PAGE_MARGIN`] out from their box,
+    /// folded into the gesture's step: the `viewBox` rewritten (or written,
+    /// when the root had none), and `width` and `height` with it when each
+    /// is a plain number, in `px` or unitless, so a viewer still shows one
+    /// user unit per pixel. Nothing is written when the page already fits,
+    /// when there is no shape to fit to, or when the gesture wrote nothing
+    /// — a no-op gesture is not the moment to fit a page a hand left loose.
+    fn follow_page(&mut self, steps: &mut usize) -> Result<(), Error> {
+        if *steps == 0 {
+            return Ok(());
+        }
+        let Some(extent) = self.extent() else {
+            return Ok(());
+        };
+        let f = number::fmt;
+        let page = Bounds {
+            x: extent.x - PAGE_MARGIN,
+            y: extent.y - PAGE_MARGIN,
+            width: extent.width + 2.0 * PAGE_MARGIN,
+            height: extent.height + 2.0 * PAGE_MARGIN,
+        };
+        let view_box = format!(
+            "{} {} {} {}",
+            f(page.x),
+            f(page.y),
+            f(page.width),
+            f(page.height)
+        );
+        let attrs = self.node(self.root).attrs.clone();
+        let mut updates: Vec<Update> = Vec::new();
+        if self.root_attr("viewBox") != Some(view_box.as_str()) {
+            updates.push(("viewBox", Some(view_box)));
+        }
+        for (name, length) in [("width", page.width), ("height", page.height)] {
+            let Some(current) = self.root_attr(name) else {
+                continue;
+            };
+            let (digits, unit) = match current.strip_suffix("px") {
+                Some(digits) => (digits, "px"),
+                None => (current, ""),
+            };
+            if digits.trim().parse::<f64>().is_err() {
+                continue;
+            }
+            let fitted = format!("{}{unit}", f(length));
+            if current != fitted {
+                updates.push((name, Some(fitted)));
+            }
+        }
+        if updates.is_empty() {
+            return Ok(());
+        }
+        self.write_attrs(self.root, &attrs, &updates)?;
+        self.fold(steps)
+    }
+
     /// Count one twig operation of a gesture; from the second on, fold it
     /// into the undo step before it, so the gesture undoes as one.
     fn fold(&mut self, steps: &mut usize) -> Result<(), Error> {
@@ -1781,7 +1897,7 @@ mod tests {
         assert_eq!((a.as_str(), b.as_str()), ("s1", "s2"));
         assert_eq!(
             d.source(),
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"10.5\" width=\"80\" height=\"40.125\" data-id=\"s1\"/>\n  <rect x=\"0\" y=\"0\" width=\"1\" height=\"1\" data-id=\"s2\"/>\n</svg>\n"
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-16 -16 122 82.625\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"10.5\" width=\"80\" height=\"40.125\" data-id=\"s1\"/>\n  <rect x=\"0\" y=\"0\" width=\"1\" height=\"1\" data-id=\"s2\"/>\n</svg>\n"
         );
         assert_eq!(d.shapes().len(), 2);
         assert_eq!(d.shape("s2").unwrap().number("width"), Some(1.0));
@@ -1802,7 +1918,7 @@ mod tests {
         d.add_text(5.0, 6.0, "a < b & \"c\"").unwrap();
         assert_eq!(
             d.source(),
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\" data-id=\"s1\"/>\n  <line x1=\"1\" y1=\"2\" x2=\"3\" y2=\"4\" data-id=\"s2\"/>\n  <text x=\"5\" y=\"6\" data-id=\"s3\">a &lt; b &amp; &quot;c&quot;</text>\n</svg>\n"
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-16 -19.6 116.2 44\" data-diaryx-drawing=\"1\">\n  <ellipse cx=\"5\" cy=\"2\" rx=\"5\" ry=\"2\" data-id=\"s1\"/>\n  <line x1=\"1\" y1=\"2\" x2=\"3\" y2=\"4\" data-id=\"s2\"/>\n  <text x=\"5\" y=\"6\" data-id=\"s3\">a &lt; b &amp; &quot;c&quot;</text>\n</svg>\n"
         );
         assert!(d.check().is_empty());
         assert_eq!(d.shapes().len(), 3);
@@ -1820,7 +1936,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 1 1\">\n  <rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" data-id=\"s1\"/>\n</svg>"
+            "<svg viewBox=\"-15 -14 35 36\">\n  <rect x=\"1\" y=\"2\" width=\"3\" height=\"4\" data-id=\"s1\"/>\n</svg>"
         );
     }
 
@@ -1855,7 +1971,7 @@ mod tests {
         d.delete("s1").unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 9 9\" data-diaryx-drawing=\"1\">\n  <!-- keep me -->\n  \n  <g data-id=\"s2\"><circle cx=\"5\" cy=\"5\" r=\"1\" data-id=\"s3\"/></g>\n</svg>\n"
+            "<svg viewBox=\"-12 -12 34 34\" data-diaryx-drawing=\"1\">\n  <!-- keep me -->\n  \n  <g data-id=\"s2\"><circle cx=\"5\" cy=\"5\" r=\"1\" data-id=\"s3\"/></g>\n</svg>\n"
         );
         assert!(d.shape("s1").is_none());
         assert!(matches!(d.delete("s1"), Err(Error::NoSuchShape(_))));
@@ -1875,15 +1991,166 @@ mod tests {
     }
 
     #[test]
+    fn the_page_follows_the_shapes() {
+        let mut d = Drawing::fresh();
+        assert_eq!(
+            d.page(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 640.0,
+                height: 400.0
+            })
+        );
+        assert_eq!(d.extent(), None, "nothing to fit to");
+        let a = d
+            .add_rect(Rect {
+                x: 100.0,
+                y: 50.0,
+                width: 80.0,
+                height: 40.0,
+            })
+            .unwrap();
+        // The margin out from the rect, and `width`/`height` with it.
+        assert!(
+            d.source()
+                .starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"84 34 112 72\" width=\"112\" height=\"72\" data-diaryx-drawing=\"1\">"),
+            "{}",
+            d.source()
+        );
+        assert!(d.check().is_empty());
+        assert!(d.undo().unwrap(), "the add and the page are one step");
+        assert_eq!(d.source(), profile::TEMPLATE);
+        assert!(d.redo().unwrap());
+
+        // A move past the edge grows the page; a move within an extent
+        // some other shape sets leaves it alone.
+        d.move_by(&a, -200.0, 0.0).unwrap();
+        assert_eq!(
+            d.page(),
+            Some(Bounds {
+                x: -116.0,
+                y: 34.0,
+                width: 112.0,
+                height: 72.0
+            })
+        );
+        let b = d
+            .add_rect(Rect {
+                x: 200.0,
+                y: 200.0,
+                width: 10.0,
+                height: 10.0,
+            })
+            .unwrap();
+        let c = d
+            .add_rect(Rect {
+                x: 0.0,
+                y: 100.0,
+                width: 10.0,
+                height: 10.0,
+            })
+            .unwrap();
+        let fitted = d.source().to_string();
+        d.move_by(&c, 5.0, 5.0).unwrap();
+        assert_eq!(
+            d.source(),
+            fitted.replace("<rect x=\"0\" y=\"100\"", "<rect x=\"5\" y=\"105\""),
+            "the page already fits, so only the rect's line changes"
+        );
+        // And it shrinks: the far corner pulled in pulls the page in.
+        d.move_by(&b, -10.0, -10.0).unwrap();
+        assert_eq!(
+            d.page(),
+            Some(Bounds {
+                x: -116.0,
+                y: 34.0,
+                width: 332.0,
+                height: 182.0
+            })
+        );
+
+        // Deleting the last shape leaves the page where it was: an empty
+        // drawing has nothing to fit to, and keeps its size.
+        d.delete_all(&[&a, &b, &c]).unwrap();
+        assert_eq!(d.extent(), None);
+        assert_eq!(
+            d.page(),
+            Some(Bounds {
+                x: -116.0,
+                y: 34.0,
+                width: 332.0,
+                height: 182.0
+            })
+        );
+        assert!(d.undo().unwrap(), "one step");
+        assert_eq!(d.shapes().len(), 3);
+    }
+
+    #[test]
+    fn the_page_is_written_where_there_was_none_and_lengths_keep_their_unit() {
+        // No viewBox: the first gesture gives the drawing one, appended.
+        let mut d = Drawing::open("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>").unwrap();
+        assert_eq!(d.page(), None);
+        d.add_line(0.0, 0.0, 10.0, 10.0).unwrap();
+        assert_eq!(
+            d.source(),
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-16 -16 42 42\">\n  <line x1=\"0\" y1=\"0\" x2=\"10\" y2=\"10\" data-id=\"s1\"/>\n</svg>"
+        );
+        // A `px` length follows in `px`; a percentage is not a page size
+        // and is left alone. Commas in a viewBox parse.
+        let mut d = Drawing::open(
+            "<svg viewBox=\"0,0,100,100\" width=\"100px\" height=\"100%\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" data-id=\"r\"/></svg>",
+        )
+        .unwrap();
+        assert_eq!(
+            d.page(),
+            Some(Bounds {
+                x: 0.0,
+                y: 0.0,
+                width: 100.0,
+                height: 100.0
+            })
+        );
+        d.move_by("r", 1.0, 0.0).unwrap();
+        assert!(
+            d.source()
+                .starts_with("<svg viewBox=\"-15 -16 42 42\" width=\"42px\" height=\"100%\">"),
+            "{}",
+            d.source()
+        );
+    }
+
+    #[test]
+    fn the_extent_is_through_transforms() {
+        let d = Drawing::open(
+            "<svg viewBox=\"0 0 1 1\"><g data-id=\"g\" transform=\"translate(100 0) scale(2)\"><rect x=\"0\" y=\"0\" width=\"10\" height=\"10\" data-id=\"r\"/></g><circle cx=\"0\" cy=\"0\" r=\"5\" data-id=\"c\"/></svg>",
+        )
+        .unwrap();
+        assert_eq!(
+            d.extent(),
+            Some(Bounds {
+                x: -5.0,
+                y: -5.0,
+                width: 125.0,
+                height: 25.0
+            })
+        );
+    }
+
+    #[test]
     fn move_rewrites_the_position_and_nothing_else() {
         let mut d = Drawing::open(SCENE).unwrap();
         d.move_by("s1", 5.0, -2.5).unwrap();
+        // The rect's line, and the page around the shapes: nothing else.
         assert_eq!(
             d.source(),
-            SCENE.replace(
-                "<rect x=\"10\" y=\"10\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>",
-                "<rect x=\"15\" y=\"7.5\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>"
-            )
+            SCENE
+                .replace(
+                    "<rect x=\"10\" y=\"10\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>",
+                    "<rect x=\"15\" y=\"7.5\" width=\"20\" height=\"10\" fill=\"red\" data-id=\"s1\"/>"
+                )
+                .replace("viewBox=\"0 0 100 100\"", "viewBox=\"-1 -8.5 72 79.5\"")
         );
         assert_eq!(
             d.bounds("s1"),
@@ -1969,7 +2236,7 @@ mod tests {
             })
         );
         d.move_by("p", 5.0, 5.0).unwrap();
-        let moved = "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M15 15 L35 15 L35 25 Z\" data-id=\"p\"/>\n</svg>\n";
+        let moved = "<svg viewBox=\"-1 -1 52 42\">\n  <path d=\"M15 15 L35 15 L35 25 Z\" data-id=\"p\"/>\n</svg>\n";
         assert_eq!(
             d.source(),
             moved,
@@ -1984,7 +2251,7 @@ mod tests {
         d.move_by("p", -5.0, -5.0).unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 100 100\">\n  <path d=\"M10 10 L30 10 L30 20 Z\" data-id=\"p\"/>\n</svg>\n",
+            "<svg viewBox=\"-6 -6 52 42\">\n  <path d=\"M10 10 L30 10 L30 20 Z\" data-id=\"p\"/>\n</svg>\n",
             "moved back: the hand's spelling is gone, the shape is not"
         );
         // Under a rotation there is nothing to bake into: the move goes
@@ -2074,7 +2341,7 @@ mod tests {
         d.ungroup("g").unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 100 100\">\n  <rect x=\"0\" y=\"0\" width=\"20\" height=\"20\" data-id=\"r\"/>\n  <circle cx=\"40\" cy=\"10\" r=\"10\" data-id=\"c\"/>\n  <text x=\"0\" y=\"40\" font-size=\"20\" data-id=\"t\">Hi</text>\n</svg>\n"
+            "<svg viewBox=\"-16 -16 82 76\">\n  <rect x=\"0\" y=\"0\" width=\"20\" height=\"20\" data-id=\"r\"/>\n  <circle cx=\"40\" cy=\"10\" r=\"10\" data-id=\"c\"/>\n  <text x=\"0\" y=\"40\" font-size=\"20\" data-id=\"t\">Hi</text>\n</svg>\n"
         );
         let after: Vec<_> = ["r", "c", "t"].iter().map(|id| d.bounds(id)).collect();
         assert_eq!(after, before, "nothing moved");
@@ -2691,7 +2958,7 @@ mod tests {
         d.set_text("t", "Hi").unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 9 9\">\n  <text x=\"1\" y=\"2\" data-id=\"t\">Hi</text>\n</svg>\n"
+            "<svg viewBox=\"-15 -23.6 46.4 44\">\n  <text x=\"1\" y=\"2\" data-id=\"t\">Hi</text>\n</svg>\n"
         );
         d.set_text("t", "").unwrap();
         assert_eq!(d.shape("t").unwrap().text, None);
@@ -2714,7 +2981,7 @@ mod tests {
         // (9), "jumps over" (10), then a word too long for any line.
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" data-id=\"t\" data-width=\"80\"><tspan x=\"10\">the quick</tspan><tspan x=\"10\" dy=\"1.2em\">brown fox</tspan><tspan x=\"10\" dy=\"1.2em\">jumps over</tspan><tspan x=\"10\" dy=\"1.2em\">extraordinarily</tspan><tspan x=\"10\" dy=\"1.2em\">lazy dogs</tspan></text>\n</svg>\n"
+            "<svg viewBox=\"-6 -5.6 112 116\" data-diaryx-drawing=\"1\">\n  <text x=\"10\" y=\"20\" data-id=\"t\" data-width=\"80\"><tspan x=\"10\">the quick</tspan><tspan x=\"10\" dy=\"1.2em\">brown fox</tspan><tspan x=\"10\" dy=\"1.2em\">jumps over</tspan><tspan x=\"10\" dy=\"1.2em\">extraordinarily</tspan><tspan x=\"10\" dy=\"1.2em\">lazy dogs</tspan></text>\n</svg>\n"
         );
         assert_eq!(
             d.shape("t").unwrap().text.as_deref(),

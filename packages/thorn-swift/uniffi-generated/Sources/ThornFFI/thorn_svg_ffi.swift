@@ -602,6 +602,12 @@ public protocol DrawingProtocol : AnyObject {
     func endPoint(id: String, end: End)  -> Point?
     
     /**
+     * The box around every shape, in the root's user units — what the
+     * page is fitted to. `None` for an empty drawing.
+     */
+    func extent()  -> Bounds?
+    
+    /**
      * The face and size a label lays out in, as resvg resolved them —
      * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
      * label's. `None` when the label lays out to nothing.
@@ -656,6 +662,15 @@ public protocol DrawingProtocol : AnyObject {
      * The outermost group a shape is in, or the shape itself.
      */
     func outermost(id: String)  -> Shape?
+    
+    /**
+     * The page: the root's `viewBox` as a box in user units. Every
+     * gesture that changes what is on the page fits it around every
+     * shape, [`page_margin`] out, in that gesture's undo step; an empty
+     * drawing keeps the page it has. `None` when there is no `viewBox`,
+     * or it is not four numbers.
+     */
+    func page()  -> Bounds?
     
     /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
@@ -1008,6 +1023,17 @@ open func endPoint(id: String, end: End) -> Point? {
 }
     
     /**
+     * The box around every shape, in the root's user units — what the
+     * page is fitted to. `None` for an empty drawing.
+     */
+open func extent() -> Bounds? {
+    return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_extent(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * The face and size a label lays out in, as resvg resolved them —
      * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
      * label's. `None` when the label lays out to nothing.
@@ -1123,6 +1149,20 @@ open func outermost(id: String) -> Shape? {
     return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
     uniffi_thorn_svg_ffi_fn_method_drawing_outermost(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * The page: the root's `viewBox` as a box in user units. Every
+     * gesture that changes what is on the page fits it around every
+     * shape, [`page_margin`] out, in that gesture's undo step; an empty
+     * drawing keeps the page it has. `None` when there is no `viewBox`,
+     * or it is not four numbers.
+     */
+open func page() -> Bounds? {
+    return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_page(self.uniffiClonePointer(),$0
     )
 })
 }
@@ -3078,6 +3118,16 @@ public func isDrawing(source: String) -> Bool {
 })
 }
 /**
+ * The margin the page keeps around the shapes, in user units:
+ * `thorn_svg_core::PAGE_MARGIN`.
+ */
+public func pageMargin() -> Double {
+    return try!  FfiConverterDouble.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_func_page_margin($0
+    )
+})
+}
+/**
  * The bytes a new drawing is created with: `thorn_svg_core::profile::TEMPLATE`.
  */
 public func template() -> String {
@@ -3112,6 +3162,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_func_is_drawing() != 27928) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_func_page_margin() != 58968) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_func_template() != 15141) {
@@ -3168,6 +3221,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 13342) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_extent() != 23471) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 674) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3196,6 +3252,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_outermost() != 20228) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_page() != 28014) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_redo() != 64887) {

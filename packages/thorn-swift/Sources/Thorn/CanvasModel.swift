@@ -11,6 +11,7 @@
 
 import CoreGraphics
 import Foundation
+import ResvgCoreGraphics
 import ThornFFI
 
 /// What the next pointer-down does. Excalidraw's toolset; `Toolset.swift`
@@ -71,9 +72,10 @@ public final class CanvasModel {
     /// How far the picture has been dragged from where it fits, in view
     /// points: the hand tool's doing, and a scroll's.
     public private(set) var pan: CGVector = .zero
-    /// How much larger than fitted the picture is drawn: `1` fits the view,
-    /// `2` is twice that. A pinch's doing, and the zoom commands'. Zoom and
-    /// pan are the view's, not the document's, so neither is an undo step.
+    /// How much larger than fitted the picture is drawn: `1` fits `fitted`
+    /// to the view, `2` is twice that. A pinch's doing, and the zoom
+    /// commands'. Zoom and pan are the view's, not the document's, so
+    /// neither is an undo step.
     public private(set) var zoom: CGFloat = 1 {
         didSet { if zoom != oldValue { onZoomChange?(zoom) } }
     }
@@ -109,9 +111,17 @@ public final class CanvasModel {
     /// The width of a stroke the draw tool makes, in user units.
     public var inkWidth: CGFloat = 3
 
-    /// User units → view points for the last `draw`: asked of the picture, so
-    /// it is the fit `SVGPicture.draw` drew under and cannot disagree with it.
+    /// User units → view points for the last `draw`: the transform the
+    /// picture was drawn under, so a hit cannot disagree with what was
+    /// drawn.
     private var fit: CGAffineTransform = .identity
+    /// The box, in user units, that `zoom == 1` fits to the view: the page
+    /// as it stood when the drawing was opened or the view last zoomed to
+    /// fit. The page itself follows the shapes (`DrawingDocument.page`),
+    /// and a page that grows under a drag must not move what is on screen,
+    /// so the mapping is pinned to this and not to the page; `zoomToFit`
+    /// is where it catches up.
+    public private(set) var fitted: CGRect
     /// The `rect` of the last `draw`: what a zoom command zooms about the
     /// middle of.
     private var drawnRect: CGRect = .zero
@@ -141,6 +151,7 @@ public final class CanvasModel {
 
     public init(document: DrawingDocument) {
         self.document = document
+        fitted = Self.sheet(of: document)
         document.onChange = { [weak self] in
             guard let self else { return }
             selection = selection.filter { document.shape(id: $0) != nil }
@@ -194,9 +205,12 @@ public final class CanvasModel {
     /// What a zoom command zooms by: √2, so two of them double.
     public static let zoomStep: CGFloat = 2.squareRoot()
 
-    /// Back to the picture fitted in the view, un-panned: Cmd-0.
+    /// Back to the page fitted in the view, un-panned: Cmd-0. The page as
+    /// it stands now, which is around the shapes as they stand now.
     public func zoomToFit() {
-        guard zoom != 1 || pan != .zero else { return }
+        let sheet = Self.sheet(of: document)
+        guard zoom != 1 || pan != .zero || fitted != sheet else { return }
+        fitted = sheet
         zoom = 1
         pan = .zero
         needsDisplay?()
@@ -218,17 +232,30 @@ public final class CanvasModel {
     public func draw(in context: CGContext, rect: CGRect, scale: CGFloat) {
         guard let picture = document.picture else { return }
         drawnRect = rect
-        // The picture fitted into a rect `zoom` times the view's, scaled
-        // about the view's origin and slid by `pan`, is the picture fitted
+        // `fitted` fitted into a rect `zoom` times the view's, scaled
+        // about the view's origin and slid by `pan`, is `fitted` fitted
         // into the view and then zoomed and panned — the fit transform of
         // that rect is `zoom * fit₀ + pan`, the one the pinch keeps its
         // point fixed under.
         let panned = rect.applying(CGAffineTransform(scaleX: zoom, y: zoom)).offsetBy(dx: pan.dx, dy: pan.dy)
-        fit = picture.fitTransform(in: panned)
+        fit = Self.fitTransform(of: fitted, in: panned)
 
+        // The desk, and the page on it: a white sheet where the page is,
+        // which follows the shapes, so a shape dragged off its edge is
+        // watched taking the sheet with it.
+        context.setFillColor(CGColor(gray: 0.94, alpha: 1))
+        context.fill(rect)
         context.setFillColor(CGColor(gray: 1, alpha: 1))
-        context.fill(viewRect(CGRect(origin: .zero, size: picture.size)))
-        picture.draw(in: context, rect: panned, scale: scale)
+        context.fill(viewRect(document.page ?? CGRect(origin: .zero, size: picture.size)))
+        // The picture, unclipped: resvg lays the `viewBox` out in the
+        // picture's own size (`width`/`height`, or the `viewBox`'s when
+        // they are absent), so its coordinates reach user units through
+        // that fit, and user units reach the view through `fit`. Drawn
+        // unclipped rather than through `SVGPicture.draw`, which stops at
+        // the page's edge as an `<img>` would.
+        let userToPicture = Self.fitTransform(of: document.page ?? CGRect(origin: .zero, size: picture.size), in: CGRect(origin: .zero, size: picture.size))
+        let pictureToView = userToPicture.inverted().concatenating(fit)
+        context.draw(picture.displayList(rasterScale: pictureToView.a * scale), transform: pictureToView)
 
         let accent = CGColor(red: 0.0, green: 0.48, blue: 1.0, alpha: 1)
         context.setStrokeColor(accent)
@@ -306,6 +333,28 @@ public final class CanvasModel {
     }
 
     private func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
+
+    /// The box `zoomToFit` fits to the view: the page, or, for a drawing
+    /// with no `viewBox` to read, the picture's own size.
+    private static func sheet(of document: DrawingDocument) -> CGRect {
+        document.page ?? CGRect(origin: .zero, size: document.picture?.size ?? .zero)
+    }
+
+    /// `box` → `rect`, uniformly scaled to fit and centred on the leftover
+    /// axis — `SVGPicture.fitTransform` for any box, and resvg's own
+    /// `xMidYMid meet` for a `viewBox` in a size. `a` (== `d`) is the
+    /// scale. The identity when either is empty.
+    static func fitTransform(of box: CGRect, in rect: CGRect) -> CGAffineTransform {
+        guard box.width > 0, box.height > 0, rect.width > 0, rect.height > 0 else { return .identity }
+        let scale = min(rect.width / box.width, rect.height / box.height)
+        let drawn = CGSize(width: box.width * scale, height: box.height * scale)
+        let origin = CGPoint(
+            x: rect.minX + (rect.width - drawn.width) / 2,
+            y: rect.minY + (rect.height - drawn.height) / 2)
+        return CGAffineTransform(translationX: origin.x, y: origin.y)
+            .scaledBy(x: scale, y: scale)
+            .translatedBy(x: -box.minX, y: -box.minY)
+    }
 
     private func handleBox(at p: CGPoint, in context: CGContext) {
         let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
