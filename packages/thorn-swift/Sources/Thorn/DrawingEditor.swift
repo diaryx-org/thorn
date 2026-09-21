@@ -41,6 +41,19 @@ public struct DrawingEditor: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            // The strip is wider than a phone. Where it does not fit it
+            // scrolls sideways, so the tools past the edge — on a phone the
+            // lock, the hand and the select tool were the ones cut off — are a
+            // swipe away rather than gone; where it fits, nothing scrolls.
+            ScrollView(.horizontal, showsIndicators: false) {
+                toolbar.frame(minWidth: 0)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            DrawingCanvas(model: state.model)
+        }
+    }
+
+    private var toolbar: some View {
             HStack(spacing: 8) {
                 Button { state.model.locked.toggle() } label: {
                     Image(systemName: state.locked ? "lock.fill" : "lock.open")
@@ -94,8 +107,6 @@ public struct DrawingEditor: View {
             }
             .padding(8)
             .buttonStyle(.borderless)
-            DrawingCanvas(model: state.model)
-        }
     }
 
     private func toolButton(_ tool: Tool) -> some View {

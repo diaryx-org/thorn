@@ -267,6 +267,16 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
         model.draw(in: context, rect: bounds, scale: contentScaleFactor)
     }
 
+    /// A touch that lands on the canvas is the canvas's. An ancestor's
+    /// recogniser — a navigation stack's swipe back, a scroll view's pan —
+    /// would otherwise take a horizontal drag before it drew anything and
+    /// cancel the touches, so a rectangle dragged sideways became a page
+    /// popped (seen in the Diaryx app on iOS 27, where the pop is full-width).
+    /// The view's own — the double-tap, the pinch — still begin.
+    public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        gestureRecognizer.view === self
+    }
+
     /// The one touch the pointer is: the first down. A second finger is
     /// the pinch's, and cancels the drag the first began.
     private var pointer: UITouch?
