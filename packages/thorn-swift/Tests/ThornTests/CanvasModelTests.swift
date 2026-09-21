@@ -64,6 +64,36 @@ final class CanvasModelTests: XCTestCase {
         model.pointerUp()
     }
 
+    /// The appearance is the canvas's, not the file's: dark mode draws
+    /// the template's `currentColor` ink light on a dark sheet, a colour a
+    /// shape spells out stays its own, and the bytes never change.
+    func testAppearanceRecoloursTheInkAndNotTheFile() throws {
+        let doc = DrawingDocument.fresh()
+        _ = try doc.addRect(CGRect(x: 0, y: 0, width: 200, height: 100)) // fits the page around it
+        let before = doc.source
+        XCTAssertTrue(before.contains("color=\"#222\""))
+        let model = CanvasModel(document: doc)
+        model.setZoom(1, about: .zero)
+        let context = makeContext()
+        let view = CGRect(x: 0, y: 0, width: 400, height: 200)
+
+        model.draw(in: context, rect: view, scale: 1)
+        let edge = model.viewPoint(CGPoint(x: 0, y: 50)) // on the rect's left stroke
+        let inside = model.viewPoint(CGPoint(x: 100, y: 50))
+        let (r, _, _) = pixel(context, Int(edge.x), Int(edge.y))
+        XCTAssertEqual(r, 0x22, "light: the stroke is the root's #222")
+        XCTAssertEqual(pixel(context, Int(inside.x), Int(inside.y)).0, 255, "on a white sheet")
+
+        model.appearance = .dark
+        model.draw(in: context, rect: view, scale: 1)
+        let (dr, _, _) = pixel(context, Int(edge.x), Int(edge.y))
+        XCTAssertEqual(dr, 0xe6, "dark: the same stroke is light ink")
+        XCTAssertLessThan(pixel(context, Int(inside.x), Int(inside.y)).0, 0x40, "on a dark sheet")
+        XCTAssertEqual(doc.source, before, "and the file is as it was")
+        XCTAssertTrue(try doc.undo(), "the rect's step is the only one")
+        XCTAssertFalse(try doc.undo())
+    }
+
     func testShiftClickSelectsSeveralAndGroupsThem() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

@@ -19,6 +19,13 @@ carries is what `apps/thorn-mac` started with: `<defs>` with the arrow
 resolves `data-arrow` to the marker. The Diaryx app's `New Drawing` writes
 exactly it.
 
+**2026-09-20, later.** The template's ink became `currentColor` off the
+root's `color="#222"`, with a `prefers-color-scheme: dark` rule for a
+browser; the canvas follows its view's appearance (`CanvasModel.Appearance`)
+and draws the picture with `DrawingDocument.ink` set, a `<style>` appended
+to what resvg parses and never to the file. resvg skips `@media`, which is
+why the editor sets the colour itself rather than relying on the rule.
+
 The profile does not write a `<style>`; a shape with no fill or stroke
 is drawn by SVG's defaults (black fill, no stroke), which is a silhouette
 but not a diagram. The app's proposal has a fresh drawing carry a `<style>`

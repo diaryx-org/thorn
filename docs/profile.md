@@ -165,9 +165,15 @@ its bytes. A `points` list is written as `x,y` pairs separated by one space.
 A reorder moves the element and the line break and indentation ahead of it,
 and nothing else. Binding an arrow appends `data-from` or `data-to` after
 the attributes it has, and settling a bound end rewrites only the two
-coordinates of that end, and only when they would change. It does not write a `<style>`; the app's proposal
-puts one in the file it creates so a viewer with no theme shows a marker as a
-marker, and that template is the app's to settle (docs/tasks/style-template.md).
+coordinates of that end, and only when they would change. It does not write a `<style>`; the template a new
+drawing is created with carries one so a viewer with no theme shows a marker as
+a marker (docs/tasks/style-template.md). That template names no colour on a
+shape: every stroke and fill is `currentColor`, which is the root's
+`color="#222"`, and a `prefers-color-scheme: dark` rule turns it light. So the
+file is dark ink in a browser on a light page and light ink on a dark one, an
+inlined copy takes the page's own text colour, and an editor draws the same
+bytes in either mode by setting `color` at render time — never in the file.
+A colour a shape spells out itself is the shape's, in both.
 
 ## Held to by
 

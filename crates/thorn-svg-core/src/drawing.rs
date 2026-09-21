@@ -2014,7 +2014,7 @@ mod tests {
         // The margin out from the rect, and `width`/`height` with it.
         assert!(
             d.source()
-                .starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"84 34 112 72\" width=\"112\" height=\"72\" data-diaryx-drawing=\"1\">"),
+                .starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"84 34 112 72\" width=\"112\" height=\"72\" color=\"#222\" data-diaryx-drawing=\"1\">"),
             "{}",
             d.source()
         );

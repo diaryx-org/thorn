@@ -33,6 +33,24 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         model.draw(in: context, rect: bounds, scale: window?.backingScaleFactor ?? 1)
     }
 
+    // The canvas follows the view's appearance: light or dark ink, sheet
+    // and desk. Read when the view lands in a window and whenever the
+    // system, or the app, changes it.
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        followAppearance()
+    }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        followAppearance()
+    }
+
+    private func followAppearance() {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        model.appearance = dark ? .dark : .light
+    }
+
     // MARK: Typing a label
 
     /// The field over a label being typed, and the edit it is for. A text
@@ -265,6 +283,25 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
     public override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         model.draw(in: context, rect: bounds, scale: contentScaleFactor)
+    }
+
+    // The canvas follows the view's appearance: light or dark ink, sheet
+    // and desk. Read when the view lands in a window and whenever the
+    // system, or the app, changes it.
+    public override func didMoveToWindow() {
+        super.didMoveToWindow()
+        followAppearance()
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
+            followAppearance()
+        }
+    }
+
+    private func followAppearance() {
+        model.appearance = traitCollection.userInterfaceStyle == .dark ? .dark : .light
     }
 
     /// A touch that lands on the canvas is the canvas's. An ancestor's

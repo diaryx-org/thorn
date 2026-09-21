@@ -143,6 +143,41 @@ public final class CanvasModel {
         case erase(ids: [String])
     }
     private var drag: Drag?
+
+    /// Light or dark: the greys the canvas draws the desk, the sheet and
+    /// the handles in, and the ink the picture's `currentColor` is drawn
+    /// as. A view sets it from its own appearance; the file is untouched.
+    public enum Appearance: Equatable {
+        case light, dark
+
+        /// What `currentColor` is drawn as: dark ink on a light sheet, and
+        /// the reverse.
+        var ink: String {
+            switch self {
+            case .light: "#222"
+            case .dark: "#e6e6e6"
+            }
+        }
+        var sheet: CGColor {
+            switch self {
+            case .light: CGColor(gray: 1, alpha: 1)
+            case .dark: CGColor(gray: 0.12, alpha: 1)
+            }
+        }
+        var desk: CGColor {
+            switch self {
+            case .light: CGColor(gray: 0.94, alpha: 1)
+            case .dark: CGColor(gray: 0.07, alpha: 1)
+            }
+        }
+    }
+    public var appearance: Appearance = .light {
+        didSet {
+            guard appearance != oldValue else { return }
+            document.ink = appearance.ink
+            needsDisplay?()
+        }
+    }
     /// Whether the drag in flight has been applied to the document, and so
     /// must be undone before it is applied again or dropped.
     private var previewed = false
@@ -152,6 +187,7 @@ public final class CanvasModel {
     public init(document: DrawingDocument) {
         self.document = document
         fitted = Self.sheet(of: document)
+        document.ink = appearance.ink
         document.onChange = { [weak self] in
             guard let self else { return }
             selection = selection.filter { document.shape(id: $0) != nil }
@@ -240,12 +276,12 @@ public final class CanvasModel {
         let panned = rect.applying(CGAffineTransform(scaleX: zoom, y: zoom)).offsetBy(dx: pan.dx, dy: pan.dy)
         fit = Self.fitTransform(of: fitted, in: panned)
 
-        // The desk, and the page on it: a white sheet where the page is,
-        // which follows the shapes, so a shape dragged off its edge is
-        // watched taking the sheet with it.
-        context.setFillColor(CGColor(gray: 0.94, alpha: 1))
+        // The desk, and the page on it: a sheet where the page is, which
+        // follows the shapes, so a shape dragged off its edge is watched
+        // taking the sheet with it. Both in the appearance's greys.
+        context.setFillColor(appearance.desk)
         context.fill(rect)
-        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.setFillColor(appearance.sheet)
         context.fill(viewRect(document.page ?? CGRect(origin: .zero, size: picture.size)))
         // The picture, unclipped: resvg lays the `viewBox` out in the
         // picture's own size (`width`/`height`, or the `viewBox`'s when
@@ -280,16 +316,16 @@ public final class CanvasModel {
                 context.strokePath()
                 for (end, p) in [(End.from, c.from), (.to, c.to)] {
                     let bound = document.binding(id: id, end) != nil
-                    context.setFillColor(bound ? accent : CGColor(gray: 1, alpha: 1))
+                    context.setFillColor(bound ? accent : appearance.sheet)
                     handleBox(at: viewPoint(p.cgPoint), in: context)
                 }
-                context.setFillColor(CGColor(gray: 1, alpha: 1))
+                context.setFillColor(appearance.sheet)
                 handleDot(at: viewPoint(c.midpoint.cgPoint), in: context)
                 continue
             }
             context.stroke(r)
             guard resizable == id else { continue }
-            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.setFillColor(appearance.sheet)
             for h in Handle.all {
                 handleBox(at: h.position(on: r), in: context)
             }

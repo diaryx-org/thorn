@@ -18,6 +18,17 @@ public final class DrawingDocument {
     /// say — in which case the canvas shows nothing but the selection.
     public private(set) var picture: SVGPicture?
 
+    /// What `currentColor` is drawn as in `picture` — a CSS colour — or
+    /// `nil` for the file's own. The template's ink is `currentColor` off
+    /// the root's `color`, so a canvas in dark mode sets this to a light
+    /// ink and the picture follows without a byte of the file changing:
+    /// the rule is appended to the source resvg parses, not to `source`.
+    /// A file that spells its colours out — an older template, a red box
+    /// — is drawn as it says.
+    public var ink: String? {
+        didSet { guard ink != oldValue else { return }; reparse() }
+    }
+
     /// Called after every gesture; a view redraws here.
     public var onChange: (() -> Void)?
 
@@ -26,7 +37,7 @@ public final class DrawingDocument {
     /// opens, and `check()` says how.
     public init(source: String) throws {
         inner = try Drawing.open(source: source)
-        picture = try? SVGPicture(data: Data(source.utf8))
+        reparse()
     }
 
     /// Open an SVG file.
@@ -290,9 +301,19 @@ public final class DrawingDocument {
 
     private func changed<T>(_ gesture: () throws -> T) rethrows -> T {
         let result = try gesture()
-        picture = try? SVGPicture(data: Data(source.utf8))
+        reparse()
         onChange?()
         return result
+    }
+
+    private func reparse() {
+        var text = source
+        // Last, so it wins over the file's own `svg { color }` at the
+        // same specificity; a `<style>` is a style wherever it sits.
+        if let ink, let end = text.range(of: "</svg>", options: .backwards) {
+            text.replaceSubrange(end, with: "<style>svg{color:\(ink)}</style></svg>")
+        }
+        picture = try? SVGPicture(data: Data(text.utf8))
     }
 }
 
