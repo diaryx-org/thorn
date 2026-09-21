@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 edition = "2024"
-version = "0.1.0"
+version = "0.1.1"
 # Minimum supported Rust version. Edition 2024 needs 1.85; let-chains 1.88.
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -40,4 +40,4 @@ svgtypes = "0.16"
 anyhow = "1"
 thiserror = "2"
 # Internal crates.
-thorn-svg-core = { path = "crates/thorn-svg-core", version = "0.1.0" }
+thorn-svg-core = { path = "crates/thorn-svg-core", version = "0.1.1" }

@@ -25,3 +25,34 @@ byte-stable re-export.
 _No commits since the last tag._
 
 <!-- git-cliff:end -->
+
+## v0.1.1 — 2026-09-21
+
+### Breaking
+
+- a bend whose first event is on the chord no longer undoes the arrow under it ([`1024178`](https://github.com/diaryx-org/thorn/commit/102417877eae4e2ba1251c35b766e3f472a8f498))
+
+### Added
+
+- **swift** — the canvas for a finger — touch tolerance and handles, two-finger pan, coalesced ink, a long-press menu, a field that follows the picture under the keyboard ([`9440336`](https://github.com/diaryx-org/thorn/commit/9440336bf5c27be9c215c60570e5e830f292a16a))
+- which ends of a connector have a head is a setting — `set_heads` in the core, and an options strip in the editor ([`1663707`](https://github.com/diaryx-org/thorn/commit/16637073b66febe40932ebf56b69c016e933720d))
+- a dashed or dotted stroke — `data-dash` in the profile, `set_dash` and a pen in the core, and the option in the editor ([`57cc325`](https://github.com/diaryx-org/thorn/commit/57cc325a31281c797eb7cdd1f065914e79b18863))
+- a palette — `data-color` and `data-fill` in the profile, a hue and a background in the core, the swatches in the editor, and dark mode from the file's own rules ([`815aaa3`](https://github.com/diaryx-org/thorn/commit/815aaa325885cabcf428b9c1e27511538f859e77))
+- a thin or bold stroke — `data-weight` in the profile, `set_weight` in the core, and the option in the editor ([`2e3aae9`](https://github.com/diaryx-org/thorn/commit/2e3aae99a63d2b343af3b436c2750e8a13e78ee1))
+- round corners — `set_corner` writes a box's `rx`, a resize keeps it, and the strip offers sharp or round ([`e345953`](https://github.com/diaryx-org/thorn/commit/e3459536ee0dc73245f2d255a8e401da393827f9))
+- **thorn-editor** — Thorn is a document app ([`aceec3e`](https://github.com/diaryx-org/thorn/commit/aceec3ec9ba7a4e644d15de5db3a81d6c4bae000))
+- **thorn-editor** — the app icon is an Icon Composer source ([`73de581`](https://github.com/diaryx-org/thorn/commit/73de581ed3cc43cc9ec5caa7798a2a71550f7183))
+
+### Behavioural changes
+
+- on iOS `DrawingCanvasView` sets `CanvasModel.tolerance` to 12 and `handleSize` to 11 when it is made; a host that set its own before must set them after. `CanvasModel.cancelPointer` now restores the selection from before `beginPointer`.
+
+- `Drawing::bend` returns `Result<bool, Error>` — `true`
+when a step was written, `false` for a `<line>` asked to be straight — where
+it returned `Result<(), Error>`; the FFI `bend` and `straighten` return
+`bool` likewise.
+
+- a drawing made from the template is ~5 KB larger — the palette's rules and eight markers — and `DrawingDocument.ink` is gone, replaced by `dark: Bool`, which applies the file's own `@media (prefers-color-scheme: dark)` rules; a file with none is drawn as it says in either appearance, where before its `currentColor` was forced to a light ink.
+
+- a resize (and an ungroup's baking) keeps a `<rect>`'s `rx` and `ry` as they are, as it keeps `stroke-width`, where before it scaled them with the box.
+
