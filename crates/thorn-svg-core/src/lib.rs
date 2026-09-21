@@ -32,6 +32,7 @@ pub mod number;
 pub mod path;
 pub mod profile;
 pub mod shape;
+mod style;
 pub mod transform;
 
 pub use connector::{Connector, End};

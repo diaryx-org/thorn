@@ -26,6 +26,13 @@ and draws the picture with `DrawingDocument.ink` set, a `<style>` appended
 to what resvg parses and never to the file. resvg skips `@media`, which is
 why the editor sets the colour itself rather than relying on the rule.
 
+**2026-09-20, later still.** The `line, path` rule that a bend needs had
+reached the arrowhead's own `<path>` inside the `<marker>`, drawing every
+head hollow; the template now fills `marker path` on its own. A drawing
+made from an earlier template gets these rules the first time it is bent
+(`docs/profile.md`, *A connector*), so the template's history is not a
+thing a file is stuck with.
+
 The profile does not write a `<style>`; a shape with no fill or stroke
 is drawn by SVG's defaults (black fill, no stroke), which is a silhouette
 but not a diagram. The app's proposal has a fresh drawing carry a `<style>`

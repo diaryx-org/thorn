@@ -133,7 +133,21 @@ number format, as absolute `M`/`L`/`Q` with the spelling a baked
 transform writes, so a move that goes into the `d` leaves the same
 bytes. A `<marker>` on a bent arrow follows the curve's end tangent
 (`orient="auto-start-reverse"`), which is why the template's `<style>`
-draws heads on `path[data-arrow]` as it does on `line[data-arrow]`.
+draws heads on `path[data-arrow]` as it does on `line[data-arrow]`, and
+strokes `path` as it strokes `line`; `marker path` is filled on its own
+so the head stays a triangle under that rule.
+
+A drawing styled before a bend was possible says what a `line` is and
+nothing of a `path`, and SVG's defaults — black fill, no stroke, no
+marker — would draw the bent arrow as a silhouette. So the first bend in
+such a drawing widens its `<style>`, in the same step: every rule that
+selects a `line` comes to select the `path` twin as well (`line, path`,
+`line[data-arrow="end"], …, path[data-arrow="end"], …`), a rule that
+strokes gains `fill: none`, and a `marker path` rule filled in the
+line's own stroke colour is added — which is how the template's own
+rules changed. A stylesheet with a
+rule for a bare `path` already is left as written: its author has said
+what a path is. Nothing else the editor does touches a `<style>`.
 
 ## The `data-` vocabulary
 
@@ -165,7 +179,8 @@ its bytes. A `points` list is written as `x,y` pairs separated by one space.
 A reorder moves the element and the line break and indentation ahead of it,
 and nothing else. Binding an arrow appends `data-from` or `data-to` after
 the attributes it has, and settling a bound end rewrites only the two
-coordinates of that end, and only when they would change. It does not write a `<style>`; the template a new
+coordinates of that end, and only when they would change. It does not write a `<style>` — the one exception is
+the widening a bend does, above; the template a new
 drawing is created with carries one so a viewer with no theme shows a marker as
 a marker (docs/tasks/style-template.md). That template names no colour on a
 shape: every stroke and fill is `currentColor`, which is the root's

@@ -46,6 +46,7 @@ use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
 use crate::shape::{self, Heads, Shape, ShapeKind};
+use crate::style;
 use crate::transform::Transform;
 
 /// Why a gesture or an open refused.
@@ -1254,7 +1255,46 @@ impl Drawing {
             }
         }
         self.fold(&mut steps)?;
+        if bent.is_bent() {
+            self.style_paths(&mut steps)?;
+        }
         self.settle(&[id], &mut steps)
+    }
+
+    /// A bent connector is a `<path>`, and how it looks is the drawing's
+    /// `<style>`'s to say. One written before the template styled a
+    /// `path` says nothing about it, and SVG's defaults — black fill, no
+    /// stroke, no marker — draw a silhouette where the arrow was. Each
+    /// top-level `<style>` that selects a `line` and no bare `path` is
+    /// widened so its `line` rules select the `path` twin too
+    /// ([`style::widened_for_paths`]), folded into the gesture's step.
+    fn style_paths(&mut self, steps: &mut usize) -> Result<(), Error> {
+        loop {
+            let mut next = self.node(self.root).first_child;
+            let mut edit = None;
+            while let Some(id) = next {
+                let node = self.node(id);
+                next = node.next_sibling;
+                if node.name.as_deref() != Some("style") {
+                    continue;
+                }
+                let Some(content) = node.content_span.clone() else {
+                    continue;
+                };
+                if let Some(widened) = style::widened_for_paths(&self.source[content.clone()]) {
+                    edit = Some((content, widened));
+                    break;
+                }
+            }
+            let Some((content, widened)) = edit else {
+                return Ok(());
+            };
+            self.editor
+                .edit_range(content.start, content.end, &widened)
+                .map_err(Error::Edit)?;
+            self.reload()?;
+            self.fold(steps)?;
+        }
     }
 
     /// Rewrite an element as `<tag>` with `attrs`, its interior kept:
@@ -2797,6 +2837,111 @@ mod tests {
         assert_eq!(line.attr("x1"), Some("110"));
         assert!(d.undo().unwrap());
         assert_eq!(d.shape("s3").unwrap().attr("data-from"), Some(&*g));
+    }
+
+    /// A drawing whose `<style>` predates the bend: `line` is stroked and
+    /// nothing says what a `path` is. The first bend widens the rules to
+    /// the template's spelling — in the same step — so the path that the
+    /// arrow becomes is an outline with its head, not a filled silhouette.
+    #[test]
+    fn a_bend_in_a_drawing_styled_before_bends_widens_its_line_rules_to_paths() {
+        const OLD: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 400\" width=\"640\" height=\"400\" data-diaryx-drawing=\"1\">\n  <defs>\n    <marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"8\" markerHeight=\"8\" orient=\"auto-start-reverse\">\n      <path d=\"M 0 0 L 10 5 L 0 10 z\"/>\n    </marker>\n  </defs>\n  <style>\n    rect, ellipse, polygon { fill: none; stroke: #222; stroke-width: 2 }\n    line { stroke: #222; stroke-width: 2 }\n    line[data-arrow=\"end\"], line[data-arrow=\"both\"] { marker-end: url(#arrow) }\n    line[data-arrow=\"start\"], line[data-arrow=\"both\"] { marker-start: url(#arrow) }\n    path[data-ink] { fill: #222; stroke: none }\n    text { font: 16px sans-serif }\n  </style>\n  <line x1=\"200\" y1=\"100\" x2=\"400\" y2=\"100\" data-arrow=\"end\" data-id=\"s1\"/>\n</svg>\n";
+        let mut d = Drawing::open(OLD).unwrap();
+        d.bend("s1", Some((300.0, 200.0))).unwrap();
+        assert!(
+            d.source().contains("    line, path { fill: none; stroke: #222; stroke-width: 2 }\n    line[data-arrow=\"end\"], line[data-arrow=\"both\"], path[data-arrow=\"end\"], path[data-arrow=\"both\"] { marker-end: url(#arrow) }\n    line[data-arrow=\"start\"], line[data-arrow=\"both\"], path[data-arrow=\"start\"], path[data-arrow=\"both\"] { marker-start: url(#arrow) }\n    marker path { fill: #222; stroke: none }\n    path[data-ink] { fill: #222; stroke: none }\n"),
+            "{}",
+            d.source()
+        );
+        assert!(
+            d.source().contains(
+                "<path d=\"M200 100 Q300 300 400 100\" data-arrow=\"end\" data-id=\"s1\"/>"
+            )
+        );
+        assert!(d.check().is_empty(), "{:?}", d.check());
+        assert!(d.undo().unwrap(), "one step");
+        assert_eq!(d.source(), OLD, "the style comes back with the line");
+        assert!(d.redo().unwrap());
+
+        // Bent again, there is nothing left to widen; and the template
+        // itself, which already styles a path, is never touched.
+        let widened = d.source().to_string();
+        d.bend("s1", Some((300.0, 150.0))).unwrap();
+        assert_eq!(
+            d.source().matches("line, path").count(),
+            1,
+            "{}",
+            d.source()
+        );
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), widened);
+        let mut fresh = Drawing::fresh();
+        let id = fresh
+            .add_arrow(200.0, 100.0, 400.0, 100.0, Heads::End)
+            .unwrap();
+        let style_before = fresh.source()
+            [fresh.source().find("<style>").unwrap()..fresh.source().find("</style>").unwrap()]
+            .to_string();
+        fresh.bend(&id, Some((300.0, 200.0))).unwrap();
+        assert!(fresh.source().contains(&style_before));
+
+        // Drawn by usvg, the bent arrow is a stroke with a head at its
+        // end, not a filled crescent.
+        #[cfg(feature = "usvg")]
+        assert_eq!(painted(d.source()), vec![Paint::Stroked, Paint::Filled]);
+    }
+
+    /// How usvg paints each path of a drawing, in order — the shape,
+    /// then any marker instanced on it.
+    #[cfg(feature = "usvg")]
+    #[derive(Debug, PartialEq)]
+    enum Paint {
+        Filled,
+        Stroked,
+        Both,
+        Neither,
+    }
+
+    #[cfg(feature = "usvg")]
+    fn painted(svg: &str) -> Vec<Paint> {
+        fn walk(g: &usvg::Group, out: &mut Vec<Paint>) {
+            for node in g.children() {
+                match node {
+                    usvg::Node::Path(p) => {
+                        out.push(match (p.fill().is_some(), p.stroke().is_some()) {
+                            (true, true) => Paint::Both,
+                            (true, false) => Paint::Filled,
+                            (false, true) => Paint::Stroked,
+                            (false, false) => Paint::Neither,
+                        })
+                    }
+                    usvg::Node::Group(g) => walk(g, out),
+                    _ => {}
+                }
+            }
+        }
+        let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).unwrap();
+        let mut out = Vec::new();
+        walk(tree.root(), &mut out);
+        out
+    }
+
+    /// The template draws an arrow as a stroke with a filled head,
+    /// straight or bent, and an ink stroke as a fill.
+    #[cfg(feature = "usvg")]
+    #[test]
+    fn the_template_strokes_a_connector_and_fills_its_head() {
+        let mut d = Drawing::fresh();
+        let a = d.add_arrow(20.0, 20.0, 120.0, 20.0, Heads::End).unwrap();
+        assert_eq!(painted(d.source()), vec![Paint::Stroked, Paint::Filled]);
+        d.bend(&a, Some((70.0, 60.0))).unwrap();
+        assert_eq!(painted(d.source()), vec![Paint::Stroked, Paint::Filled]);
+        d.add_ink(&[(10.0, 100.0), (60.0, 110.0)], &[4.0], Nib::Monoline)
+            .unwrap();
+        assert_eq!(
+            painted(d.source()),
+            vec![Paint::Stroked, Paint::Filled, Paint::Filled]
+        );
     }
 
     #[test]
