@@ -547,7 +547,14 @@ public protocol DrawingProtocol : AnyObject {
     func addText(x: Double, y: Double, text: String) throws  -> String
     
     /**
-     * Bind an end of a `<line>` to a shape, the end put on its edge; or,
+     * Bend a connector to pass through a point half-way along — a
+     * `<line>` becomes a `<path>` — and re-settle its bound ends. One
+     * undo step.
+     */
+    func bend(id: String, x: Double, y: Double) throws 
+    
+    /**
+     * Bind an end of a connector to a shape, the end put on its edge; or,
      * with no target, unbind it. One undo step.
      */
     func bind(id: String, end: End, target: String?) throws 
@@ -565,6 +572,13 @@ public protocol DrawingProtocol : AnyObject {
     func check()  -> [Finding]
     
     /**
+     * A shape as a connector — a `<line>`, or a `<path>` of one straight
+     * or bent segment — in the root's user units; `None` for what is not
+     * one.
+     */
+    func connector(id: String)  -> Connector?
+    
+    /**
      * Delete the shape with this `data-id`.
      */
     func delete(id: String) throws 
@@ -575,15 +589,15 @@ public protocol DrawingProtocol : AnyObject {
     func deleteAll(ids: [String]) throws 
     
     /**
-     * Drop an end of a `<line>` at a point: it goes there, bound to the
+     * Drop an end of a connector at a point: it goes there, bound to the
      * topmost shape within `tolerance` — any but the arrow — or unbound.
      * Returns what it was bound to. One undo step.
      */
     func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double) throws  -> String?
     
     /**
-     * Where an end of a `<line>` is, in the root's user units; `None`
-     * for any other kind.
+     * Where an end of a connector is, in the root's user units; `None`
+     * for what is not one.
      */
     func endPoint(id: String, end: End)  -> Point?
     
@@ -679,6 +693,11 @@ public protocol DrawingProtocol : AnyObject {
      * The current bytes — what saving writes.
      */
     func source()  -> String
+    
+    /**
+     * Straighten a bent connector: a `<line>` again. One undo step.
+     */
+    func straighten(id: String) throws 
     
     /**
      * Undo the last gesture; `false` when there was nothing to undo.
@@ -876,7 +895,21 @@ open func addText(x: Double, y: Double, text: String)throws  -> String {
 }
     
     /**
-     * Bind an end of a `<line>` to a shape, the end put on its edge; or,
+     * Bend a connector to pass through a point half-way along — a
+     * `<line>` becomes a `<path>` — and re-settle its bound ends. One
+     * undo step.
+     */
+open func bend(id: String, x: Double, y: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_bend(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterDouble.lower(x),
+        FfiConverterDouble.lower(y),$0
+    )
+}
+}
+    
+    /**
+     * Bind an end of a connector to a shape, the end put on its edge; or,
      * with no target, unbind it. One undo step.
      */
 open func bind(id: String, end: End, target: String?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
@@ -912,6 +945,19 @@ open func check() -> [Finding] {
 }
     
     /**
+     * A shape as a connector — a `<line>`, or a `<path>` of one straight
+     * or bent segment — in the root's user units; `None` for what is not
+     * one.
+     */
+open func connector(id: String) -> Connector? {
+    return try!  FfiConverterOptionTypeConnector.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_connector(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * Delete the shape with this `data-id`.
      */
 open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
@@ -932,7 +978,7 @@ open func deleteAll(ids: [String])throws  {try rustCallWithError(FfiConverterTyp
 }
     
     /**
-     * Drop an end of a `<line>` at a point: it goes there, bound to the
+     * Drop an end of a connector at a point: it goes there, bound to the
      * topmost shape within `tolerance` — any but the arrow — or unbound.
      * Returns what it was bound to. One undo step.
      */
@@ -949,8 +995,8 @@ open func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double)
 }
     
     /**
-     * Where an end of a `<line>` is, in the root's user units; `None`
-     * for any other kind.
+     * Where an end of a connector is, in the root's user units; `None`
+     * for what is not one.
      */
 open func endPoint(id: String, end: End) -> Point? {
     return try!  FfiConverterOptionTypePoint.lift(try! rustCall() {
@@ -1156,6 +1202,16 @@ open func source() -> String {
     uniffi_thorn_svg_ffi_fn_method_drawing_source(self.uniffiClonePointer(),$0
     )
 })
+}
+    
+    /**
+     * Straighten a bent connector: a `<line>` again. One undo step.
+     */
+open func straighten(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_straighten(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+}
 }
     
     /**
@@ -1386,6 +1442,93 @@ public func FfiConverterTypeBounds_lift(_ buf: RustBuffer) throws -> Bounds {
 #endif
 public func FfiConverterTypeBounds_lower(_ value: Bounds) -> RustBuffer {
     return FfiConverterTypeBounds.lower(value)
+}
+
+
+/**
+ * Mirrors `thorn_svg_core::Connector`: a line-like shape's ends, and its
+ * control point when bent. `midpoint` is where the bend handle sits —
+ * on the stroke, half-way along.
+ */
+public struct Connector {
+    public var from: Point
+    public var to: Point
+    public var control: Point?
+    public var midpoint: Point
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(from: Point, to: Point, control: Point?, midpoint: Point) {
+        self.from = from
+        self.to = to
+        self.control = control
+        self.midpoint = midpoint
+    }
+}
+
+
+
+extension Connector: Equatable, Hashable {
+    public static func ==(lhs: Connector, rhs: Connector) -> Bool {
+        if lhs.from != rhs.from {
+            return false
+        }
+        if lhs.to != rhs.to {
+            return false
+        }
+        if lhs.control != rhs.control {
+            return false
+        }
+        if lhs.midpoint != rhs.midpoint {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(from)
+        hasher.combine(to)
+        hasher.combine(control)
+        hasher.combine(midpoint)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeConnector: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Connector {
+        return
+            try Connector(
+                from: FfiConverterTypePoint.read(from: &buf), 
+                to: FfiConverterTypePoint.read(from: &buf), 
+                control: FfiConverterOptionTypePoint.read(from: &buf), 
+                midpoint: FfiConverterTypePoint.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Connector, into buf: inout [UInt8]) {
+        FfiConverterTypePoint.write(value.from, into: &buf)
+        FfiConverterTypePoint.write(value.to, into: &buf)
+        FfiConverterOptionTypePoint.write(value.control, into: &buf)
+        FfiConverterTypePoint.write(value.midpoint, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnector_lift(_ buf: RustBuffer) throws -> Connector {
+    return try FfiConverterTypeConnector.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeConnector_lower(_ value: Connector) -> RustBuffer {
+    return FfiConverterTypeConnector.lower(value)
 }
 
 
@@ -2571,6 +2714,30 @@ fileprivate struct FfiConverterOptionTypeBounds: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeConnector: FfiConverterRustBuffer {
+    typealias SwiftType = Connector?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeConnector.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeConnector.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeFont: FfiConverterRustBuffer {
     typealias SwiftType = Font?
 
@@ -2974,7 +3141,10 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 58303) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 8142) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bend() != 27315) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 20832) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 7686) {
@@ -2983,16 +3153,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_check() != 12937) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 14022) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 53757) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete_all() != 13572) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end() != 40545) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end() != 45703) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 45968) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 13342) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 674) {
@@ -3044,6 +3217,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_source() != 3308) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 20524) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {

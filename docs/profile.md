@@ -49,8 +49,10 @@ same list as code.
    only the values it lists: `data-arrow` is `end`, `start` or `both`;
    `data-ink` is `monoline`, and comes with `data-centreline` and
    `data-widths`; `data-role` is `note`, on a `<g>` with the members a
-   note has. A term the profile does not name is preserved and not
-   judged.
+   note has. A term is on the elements the profile puts it on:
+   `data-arrow`, `data-from` and `data-to` are on a connector (below),
+   which is what the editor can bind, settle and bend. A term the
+   profile does not name is preserved and not judged.
 
 ## What is a shape
 
@@ -97,6 +99,30 @@ comment, a processing instruction, an element the editor has never heard of
 which rewrites only the span it was asked to, so the bytes the user did not
 touch are the bytes that were there.
 
+## A connector
+
+A **connector** is the line-like shape an arrow is: a `<line>`, or a
+`<path>` that is not ink and whose `d` is one segment from one end to
+the other — straight, `M x1 y1 L x2 y2`, or bent through one control
+point, `M x1 y1 Q cx cy x2 y2`, in any spelling that simplifies to that
+(`l`, `h`, `T` …). Which `<path>`s count is read off the `d`, never
+declared, so a path a hand wrote as `M 0 0 Q 50 80 100 0` is bendable on
+sight. A path of two segments, a cubic, or a closed one is a `<path>`
+like any other: movable, resizable, not an arrow.
+
+The editor makes a line or an arrow as a `<line>`, and **bending** it
+(`Drawing::bend`, dragging the round handle at its midpoint) rewrites it
+in place as a `<path>` with a `Q`, every other attribute kept in its
+place — `d` where `x1` was. The control point is what makes the curve
+pass through the dropped point half-way along, so the handle sits on
+the stroke. Straightening (`bend(None)`, dragging the handle back onto
+the chord) rewrites it as a `<line>` again. The `d` is written in the
+number format, as absolute `M`/`L`/`Q` with the spelling a baked
+transform writes, so a move that goes into the `d` leaves the same
+bytes. A `<marker>` on a bent arrow follows the curve's end tangent
+(`orient="auto-start-reverse"`), which is why the template's `<style>`
+draws heads on `path[data-arrow]` as it does on `line[data-arrow]`.
+
 ## The `data-` vocabulary
 
 Beyond `data-id`, these are what a Diaryx drawing may carry. Each is
@@ -107,8 +133,8 @@ draws.
 |-----------|----|-------|
 | `data-diaryx-drawing` | `<svg>` | rule 1: the profile version |
 | `data-id` | every shape | rule 3 |
-| `data-from`, `data-to` | `<line>`, `<path>` | an arrow bound to a shape at each end: when the shape moves, the arrow's endpoint follows. The value is the shape's `data-id`. The editor binds a `<line>` (`Drawing::bind`, or dropping an endpoint handle on a shape) and keeps a bound end on its shape's edge, facing the other end — it rewrites `x1`/`y1` or `x2`/`y2` whenever the shape moves or resizes, in that gesture's undo step, and takes the binding off when the shape is deleted. A bound `<path>` is honoured as reserved: read, never rewritten. |
-| `data-arrow` | `<line>` | `end`, `start` or `both`: which ends have a head. This is what an arrow *is*; how a head looks is the drawing's `<style>` — `line[data-arrow="end"], line[data-arrow="both"] { marker-end: url(#arrow) }` and the `<marker>` it names, which the template a new drawing is created with carries (docs/tasks/style-template.md). The editor writes `data-arrow` (`Drawing::add_arrow`) and never `marker-end`; a file that spells `marker-start`/`marker-end` itself is read as an arrow all the same (`Shape::heads`). Any other value is a finding. |
+| `data-from`, `data-to` | a connector | an arrow bound to a shape at each end: when the shape moves, the arrow's endpoint follows. The value is the shape's `data-id`. The editor binds a connector (`Drawing::bind`, or dropping an endpoint handle on a shape) and keeps a bound end on its shape's edge, facing the other end — or, when the connector is bent, facing its control point, so the stroke leaves the shape along its tangent. It rewrites `x1`/`y1` or `x2`/`y2` — or the `d` — whenever the shape moves or resizes, in that gesture's undo step, and takes the binding off when the shape is deleted. |
+| `data-arrow` | a connector | `end`, `start` or `both`: which ends have a head. This is what an arrow *is*; how a head looks is the drawing's `<style>` — `line[data-arrow="end"], line[data-arrow="both"], path[data-arrow="end"], path[data-arrow="both"] { marker-end: url(#arrow) }` and the `<marker>` it names, which the template a new drawing is created with carries (docs/tasks/style-template.md). The editor writes `data-arrow` (`Drawing::add_arrow`) and never `marker-end`; a file that spells `marker-start`/`marker-end` itself is read as an arrow all the same (`Shape::heads`). Any other value is a finding. |
 | `data-role` | `<g>` | `note`: a box with a label in it — a `<rect>` and a `<text>` wrapped to the box's inner width, eight units in from its edge. The editor makes one as one splice (`Drawing::add_note`), resizes it as one — the box to the new bounds, the label to its corner and re-wrapped — and moves and deletes it as any group; the label is re-worded as any label. A `<g>` with the role and without both members is a finding. |
 | `data-width` | `<text>` | the width a label wraps to, in user units, in the number format. The editor flows the label's words into one `<tspan>` per line — each at the anchor's `x`, each after the first `dy="1.2em"` down — measured by the host's layout; a word longer than the width has a line to itself. Without it a label is one line. Written by a resize of the label's box; taken off by `Drawing::set_width(None)`. Any viewer draws the `<tspan>`s as they are. |
 | `data-break` | `<tspan>` in a `<text>` | `hard`: this line starts where the author broke it, not where the width did. The editor writes a label with a line break of its own as `<tspan>` lines like a wrapped one's, this on the first line of each paragraph after the first, and reads the label back with a newline there. |

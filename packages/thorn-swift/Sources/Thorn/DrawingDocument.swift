@@ -81,13 +81,19 @@ public final class DrawingDocument {
     /// The shapes directly inside a `<g>`, in paint order.
     public func members(id: String) -> [Shape] { inner.members(id: id) }
 
-    /// Where an end of a `<line>` is, in user units; `nil` for any other
-    /// kind.
+    /// Where an end of a connector is, in user units; `nil` for what is
+    /// not one.
     public func endPoint(id: String, _ end: End) -> CGPoint? {
         inner.endPoint(id: id, end: end).map { CGPoint(x: $0.x, y: $0.y) }
     }
 
-    /// What an end of a `<line>` is bound to — the `data-id` in its
+    /// A shape as a connector — a `<line>`, or a `<path>` of one straight
+    /// or bent segment — in user units: its ends, its control point when
+    /// bent, and the midpoint the bend handle sits at. `nil` for what is
+    /// not one.
+    public func connector(id: String) -> Connector? { inner.connector(id: id) }
+
+    /// What an end of a connector is bound to — the `data-id` in its
     /// `data-from` or `data-to` — if anything.
     public func binding(id: String, _ end: End) -> String? {
         let name = end == .from ? "data-from" : "data-to"
@@ -220,13 +226,23 @@ public final class DrawingDocument {
         try changed { try inner.ungroup(id: id) }
     }
 
-    /// Bind an end of a `<line>` to a shape, the end put on its edge; or,
+    /// Bend a connector to pass through a point half-way along — a
+    /// `<line>` becomes a `<path>` — or, with `nil`, straighten it back
+    /// into a `<line>`. Bound ends re-settle to leave their shapes along
+    /// the new tangent. One undo step.
+    public func bend(id: String, through point: CGPoint?) throws {
+        try changed {
+            if let point { try inner.bend(id: id, x: Double(point.x), y: Double(point.y)) } else { try inner.straighten(id: id) }
+        }
+    }
+
+    /// Bind an end of a connector to a shape, the end put on its edge; or,
     /// with `nil`, unbind it. One undo step.
     public func bind(id: String, _ end: End, to target: String?) throws {
         try changed { try inner.bind(id: id, end: end, target: target) }
     }
 
-    /// Drop an end of a `<line>` at a point: it goes there, bound to the
+    /// Drop an end of a connector at a point: it goes there, bound to the
     /// topmost shape within `tolerance` — any but the arrow — or unbound.
     /// Returns what it was bound to. One undo step.
     @discardableResult
@@ -274,6 +290,10 @@ extension Bounds {
     init(_ r: CGRect) {
         self.init(x: Double(r.origin.x), y: Double(r.origin.y), width: Double(r.size.width), height: Double(r.size.height))
     }
+}
+
+extension Point {
+    public var cgPoint: CGPoint { CGPoint(x: x, y: y) }
 }
 
 extension Handle {

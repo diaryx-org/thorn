@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 
+use crate::connector::Connector;
 use crate::drawing::Drawing;
 use crate::ink::{self, Nib};
 use crate::number;
@@ -66,6 +67,10 @@ pub enum Rule {
     /// `data-arrow` is `end`, `start` or `both`: the values the template's
     /// `<style>` draws a head for.
     ArrowHeads,
+    /// `data-arrow`, `data-from` and `data-to` sit on a connector — a
+    /// `<line>`, or a `<path>` of one segment (`M` then `L` or `Q`) that
+    /// is not ink — which is what the editor can bind, settle and bend.
+    Connector,
     /// `data-ink` names a nib the editor draws — `monoline` — and the
     /// stroke carries the `data-centreline` and `data-widths` its outline
     /// was computed from.
@@ -88,6 +93,9 @@ impl Rule {
                 "every geometry attribute is a number with at most three decimals and no trailing zeros"
             }
             Self::ArrowHeads => "data-arrow is end, start or both",
+            Self::Connector => {
+                "data-arrow, data-from and data-to are on a <line> or a <path> of one segment"
+            }
             Self::InkNib => {
                 "data-ink names a nib the editor draws, with data-centreline and data-widths beside it"
             }
@@ -185,6 +193,19 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                 rule: Rule::ArrowHeads,
                 shape: shape.id.clone(),
                 message: format!("<{tag}> data-arrow={value:?} is not end, start or both"),
+            });
+        }
+        if let Some(name) = ["data-arrow", "data-from", "data-to"]
+            .into_iter()
+            .find(|name| shape.attr(name).is_some())
+            && Connector::of(shape).is_none()
+        {
+            findings.push(Finding {
+                rule: Rule::Connector,
+                shape: shape.id.clone(),
+                message: format!(
+                    "<{tag}> carries {name} but is not a <line> or a <path> of one segment (M then L or Q)"
+                ),
             });
         }
         if let Some(value) = shape.attr("data-ink") {

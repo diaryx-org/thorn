@@ -120,8 +120,10 @@ public final class CanvasModel {
         /// The selection moving as one; `start` is the box around it all.
         case move(ids: [String], start: CGRect, delta: CGVector)
         case resize(id: String, handle: Handle, start: CGRect, delta: CGVector)
-        /// An end of a line being dragged; `other` is the end staying put.
+        /// An end of a connector being dragged; `other` is the end staying put.
         case endpoint(id: String, end: End, other: CGPoint, to: CGPoint)
+        /// A connector's midpoint handle being dragged: the bend.
+        case bend(id: String, to: CGPoint)
         case create(from: CGPoint, to: CGPoint)
         /// The draw tool: the centreline so far, in user units.
         case ink(points: [CGPoint])
@@ -236,19 +238,26 @@ public final class CanvasModel {
         for id in selection {
             guard let bounds = selectionBounds(id) else { continue }
             let r = viewRect(bounds)
-            // A lone line is outlined as itself, its handles its ends —
-            // filled when bound to a shape. Everything else is its box,
-            // with handles when it can be resized by them; a group of
-            // shapes moves as one and is resized one at a time.
-            if selection.count == 1, let ends = endpoints(id), ends.count == 2 {
-                context.move(to: viewPoint(ends[0].1))
-                context.addLine(to: viewPoint(ends[1].1))
+            // A lone connector is outlined as itself, its handles its ends
+            // — filled when bound to a shape — and a round one half-way
+            // along, which bends it. Everything else is its box, with
+            // handles when it can be resized by them; a group of shapes
+            // moves as one and is resized one at a time.
+            if selection.count == 1, let c = document.connector(id: id) {
+                context.move(to: viewPoint(c.from.cgPoint))
+                if let control = c.control {
+                    context.addQuadCurve(to: viewPoint(c.to.cgPoint), control: viewPoint(control.cgPoint))
+                } else {
+                    context.addLine(to: viewPoint(c.to.cgPoint))
+                }
                 context.strokePath()
-                for (end, p) in ends {
+                for (end, p) in [(End.from, c.from), (.to, c.to)] {
                     let bound = document.binding(id: id, end) != nil
                     context.setFillColor(bound ? accent : CGColor(gray: 1, alpha: 1))
-                    handleBox(at: viewPoint(p), in: context)
+                    handleBox(at: viewPoint(p.cgPoint), in: context)
                 }
+                context.setFillColor(CGColor(gray: 1, alpha: 1))
+                handleDot(at: viewPoint(c.midpoint.cgPoint), in: context)
                 continue
             }
             context.stroke(r)
@@ -304,16 +313,30 @@ public final class CanvasModel {
         context.stroke(box)
     }
 
+    /// The bend handle: round, so it reads as a different thing from an
+    /// end.
+    private func handleDot(at p: CGPoint, in context: CGContext) {
+        let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
+        context.fillEllipse(in: box)
+        context.strokeEllipse(in: box)
+    }
+
     /// A selected shape's box as drawn.
     private func selectionBounds(_ id: String) -> CGRect? {
         document.bounds(id: id)
     }
 
-    /// A `<line>`'s ends, in user units — its handles; `nil` for any other
-    /// kind.
+    /// A connector's ends, in user units — its handles; `nil` for any
+    /// other kind.
     private func endpoints(_ id: String) -> [(End, CGPoint)]? {
-        guard document.shape(id: id)?.kind == .line else { return nil }
-        return [End.from, .to].compactMap { end in document.endPoint(id: id, end).map { (end, $0) } }
+        guard let c = document.connector(id: id) else { return nil }
+        return [(End.from, c.from.cgPoint), (.to, c.to.cgPoint)]
+    }
+
+    /// Whether a user point is within the tolerance of another: on a
+    /// handle.
+    private func near(_ p: CGPoint, _ q: CGPoint) -> Bool {
+        abs(p.x - q.x) <= userTolerance && abs(p.y - q.y) <= userTolerance
     }
 
     /// The box around the whole selection.
@@ -322,11 +345,11 @@ public final class CanvasModel {
     }
 
     /// Whether a lone selected shape can be resized by its box handles: a
-    /// line is dragged by its ends instead. A label's handles set the
-    /// width it wraps to.
+    /// connector is dragged by its ends and its bend instead. A label's
+    /// handles set the width it wraps to.
     private var resizable: String? {
         guard selection.count == 1, let id = selection.first,
-              let shape = document.shape(id: id), shape.kind != .line else { return nil }
+              document.shape(id: id) != nil, document.connector(id: id) == nil else { return nil }
         return id
     }
 
@@ -340,9 +363,12 @@ public final class CanvasModel {
         switch tool {
         case .select:
             if selection.count == 1, let id = selection.first, let ends = endpoints(id),
-               let (end, at) = ends.first(where: { abs($0.1.x - p.x) <= userTolerance && abs($0.1.y - p.y) <= userTolerance }),
+               let (end, at) = ends.first(where: { near($0.1, p) }),
                let other = ends.first(where: { $0.0 != end })?.1 {
                 drag = .endpoint(id: id, end: end, other: other, to: at)
+            } else if selection.count == 1, let id = selection.first, let c = document.connector(id: id),
+                      near(c.midpoint.cgPoint, p) {
+                drag = .bend(id: id, to: c.midpoint.cgPoint)
             } else if let id = resizable, let b = selectionBounds(id),
                let h = Handle.at(p, on: b, tolerance: userTolerance) {
                 drag = .resize(id: id, handle: h, start: b, delta: .zero)
@@ -408,6 +434,8 @@ public final class CanvasModel {
             drag = .resize(id: id, handle: handle, start: start, delta: CGVector(dx: p.x - origin.x, dy: p.y - origin.y))
         case .endpoint(let id, let end, let other, _):
             drag = .endpoint(id: id, end: end, other: other, to: p)
+        case .bend(let id, _):
+            drag = .bend(id: id, to: p)
         case .create(let from, _):
             drag = .create(from: from, to: p)
         case .ink(var points):
@@ -451,6 +479,13 @@ public final class CanvasModel {
             // now on; dropped on nothing, it is unbound.
             _ = try? document.dropEnd(id: id, end, at: to, tolerance: userTolerance)
             return true
+        case .bend(let id, let to):
+            // Dragged back onto the chord, within the tolerance, it is
+            // straight again.
+            guard let c = document.connector(id: id) else { return false }
+            let straight = distance(from: to, toSegment: c.from.cgPoint, c.to.cgPoint) <= userTolerance
+            try? document.bend(id: id, through: straight ? nil : to)
+            return true
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
             guard box.width > 0 || box.height > 0 else { return false }
@@ -476,12 +511,20 @@ public final class CanvasModel {
     /// The view point the drag began at, remembered by `pointerDown`.
     private var startViewPoint: CGPoint?
 
+    /// How far a point is from the segment `a`–`b`.
+    private func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let (dx, dy) = (b.x - a.x, b.y - a.y)
+        let length = dx * dx + dy * dy
+        let t = length == 0 ? 0 : max(0, min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length))
+        return hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+    }
+
     /// Pointer up: the gesture in flight lands as one splice — the last
     /// preview, which is already in the document.
     public func pointerUp() {
         defer { drag = nil; startViewPoint = nil; previewed = false; created = nil; needsDisplay?() }
         switch drag {
-        case .move, .resize, .endpoint:
+        case .move, .resize, .endpoint, .bend:
             if !previewed { previewed = apply() }
         case .create:
             if !previewed { previewed = apply() }

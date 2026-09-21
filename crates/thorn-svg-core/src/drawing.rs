@@ -16,10 +16,11 @@
 //! `transform` of its own, is mapped through the chain here; [`geometry`]
 //! and [`hit`](crate::hit) work in a shape's own coordinates.
 //!
-//! An arrow — a `<line>` with `data-from` or `data-to` naming a shape — is
-//! kept on that shape's edge: every gesture that moves a shape ends by
-//! settling the arrows bound to it, in the same undo step, and deleting a
-//! shape takes the bindings to it off.
+//! An arrow — a connector (a `<line>`, or a one-segment `<path>`, see
+//! [`Connector`]) with `data-from` or `data-to` naming a shape — is kept on
+//! that shape's edge: every gesture that moves a shape ends by settling the
+//! arrows bound to it, in the same undo step, and deleting a shape takes
+//! the bindings to it off.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +28,7 @@ use std::fmt::Write as _;
 
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
+use crate::connector::{Connector, End};
 use crate::geometry::{self, Bounds, Update};
 use crate::ink::{self, Nib};
 use crate::measure::{Font, Measure};
@@ -50,8 +52,8 @@ pub enum Error {
     NoSuchShape(String),
     /// The gesture is not defined for this shape: ungrouping what is not a
     /// `<g>`, resizing a shape under a rotation by a box, moving one whose
-    /// `transform` maps everything to a point, binding an end of what is
-    /// not a `<line>`.
+    /// `transform` maps everything to a point, binding or bending what is
+    /// not a connector.
     #[error("{gesture} is not defined for this <{}>", kind.tag())]
     Unsupported {
         gesture: &'static str,
@@ -134,40 +136,6 @@ pub const NOTE_PAD: f64 = 8.0;
 pub struct Note {
     pub frame: String,
     pub label: String,
-}
-
-/// An end of an arrow: the coordinates it is at and the attribute that
-/// binds it to a shape.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub enum End {
-    /// `(x1, y1)`, bound by `data-from`.
-    From,
-    /// `(x2, y2)`, bound by `data-to`.
-    To,
-}
-
-impl End {
-    /// The attribute that binds this end.
-    pub fn binding(self) -> &'static str {
-        match self {
-            End::From => "data-from",
-            End::To => "data-to",
-        }
-    }
-
-    fn coords(self) -> (&'static str, &'static str) {
-        match self {
-            End::From => ("x1", "y1"),
-            End::To => ("x2", "y2"),
-        }
-    }
-
-    fn other(self) -> End {
-        match self {
-            End::From => End::To,
-            End::To => End::From,
-        }
-    }
 }
 
 /// A drawing being edited.
@@ -1133,28 +1101,134 @@ impl Drawing {
 
     // ----- arrows ----------------------------------------------------------
 
-    /// Where an end of a `<line>` is, in the root's user units. `None` for
-    /// any other kind.
+    /// Where an end of a connector is, in the root's user units. `None`
+    /// for what is not one.
     pub fn end_point(&self, id: &str, end: End) -> Option<(f64, f64)> {
-        let shape = self.shape(id)?;
-        if shape.kind != ShapeKind::Line {
-            return None;
-        }
-        let (x, y) = end.coords();
-        let t = self.ctm(shape);
-        Some(t.apply(
-            shape.number(x).unwrap_or(0.0),
-            shape.number(y).unwrap_or(0.0),
-        ))
+        Some(self.connector(id)?.end(end))
     }
 
-    /// Bind an end of a `<line>` to a shape — `data-from` or `data-to`
+    /// A shape as a connector — a `<line>`, or a `<path>` of one straight
+    /// or bent segment — in the root's user units: its ends, and its
+    /// control point when bent. `None` for what is not one. A host draws
+    /// the handles from this: one at each end, one at
+    /// [`Connector::midpoint`] for the bend.
+    pub fn connector(&self, id: &str) -> Option<Connector> {
+        let shape = self.shape(id)?;
+        let c = Connector::of(shape)?;
+        let t = self.ctm(shape);
+        let map = |(x, y): (f64, f64)| t.apply(x, y);
+        Some(Connector {
+            from: map(c.from),
+            to: map(c.to),
+            control: c.control.map(map),
+        })
+    }
+
+    /// Bend a connector so it passes through `(x, y)`, in the root's user
+    /// units, half-way along — the gesture of dragging the handle at its
+    /// midpoint — or, with `None`, straighten it. A `<line>` bent becomes
+    /// a `<path>` with a `Q`, every other attribute kept in place; a
+    /// `<path>` straightened becomes a `<line>` again. An end bound to a
+    /// shape is re-settled to leave the shape along the new tangent. One
+    /// undo step. `Unsupported` for what is not a connector.
+    pub fn bend(&mut self, id: &str, through: Option<(f64, f64)>) -> Result<(), Error> {
+        let (shape, c) = self.arrow(id, "bend")?;
+        let shape = shape.clone();
+        let unsupported = || Error::Unsupported {
+            gesture: "bend",
+            kind: shape.kind,
+        };
+        let bent = match through {
+            Some((x, y)) => {
+                let (lx, ly) = self
+                    .ctm(&shape)
+                    .inverse()
+                    .ok_or_else(unsupported)?
+                    .apply(x, y);
+                // A bound end leaves its shape toward the control point,
+                // so where the ends settle depends on the bend and the
+                // bend on the ends; a few rounds meet in the middle, and
+                // the handle lands where it was dropped.
+                let mut bent = c.through((lx, ly));
+                for _ in 0..8 {
+                    let next = self.settled(&shape, bent).through((lx, ly));
+                    let close = |a: (f64, f64), b: (f64, f64)| {
+                        (a.0 - b.0).abs() < 1e-6 && (a.1 - b.1).abs() < 1e-6
+                    };
+                    if close(next.from, bent.from) && close(next.to, bent.to) {
+                        break;
+                    }
+                    bent = next;
+                }
+                bent
+            }
+            None => c.straight(),
+        };
+        let mut steps = 0;
+        match (shape.kind, bent.is_bent()) {
+            (ShapeKind::Path, true) => {
+                self.write_attrs(shape.node, &shape.attrs, &[("d", Some(bent.d()))])?;
+            }
+            (ShapeKind::Path, false) => {
+                // Straight, it is a `<line>` again: the ends where `d` was.
+                let mut attrs = shape.attrs.clone();
+                let at = attrs.iter().position(|(k, _)| k == "d").unwrap_or(0);
+                attrs.retain(|(k, _)| k != "d");
+                for (i, (name, value)) in bent.line_attrs().into_iter().enumerate() {
+                    attrs.insert((at + i).min(attrs.len()), (name.to_string(), Some(value)));
+                }
+                self.retag(shape.node, "line", &attrs)?;
+            }
+            (_, false) => {
+                // A `<line>` is already straight.
+                return Ok(());
+            }
+            (_, true) => {
+                // The `<line>` becomes a `<path>`: `d` where `x1` was, the
+                // other attributes as they were.
+                let mut attrs = shape.attrs.clone();
+                let at = attrs.iter().position(|(k, _)| k == "x1").unwrap_or(0);
+                attrs.retain(|(k, _)| !["x1", "y1", "x2", "y2"].contains(&k.as_str()));
+                attrs.insert(at.min(attrs.len()), ("d".to_string(), Some(bent.d())));
+                self.retag(shape.node, "path", &attrs)?;
+            }
+        }
+        self.fold(&mut steps)?;
+        self.settle(&[id], &mut steps)
+    }
+
+    /// Rewrite an element as `<tag>` with `attrs`, its interior kept:
+    /// one `edit_range` over the element.
+    fn retag(
+        &mut self,
+        node: NodeId,
+        tag: &str,
+        attrs: &[(String, Option<String>)],
+    ) -> Result<(), Error> {
+        let node = self.node(node);
+        let span = node.span.clone();
+        let mut markup = format!("<{tag}");
+        write_attributes(&mut markup, attrs, &[]);
+        match node.content_span.clone() {
+            Some(content) => {
+                let inner = &self.source[content];
+                write!(markup, ">{inner}</{tag}>").expect("writing to a String");
+            }
+            None => markup.push_str("/>"),
+        }
+        self.editor
+            .edit_range(span.start, span.end, &markup)
+            .map_err(Error::Edit)?;
+        self.reload()
+    }
+
+    /// Bind an end of a connector to a shape — `data-from` or `data-to`
     /// written, and the end put on the shape's edge, facing the other end
     /// — or, with `None`, unbind it, the end staying put. One undo step.
-    /// `Unsupported` for what is not a `<line>`; `NoSuchShape` for a
+    /// `Unsupported` for what is not a connector; `NoSuchShape` for a
     /// target that is not there, the arrow itself included.
     pub fn bind(&mut self, id: &str, end: End, target: Option<&str>) -> Result<(), Error> {
-        let shape = self.arrow(id, "bind")?;
+        let (shape, _) = self.arrow(id, "bind")?;
         if let Some(target) = target
             && (target == id || self.shape(target).is_none())
         {
@@ -1166,8 +1240,8 @@ impl Drawing {
         self.settle(&[id], &mut steps)
     }
 
-    /// Drop an end of a `<line>` at `(x, y)`, in the root's user units: the
-    /// end goes there, and is bound to the topmost shape within
+    /// Drop an end of a connector at `(x, y)`, in the root's user units:
+    /// the end goes there, and is bound to the topmost shape within
     /// `tolerance` of the point — any but the arrow itself — or unbound if
     /// there is none. Returns what it was bound to. One undo step; the
     /// gesture a canvas makes of dragging an endpoint handle.
@@ -1179,7 +1253,7 @@ impl Drawing {
         y: f64,
         tolerance: f64,
     ) -> Result<Option<String>, Error> {
-        let shape = self.arrow(id, "drop end")?;
+        let (shape, mut c) = self.arrow(id, "drop end")?;
         let unsupported = || Error::Unsupported {
             gesture: "drop end",
             kind: shape.kind,
@@ -1192,30 +1266,47 @@ impl Drawing {
             .inverse()
             .ok_or_else(unsupported)?
             .apply(x, y);
-        let (xn, yn) = end.coords();
-        let updates = [
-            (xn, Some(number::fmt(lx))),
-            (yn, Some(number::fmt(ly))),
-            (end.binding(), target.clone()),
-        ];
+        c.set_end(end, (lx, ly));
+        let mut updates = Self::connector_updates(shape, &c);
+        updates.push((end.binding(), target.clone()));
         self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
         let mut steps = 1;
         self.settle(&[id], &mut steps)?;
         Ok(target)
     }
 
-    /// The `<line>` with this id, for a binding gesture.
-    fn arrow(&self, id: &str, gesture: &'static str) -> Result<&Shape, Error> {
+    /// The connector with this id, for a binding gesture.
+    fn arrow(&self, id: &str, gesture: &'static str) -> Result<(&Shape, Connector), Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
-        if shape.kind != ShapeKind::Line {
-            return Err(Error::Unsupported {
-                gesture,
-                kind: shape.kind,
-            });
+        let c = Connector::of(shape).ok_or(Error::Unsupported {
+            gesture,
+            kind: shape.kind,
+        })?;
+        Ok((shape, c))
+    }
+
+    /// The attributes that put `shape`'s geometry at `c` — of a `<line>`,
+    /// the ends that differ; of a `<path>`, its `d` when it differs.
+    /// Empty when nothing would change.
+    fn connector_updates(shape: &Shape, c: &Connector) -> Vec<Update> {
+        match shape.kind {
+            ShapeKind::Line => c
+                .line_attrs()
+                .into_iter()
+                .filter(|(name, value)| shape.number(name).map(number::fmt).as_ref() != Some(value))
+                .map(|(name, value)| (name, Some(value)))
+                .collect(),
+            _ => {
+                let d = c.d();
+                if shape.attr("d") == Some(d.as_str()) {
+                    Vec::new()
+                } else {
+                    vec![("d", Some(d))]
+                }
+            }
         }
-        Ok(shape)
     }
 
     /// Put every arrow that `affected` reaches — one of them, or bound to
@@ -1230,7 +1321,7 @@ impl Drawing {
         let arrows: Vec<String> = self
             .shapes
             .iter()
-            .filter(|s| s.kind == ShapeKind::Line)
+            .filter(|s| Connector::of(s).is_some())
             .filter(|s| {
                 let bound = |end: End| s.attr(end.binding());
                 (bound(End::From).is_some() || bound(End::To).is_some())
@@ -1266,20 +1357,29 @@ impl Drawing {
         }
     }
 
-    /// The ends of an arrow moved onto their targets' edges: each bound end
-    /// on the segment from its target's centre to the other end's anchor —
-    /// the other target's centre, or the other end itself.
+    /// The ends of an arrow moved onto their targets' edges, as the
+    /// attributes that put them there; empty when they are there already.
     fn settled_ends(&self, arrow: &Shape) -> Vec<Update> {
+        match Connector::of(arrow) {
+            Some(c) => Self::connector_updates(arrow, &self.settled(arrow, c)),
+            None => Vec::new(),
+        }
+    }
+
+    /// `local` — `arrow`'s geometry, in its own coordinates — with each
+    /// bound end on the segment from its target's centre to what the end
+    /// faces: the bend's control point, or the other end's anchor (the
+    /// other target's centre, or the other end itself).
+    fn settled(&self, arrow: &Shape, local: Connector) -> Connector {
         let t = self.ctm(arrow);
         let Some(back) = t.inverse() else {
-            return Vec::new();
+            return local;
         };
-        let at = |end: End| {
-            let (x, y) = end.coords();
-            t.apply(
-                arrow.number(x).unwrap_or(0.0),
-                arrow.number(y).unwrap_or(0.0),
-            )
+        let map = |(x, y): (f64, f64)| t.apply(x, y);
+        let c = Connector {
+            from: map(local.from),
+            to: map(local.to),
+            control: local.control.map(map),
         };
         let target = |end: End| {
             arrow
@@ -1290,24 +1390,17 @@ impl Drawing {
         };
         let anchor = |end: End| match target(end) {
             Some((_, b)) => (b.x + b.width / 2.0, b.y + b.height / 2.0),
-            None => at(end),
+            None => c.end(end),
         };
-        let mut updates = Vec::new();
+        let mut settled = local;
         for end in [End::From, End::To] {
             let Some((shape, _)) = target(end) else {
                 continue;
             };
-            let (px, py) = self.edge(shape, anchor(end), anchor(end.other()));
-            let (lx, ly) = back.apply(px, py);
-            let (xn, yn) = end.coords();
-            for (name, value) in [(xn, lx), (yn, ly)] {
-                let written = number::fmt(value);
-                if arrow.number(name).map(number::fmt) != Some(written.clone()) {
-                    updates.push((name, Some(written)));
-                }
-            }
+            let (px, py) = self.edge(shape, anchor(end), c.facing(anchor(end.other())));
+            settled.set_end(end, back.apply(px, py));
         }
-        updates
+        settled
     }
 
     /// Where the segment from `from` (inside `shape`) to `to` last leaves
@@ -1376,7 +1469,7 @@ impl Drawing {
         let dangling: Vec<(String, Vec<Update>)> = self
             .shapes
             .iter()
-            .filter(|s| s.kind == ShapeKind::Line)
+            .filter(|s| Connector::of(s).is_some())
             .filter_map(|s| {
                 let gone: Vec<Update> = [End::From, End::To]
                     .into_iter()
@@ -2307,8 +2400,7 @@ mod tests {
 
     /// The end is on the rim of the circle of radius 10 at `centre`.
     fn on_rim(line: &Shape, end: End, centre: (f64, f64)) {
-        let (xn, yn) = end.coords();
-        let (x, y) = (line.number(xn).unwrap(), line.number(yn).unwrap());
+        let (x, y) = Connector::of(line).unwrap().end(end);
         let r = ((x - centre.0).powi(2) + (y - centre.1).powi(2)).sqrt();
         assert!((r - 10.0).abs() < 0.05, "on the rim of {centre:?}: {x} {y}");
     }
@@ -2438,6 +2530,140 @@ mod tests {
         assert_eq!(line.attr("x1"), Some("110"));
         assert!(d.undo().unwrap());
         assert_eq!(d.shape("s3").unwrap().attr("data-from"), Some(&*g));
+    }
+
+    #[test]
+    fn a_bend_makes_a_line_a_path_and_back_and_a_bound_end_faces_the_bend() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        d.bind("s3", End::From, Some("s1")).unwrap();
+        d.bind("s3", End::To, Some("s2")).unwrap();
+        // Straight, from (30, 20) to (90, 20); its midpoint is the handle.
+        let c = d.connector("s3").unwrap();
+        assert_eq!(
+            (c.from, c.to, c.control),
+            ((30.0, 20.0), (90.0, 20.0), None)
+        );
+        assert_eq!(c.midpoint(), (60.0, 20.0));
+
+        // Pulled down to pass through (60, 50): the line becomes a path
+        // with `d` where `x1` was, the binding attributes kept, and each
+        // bound end re-settled to leave its shape toward the control
+        // point.
+        d.bend("s3", Some((60.0, 50.0))).unwrap();
+        let shape = d.shape("s3").unwrap();
+        assert_eq!(shape.kind, ShapeKind::Path);
+        assert!(
+            d.source().contains("\n  <path d=\"M"),
+            "d where x1 was: {}",
+            d.source()
+        );
+        assert!(
+            d.source()
+                .contains("data-id=\"s3\" data-from=\"s1\" data-to=\"s2\"/>")
+        );
+        let c = d.connector("s3").unwrap();
+        let (mx, my) = c.midpoint();
+        assert!(
+            (mx - 60.0).abs() < 0.01 && (my - 50.0).abs() < 0.01,
+            "{c:?}"
+        );
+        // From the rect's centre toward a control point below and right,
+        // the start leaves the rect's bottom edge.
+        assert!(
+            c.from.1 == 30.0 && c.from.0 > 20.0 && c.from.0 < 30.0,
+            "{c:?}"
+        );
+        on_rim(shape, End::To, (100.0, 20.0));
+        assert!(
+            c.to.1 > 20.0,
+            "leaves the rim below its leftmost point: {c:?}"
+        );
+        assert!(d.check().is_empty(), "{:?}", d.check());
+        // One step.
+        assert!(d.undo().unwrap());
+        assert_eq!(d.shape("s3").unwrap().kind, ShapeKind::Line);
+        assert!(d.redo().unwrap());
+
+        // The circle moves: the bent arrow's end follows, in the path's
+        // `d`, and the bend is kept.
+        let control = d.connector("s3").unwrap().control;
+        d.move_by("s2", 0.0, 60.0).unwrap();
+        let c = d.connector("s3").unwrap();
+        on_rim(d.shape("s3").unwrap(), End::To, (100.0, 80.0));
+        assert_eq!(c.control, control);
+        assert!(d.undo().unwrap());
+
+        // Moving the arrow itself bakes into the `d` and keeps it a
+        // connector; the bytes it writes are the bytes a bend writes.
+        d.bind("s3", End::From, None).unwrap();
+        d.bind("s3", End::To, None).unwrap();
+        let before = d.shape("s3").unwrap().attr("d").unwrap().to_string();
+        let unbound = d.connector("s3").unwrap();
+        d.move_by("s3", 10.0, 0.0).unwrap();
+        let moved = d.connector("s3").unwrap();
+        assert_eq!(moved.from, (unbound.from.0 + 10.0, unbound.from.1));
+        assert!(d.shape("s3").unwrap().attr("transform").is_none());
+        d.move_by("s3", -10.0, 0.0).unwrap();
+        assert_eq!(d.shape("s3").unwrap().attr("d"), Some(before.as_str()));
+
+        // An end dragged keeps the control point where it was.
+        d.drop_end("s3", End::To, 150.0, 90.0, 0.0).unwrap();
+        let c = d.connector("s3").unwrap();
+        assert_eq!((c.to, c.control), ((150.0, 90.0), unbound.control));
+
+        // Straightened, it is a `<line>` again, its ends where they were.
+        d.bend("s3", None).unwrap();
+        let shape = d.shape("s3").unwrap();
+        assert_eq!(shape.kind, ShapeKind::Line);
+        assert_eq!(
+            (shape.attr("x2"), shape.attr("y2")),
+            (Some("150"), Some("90"))
+        );
+        assert!(d.source().contains("<line x1=\""));
+        assert_eq!(d.connector("s3").unwrap().control, None);
+        // Straightening a line is nothing.
+        d.bend("s3", None).unwrap();
+        assert!(d.check().is_empty());
+
+        assert!(matches!(
+            d.bend("s1", Some((0.0, 0.0))),
+            Err(Error::Unsupported {
+                gesture: "bend",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn a_hand_written_one_segment_path_is_a_connector_and_ink_is_not() {
+        let src = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <circle cx=\"100\" cy=\"20\" r=\"10\" data-id=\"s2\"/>\n  <path d=\"M 0 0 q 50 80, 100 0\" data-arrow=\"end\" data-id=\"p\"/>\n  <path d=\"M0 0 L1 1\" data-ink=\"monoline\" data-centreline=\"M0 0 L1 1\" data-widths=\"2\" data-id=\"i\"/>\n</svg>\n";
+        let mut d = Drawing::open(src).unwrap();
+        assert_eq!(
+            d.connector("p"),
+            Some(Connector {
+                from: (0.0, 0.0),
+                to: (100.0, 0.0),
+                control: Some((50.0, 80.0))
+            })
+        );
+        assert_eq!(d.shape("p").unwrap().heads(), Some(Heads::End));
+        assert_eq!(d.connector("i"), None);
+        assert!(matches!(
+            d.bend("i", None),
+            Err(Error::Unsupported {
+                gesture: "bend",
+                ..
+            })
+        ));
+        // Bound, the `d` is rewritten in the profile's spelling.
+        d.bind("p", End::To, Some("s2")).unwrap();
+        let p = d.shape("p").unwrap();
+        assert!(
+            p.attr("d").unwrap().starts_with("M0 0 Q50 80 "),
+            "{:?}",
+            p.attr("d")
+        );
+        on_rim(p, End::To, (100.0, 20.0));
     }
 
     #[test]

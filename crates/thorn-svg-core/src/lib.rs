@@ -22,6 +22,7 @@
 //!   and the handles a selection is resized by; [`measure`] is how a host
 //!   lends the core its fonts, so a `<text>`'s box is the one it draws.
 
+pub mod connector;
 pub mod drawing;
 pub mod geometry;
 pub mod hit;
@@ -33,7 +34,8 @@ pub mod profile;
 pub mod shape;
 pub mod transform;
 
-pub use drawing::{Drawing, End, Error, NOTE_PAD, Note, Order, Rect};
+pub use connector::{Connector, End};
+pub use drawing::{Drawing, Error, NOTE_PAD, Note, Order, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
 pub use ink::Nib;

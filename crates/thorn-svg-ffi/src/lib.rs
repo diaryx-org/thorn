@@ -351,6 +351,29 @@ impl From<End> for core::End {
     }
 }
 
+/// Mirrors `thorn_svg_core::Connector`: a line-like shape's ends, and its
+/// control point when bent. `midpoint` is where the bend handle sits —
+/// on the stroke, half-way along.
+#[derive(Clone, Copy, Debug, uniffi::Record)]
+pub struct Connector {
+    pub from: Point,
+    pub to: Point,
+    pub control: Option<Point>,
+    pub midpoint: Point,
+}
+
+impl From<core::Connector> for Connector {
+    fn from(c: core::Connector) -> Self {
+        let p = |(x, y): (f64, f64)| Point { x, y };
+        Self {
+            from: p(c.from),
+            to: p(c.to),
+            control: c.control.map(p),
+            midpoint: p(c.midpoint()),
+        }
+    }
+}
+
 /// Mirrors `thorn_svg_core::Order`.
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
 pub enum Order {
@@ -619,21 +642,40 @@ impl Drawing {
         Ok(self.lock().ungroup(&id)?)
     }
 
-    /// Where an end of a `<line>` is, in the root's user units; `None`
-    /// for any other kind.
+    /// Where an end of a connector is, in the root's user units; `None`
+    /// for what is not one.
     pub fn end_point(&self, id: String, end: End) -> Option<Point> {
         self.lock()
             .end_point(&id, end.into())
             .map(|(x, y)| Point { x, y })
     }
 
-    /// Bind an end of a `<line>` to a shape, the end put on its edge; or,
+    /// A shape as a connector — a `<line>`, or a `<path>` of one straight
+    /// or bent segment — in the root's user units; `None` for what is not
+    /// one.
+    pub fn connector(&self, id: String) -> Option<Connector> {
+        self.lock().connector(&id).map(Into::into)
+    }
+
+    /// Bend a connector to pass through a point half-way along — a
+    /// `<line>` becomes a `<path>` — and re-settle its bound ends. One
+    /// undo step.
+    pub fn bend(&self, id: String, x: f64, y: f64) -> Result<(), DrawingError> {
+        Ok(self.lock().bend(&id, Some((x, y)))?)
+    }
+
+    /// Straighten a bent connector: a `<line>` again. One undo step.
+    pub fn straighten(&self, id: String) -> Result<(), DrawingError> {
+        Ok(self.lock().bend(&id, None)?)
+    }
+
+    /// Bind an end of a connector to a shape, the end put on its edge; or,
     /// with no target, unbind it. One undo step.
     pub fn bind(&self, id: String, end: End, target: Option<String>) -> Result<(), DrawingError> {
         Ok(self.lock().bind(&id, end.into(), target.as_deref())?)
     }
 
-    /// Drop an end of a `<line>` at a point: it goes there, bound to the
+    /// Drop an end of a connector at a point: it goes there, bound to the
     /// topmost shape within `tolerance` — any but the arrow — or unbound.
     /// Returns what it was bound to. One undo step.
     pub fn drop_end(

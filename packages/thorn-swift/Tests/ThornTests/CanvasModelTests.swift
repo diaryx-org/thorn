@@ -462,6 +462,51 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertTrue(try doc.undo(), "one step")
     }
 
+    func testALineIsBentByItsMidpointHandleAndStraightenedByDraggingItBack() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        model.key("l")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 100))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        let straight = try XCTUnwrap(doc.connector(id: id))
+        XCTAssertNil(straight.control)
+        XCTAssertEqual(straight.midpoint.cgPoint, CGPoint(x: 75, y: 50), "the handle is half-way along, in user units")
+
+        // The midpoint handle, at view (150, 100), dragged down 40 view
+        // points — 20 user units — bends the line into a path through there.
+        model.beginPointer(at: CGPoint(x: 150, y: 100))
+        model.pointerDragged(to: CGPoint(x: 150, y: 140))
+        model.pointerUp()
+        XCTAssertEqual(model.selection, [id], "still selected")
+        let bent = try XCTUnwrap(doc.connector(id: id))
+        XCTAssertEqual(doc.shape(id: id)?.kind, .path)
+        XCTAssertEqual(bent.midpoint.cgPoint, CGPoint(x: 75, y: 70))
+        XCTAssertEqual(bent.control?.cgPoint, CGPoint(x: 75, y: 90))
+        XCTAssertTrue(doc.source.contains("<path d=\"M50 50 Q75 90 100 50\" data-id=\"\(id)\"/>"), doc.source)
+        XCTAssertTrue(try doc.undo(), "one step")
+        XCTAssertEqual(doc.shape(id: id)?.kind, .line)
+        XCTAssertTrue(try doc.redo())
+
+        // Its ends are still its handles, and the box handles are not.
+        model.beginPointer(at: CGPoint(x: 200, y: 100))
+        model.pointerDragged(to: CGPoint(x: 240, y: 100))
+        model.pointerUp()
+        XCTAssertEqual(doc.connector(id: id)?.to.cgPoint, CGPoint(x: 120, y: 50))
+        XCTAssertEqual(doc.connector(id: id)?.control?.cgPoint, CGPoint(x: 75, y: 90), "the bend stays")
+        XCTAssertTrue(try doc.undo())
+
+        // Dragged back onto the chord, it is a line again.
+        model.beginPointer(at: CGPoint(x: 150, y: 140))
+        model.pointerDragged(to: CGPoint(x: 150, y: 102))
+        model.pointerUp()
+        XCTAssertEqual(doc.shape(id: id)?.kind, .line)
+        XCTAssertTrue(doc.source.contains("<line x1=\"50\" y1=\"50\" x2=\"100\" y2=\"50\" data-id=\"\(id)\"/>"), doc.source)
+        XCTAssertNil(doc.connector(id: id)?.control)
+    }
+
     func testTheDrawToolInksAStrokeAsOneStep() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)
