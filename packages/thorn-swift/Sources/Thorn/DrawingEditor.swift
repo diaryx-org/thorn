@@ -30,7 +30,13 @@ public struct DrawingEditor: View {
     @ObservedObject private var state: EditorState
 
     public init(document: DrawingDocument) {
-        state = EditorState(model: CanvasModel(document: document))
+        self.init(model: CanvasModel(document: document))
+    }
+
+    /// Over a model the host owns — so it can listen to `onDocumentChange`
+    /// and save, or pick the tool from outside the toolbar.
+    public init(model: CanvasModel) {
+        state = EditorState(model: model)
     }
 
     public var body: some View {

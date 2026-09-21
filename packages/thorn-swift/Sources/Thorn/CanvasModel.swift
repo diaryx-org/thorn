@@ -93,6 +93,12 @@ public final class CanvasModel {
     public var onSelectionChange: (([String]) -> Void)?
     /// Called when the picture or overlay needs redrawing.
     public var needsDisplay: (() -> Void)?
+    /// Called after every gesture lands in the document — the host's cue to
+    /// save `document.source`. The model owns `document.onChange` (it keeps
+    /// the selection honest and redraws), so a host listens here. It fires
+    /// for each application during a drag as well as for the one step that
+    /// lands on pointer-up, so a host that writes a file debounces.
+    public var onDocumentChange: (() -> Void)?
     /// Called to open a text field for a label — a double-click on one, or
     /// a click with the label tool. The view calls `commitTextEdit` with
     /// what was typed, or nothing to leave the label as it was.
@@ -137,6 +143,7 @@ public final class CanvasModel {
             guard let self else { return }
             selection = selection.filter { document.shape(id: $0) != nil }
             needsDisplay?()
+            onDocumentChange?()
         }
     }
 
