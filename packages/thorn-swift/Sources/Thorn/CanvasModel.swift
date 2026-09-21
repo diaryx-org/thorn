@@ -69,8 +69,19 @@ public final class CanvasModel {
     /// Called when `locked` changes.
     public var onLockChange: ((Bool) -> Void)?
     /// How far the picture has been dragged from where it fits, in view
-    /// points: the hand tool's doing.
+    /// points: the hand tool's doing, and a scroll's.
     public private(set) var pan: CGVector = .zero
+    /// How much larger than fitted the picture is drawn: `1` fits the view,
+    /// `2` is twice that. A pinch's doing, and the zoom commands'. Zoom and
+    /// pan are the view's, not the document's, so neither is an undo step.
+    public private(set) var zoom: CGFloat = 1 {
+        didSet { if zoom != oldValue { onZoomChange?(zoom) } }
+    }
+    /// Called when `zoom` changes.
+    public var onZoomChange: ((CGFloat) -> Void)?
+    /// The least and the most the picture is drawn at: Excalidraw's 10% to
+    /// 3000%.
+    public static let zoomRange: ClosedRange<CGFloat> = 0.1...30
 
     /// The selected shapes' `data-id`s, in the order they were picked. A
     /// click on a member of a group selects the outermost group; a
@@ -95,6 +106,9 @@ public final class CanvasModel {
     /// User units → view points for the last `draw`: asked of the picture, so
     /// it is the fit `SVGPicture.draw` drew under and cannot disagree with it.
     private var fit: CGAffineTransform = .identity
+    /// The `rect` of the last `draw`: what a zoom command zooms about the
+    /// middle of.
+    private var drawnRect: CGRect = .zero
 
     private enum Drag {
         /// The selection moving as one; `start` is the box around it all.
@@ -136,14 +150,71 @@ public final class CanvasModel {
 
     private var userTolerance: CGFloat { tolerance / fit.a }
 
+    // MARK: Zoom and pan
+
+    /// Zoom by `factor` about a view point, which stays over the same
+    /// user point: a pinch's increment, or a wheel's with the command key.
+    /// Clamped to `zoomRange`.
+    public func zoom(by factor: CGFloat, about viewPoint: CGPoint) {
+        setZoom(zoom * factor, about: viewPoint)
+    }
+
+    /// Zoom to `zoom` about a view point, which stays over the same user
+    /// point. Clamped to `zoomRange`.
+    public func setZoom(_ zoom: CGFloat, about viewPoint: CGPoint) {
+        let clamped = min(max(zoom, Self.zoomRange.lowerBound), Self.zoomRange.upperBound)
+        guard clamped != self.zoom else { return }
+        // The picture is drawn at `zoom * fit₀ + pan`, so the view point
+        // is `zoom * u + pan` for its user point `u`; scaling by `k` keeps
+        // it there when `pan` moves to `c - k * (c - pan)`.
+        let k = clamped / self.zoom
+        pan = CGVector(dx: viewPoint.x - k * (viewPoint.x - pan.dx), dy: viewPoint.y - k * (viewPoint.y - pan.dy))
+        self.zoom = clamped
+        needsDisplay?()
+    }
+
+    /// Zoom by `factor` about the middle of the view: the zoom commands.
+    public func zoom(by factor: CGFloat) {
+        zoom(by: factor, about: CGPoint(x: drawnRect.midX, y: drawnRect.midY))
+    }
+
+    /// One step in: Cmd-+.
+    public func zoomIn() { zoom(by: Self.zoomStep) }
+    /// One step out: Cmd-−.
+    public func zoomOut() { zoom(by: 1 / Self.zoomStep) }
+    /// What a zoom command zooms by: √2, so two of them double.
+    public static let zoomStep: CGFloat = 2.squareRoot()
+
+    /// Back to the picture fitted in the view, un-panned: Cmd-0.
+    public func zoomToFit() {
+        guard zoom != 1 || pan != .zero else { return }
+        zoom = 1
+        pan = .zero
+        needsDisplay?()
+    }
+
+    /// Slide the picture by a view vector: a scroll's doing.
+    public func pan(by delta: CGVector) {
+        guard delta != .zero else { return }
+        pan = CGVector(dx: pan.dx + delta.dx, dy: pan.dy + delta.dy)
+        needsDisplay?()
+    }
+
     // MARK: Drawing
 
-    /// Draw the picture fitted into `rect`, then the selection and the drag
-    /// in flight, in a **y-down** context (a `UIView`, a flipped `NSView`).
-    /// `scale` is the context's device pixels per point.
+    /// Draw the picture fitted into `rect`, then zoomed and panned, then the
+    /// selection and the drag in flight, in a **y-down** context (a
+    /// `UIView`, a flipped `NSView`). `scale` is the context's device pixels
+    /// per point.
     public func draw(in context: CGContext, rect: CGRect, scale: CGFloat) {
         guard let picture = document.picture else { return }
-        let panned = rect.offsetBy(dx: pan.dx, dy: pan.dy)
+        drawnRect = rect
+        // The picture fitted into a rect `zoom` times the view's, scaled
+        // about the view's origin and slid by `pan`, is the picture fitted
+        // into the view and then zoomed and panned — the fit transform of
+        // that rect is `zoom * fit₀ + pan`, the one the pinch keeps its
+        // point fixed under.
+        let panned = rect.applying(CGAffineTransform(scaleX: zoom, y: zoom)).offsetBy(dx: pan.dx, dy: pan.dy)
         fit = picture.fitTransform(in: panned)
 
         context.setFillColor(CGColor(gray: 1, alpha: 1))
@@ -422,6 +493,18 @@ public final class CanvasModel {
         default:
             break
         }
+    }
+
+    /// The pointer taken away mid-gesture — a second finger turned the
+    /// touch into a pinch, the system took the touches: nothing lands, and
+    /// what was previewed is undone.
+    public func cancelPointer() {
+        if previewed { _ = try? document.undo() }
+        drag = nil
+        startViewPoint = nil
+        previewed = false
+        created = nil
+        needsDisplay?()
     }
 
     /// A key with no modifier, as the canvas sees it: a tool's key picks

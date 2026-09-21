@@ -320,6 +320,96 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(model.selection, [])
     }
 
+    func testAPinchZoomsAboutItsPointAndTouchesNothing() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let view = CGRect(x: 0, y: 0, width: 400, height: 200)
+        model.draw(in: makeContext(), rect: view, scale: 1)
+        XCTAssertEqual(model.zoom, 1)
+        var told: [CGFloat] = []
+        model.onZoomChange = { told.append($0) }
+
+        // Zooming in twice about view (40, 40) — over user (20, 20) — keeps
+        // that user point under the finger, and the picture follows.
+        model.zoom(by: 2, about: CGPoint(x: 40, y: 40))
+        var context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(model.zoom, 2)
+        XCTAssertEqual(told, [2])
+        XCTAssertEqual(model.pan, CGVector(dx: -40, dy: -40))
+        XCTAssertEqual(model.userPoint(CGPoint(x: 40, y: 40)), CGPoint(x: 20, y: 20))
+        XCTAssertEqual(model.userPoint(CGPoint(x: 44, y: 40)), CGPoint(x: 21, y: 20), "4 points per user unit now")
+        XCTAssertEqual(model.viewPoint(CGPoint(x: 50, y: 30)), CGPoint(x: 160, y: 80), "the rect's corner, four times out from the fixed point")
+        var (r, g, b) = pixel(context, 159, 79)
+        XCTAssertEqual([r, g, b], [255, 0, 0], "the picture is drawn under the zoom")
+        (r, g, b) = pixel(context, 161, 81)
+        XCTAssertNotEqual([r, g, b], [255, 0, 0])
+        XCTAssertFalse(try doc.undo(), "zoom is the view's, not the document's")
+
+        // A click still maps through the zoomed fit: user (20, 20) hits s1,
+        // and a drag of 8 points moves it 2 units.
+        model.beginPointer(at: CGPoint(x: 40, y: 40))
+        XCTAssertEqual(model.selection, ["s1"])
+        model.pointerDragged(to: CGPoint(x: 48, y: 40))
+        model.pointerUp()
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 12, y: 10))
+        XCTAssertTrue(try doc.undo())
+
+        // A step out about the middle keeps what was under it, then back
+        // to the fit.
+        let middle = CGPoint(x: 200, y: 100)
+        XCTAssertEqual(model.userPoint(middle), CGPoint(x: 60, y: 35))
+        model.zoomOut()
+        XCTAssertEqual(model.zoom, 2 / 2.squareRoot(), accuracy: 1e-9)
+        model.draw(in: makeContext(), rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(middle).x, 60, accuracy: 1e-9, "the middle stayed put")
+        XCTAssertEqual(model.userPoint(middle).y, 35, accuracy: 1e-9)
+        model.zoomToFit()
+        XCTAssertEqual(model.zoom, 1)
+        XCTAssertEqual(model.pan, .zero)
+        context = makeContext()
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(CGPoint(x: 40, y: 40)), CGPoint(x: 20, y: 20))
+
+        // Clamped at both ends.
+        model.zoom(by: 1000, about: .zero)
+        XCTAssertEqual(model.zoom, CanvasModel.zoomRange.upperBound)
+        model.zoom(by: 1e-6, about: .zero)
+        XCTAssertEqual(model.zoom, CanvasModel.zoomRange.lowerBound)
+        model.zoomToFit()
+
+        // A scroll slides the picture as the hand does.
+        model.pan(by: CGVector(dx: 20, dy: 10))
+        XCTAssertEqual(model.pan, CGVector(dx: 20, dy: 10))
+        model.draw(in: makeContext(), rect: view, scale: 1)
+        XCTAssertEqual(model.userPoint(CGPoint(x: 60, y: 50)), CGPoint(x: 20, y: 20))
+    }
+
+    func testACancelledDragLandsNothing() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        // A move under way, previewed in the document, is undone.
+        model.beginPointer(at: CGPoint(x: 40, y: 40))
+        model.pointerDragged(to: CGPoint(x: 60, y: 50))
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 20, y: 15))
+        model.cancelPointer()
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 10, y: 10))
+        XCTAssertFalse(try doc.undo(), "and left no step behind")
+
+        // So is a shape being created.
+        model.key("r")
+        model.beginPointer(at: CGPoint(x: 200, y: 20))
+        model.pointerDragged(to: CGPoint(x: 240, y: 60))
+        XCTAssertEqual(doc.shapes.count, 3)
+        model.cancelPointer()
+        XCTAssertEqual(doc.shapes.count, 2)
+        XCTAssertEqual(model.tool, .rect, "the tool is kept: nothing was made")
+        model.pointerUp()
+        XCTAssertEqual(doc.shapes.count, 2, "and a stray up after the cancel does nothing")
+    }
+
     func testTheHandPansAndTheEraserSweepsAsOneStep() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

@@ -122,6 +122,32 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
         model.pointerUp()
     }
 
+    // MARK: Zoom and pan
+
+    /// A pinch on the trackpad zooms about the pointer; `magnification` is
+    /// the change since the last event, as a fraction of the current size.
+    public override func magnify(with event: NSEvent) {
+        model.zoom(by: 1 + event.magnification, about: convert(event.locationInWindow, from: nil))
+    }
+
+    /// A two-finger double-tap zooms in a step about the pointer.
+    public override func smartMagnify(with event: NSEvent) {
+        model.zoom(by: CanvasModel.zoomStep * CanvasModel.zoomStep, about: convert(event.locationInWindow, from: nil))
+    }
+
+    /// A scroll pans; with the command key it zooms about the pointer, as
+    /// Excalidraw's does. A mouse wheel's deltas are in lines, a
+    /// trackpad's in points.
+    public override func scrollWheel(with event: NSEvent) {
+        let lines: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
+        let dx = event.scrollingDeltaX * lines, dy = event.scrollingDeltaY * lines
+        if event.modifierFlags.contains(.command) {
+            model.zoom(by: exp(dy / 100), about: convert(event.locationInWindow, from: nil))
+        } else {
+            model.pan(by: CGVector(dx: dx, dy: dy))
+        }
+    }
+
     /// Delete deletes the selection; a bare key is the model's — a tool's
     /// key, the lock, Escape. A field being typed into is first responder
     /// instead, so its letters never reach here.
@@ -140,6 +166,9 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
     @objc public func delete(_ sender: Any?) { model.deleteSelection() }
     @objc public func group(_ sender: Any?) { model.groupSelection() }
     @objc public func ungroup(_ sender: Any?) { model.ungroupSelection() }
+    @objc public func zoomIn(_ sender: Any?) { model.zoomIn() }
+    @objc public func zoomOut(_ sender: Any?) { model.zoomOut() }
+    @objc public func zoomToFit(_ sender: Any?) { model.zoomToFit() }
 }
 
 #elseif canImport(UIKit)
@@ -152,12 +181,25 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
         self.model = model
         super.init(frame: .zero)
         backgroundColor = .clear
-        isMultipleTouchEnabled = false
+        // Two fingers are a pinch; the drag the first began is cancelled
+        // rather than landed (see `touchesCancelled`).
+        isMultipleTouchEnabled = true
         model.needsDisplay = { [weak self] in self?.setNeedsDisplay() }
         model.onTextEdit = { [weak self] edit in self?.openField(for: edit) }
         let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
+        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:))))
+    }
+
+    // MARK: Zoom
+
+    /// A pinch zooms about its centre. `scale` is cumulative from the
+    /// pinch's start, so it is reset after each step is taken.
+    @objc private func pinched(_ g: UIPinchGestureRecognizer) {
+        guard g.state == .began || g.state == .changed else { return }
+        model.zoom(by: g.scale, about: g.location(in: self))
+        g.scale = 1
     }
 
     // MARK: Typing a label
@@ -225,24 +267,40 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate {
         model.draw(in: context, rect: bounds, scale: contentScaleFactor)
     }
 
+    /// The one touch the pointer is: the first down. A second finger is
+    /// the pinch's, and cancels the drag the first began.
+    private var pointer: UITouch?
+
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let t = touches.first else { return }
+        if pointer != nil {
+            pointer = nil
+            model.cancelPointer()
+            return
+        }
+        pointer = t
         closeField(commit: true)
         becomeFirstResponder()
         model.beginPointer(at: t.location(in: self))
     }
 
     public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let t = touches.first else { return }
-        model.pointerDragged(to: t.location(in: self))
+        guard let pointer, touches.contains(pointer) else { return }
+        model.pointerDragged(to: pointer.location(in: self))
     }
 
     public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let pointer, touches.contains(pointer) else { return }
+        self.pointer = nil
         model.pointerUp()
     }
 
+    /// The system took the touches, or the pinch recognised and took them:
+    /// nothing lands.
     public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        model.pointerUp()
+        guard let pointer, touches.contains(pointer) else { return }
+        self.pointer = nil
+        model.cancelPointer()
     }
 }
 #endif

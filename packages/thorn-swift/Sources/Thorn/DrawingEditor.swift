@@ -24,7 +24,8 @@ public struct DrawingCanvas: PlatformViewRepresentable {
 /// The canvas with a toolbar in Excalidraw's shape: the lock, then every
 /// tool in `Tool.all` (each with its keys in its tooltip, and disabled
 /// until the core has its gesture); a menu of the layering and grouping
-/// commands; delete; undo and redo.
+/// commands; delete; undo and redo; and, at the far end, the zoom — out,
+/// the percentage (which fits the picture again), in.
 public struct DrawingEditor: View {
     @ObservedObject private var state: EditorState
 
@@ -72,6 +73,18 @@ public struct DrawingEditor: View {
                 Button { state.model.undo() } label: { Image(systemName: "arrow.uturn.backward") }.help("Undo")
                 Button { state.model.redo() } label: { Image(systemName: "arrow.uturn.forward") }.help("Redo")
                 Spacer()
+                Button { state.model.zoomOut() } label: { Image(systemName: "minus.magnifyingglass") }
+                    .keyboardShortcut("-", modifiers: .command).help("Zoom out — ⌘−")
+                    .disabled(state.zoom <= CanvasModel.zoomRange.lowerBound)
+                Button { state.model.zoomToFit() } label: {
+                    Text("\(Int((state.zoom * 100).rounded()))%")
+                        .monospacedDigit()
+                        .frame(minWidth: 44)
+                }
+                .keyboardShortcut("0", modifiers: .command).help("Fit the drawing — ⌘0")
+                Button { state.model.zoomIn() } label: { Image(systemName: "plus.magnifyingglass") }
+                    .keyboardShortcut("=", modifiers: .command).help("Zoom in — ⌘+")
+                    .disabled(state.zoom >= CanvasModel.zoomRange.upperBound)
             }
             .padding(8)
             .buttonStyle(.borderless)
@@ -92,22 +105,25 @@ public struct DrawingEditor: View {
     }
 }
 
-/// The bit of the model SwiftUI watches: the tool, the lock and the
-/// selection.
+/// The bit of the model SwiftUI watches: the tool, the lock, the
+/// selection and the zoom.
 final class EditorState: ObservableObject {
     let model: CanvasModel
     @Published var tool: Tool
     @Published var locked: Bool
     @Published var selection: [String]
+    @Published var zoom: CGFloat
 
     init(model: CanvasModel) {
         self.model = model
         tool = model.tool
         locked = model.locked
         selection = model.selection
+        zoom = model.zoom
         model.onSelectionChange = { [weak self] ids in self?.selection = ids }
         model.onToolChange = { [weak self] tool in self?.tool = tool }
         model.onLockChange = { [weak self] locked in self?.locked = locked }
+        model.onZoomChange = { [weak self] zoom in self?.zoom = zoom }
     }
 
     func setTool(_ tool: Tool) { model.tool = tool }

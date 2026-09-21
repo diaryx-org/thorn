@@ -24,10 +24,12 @@ pub fn run_task(args: Args) -> Result<()> {
         run(cargo().args(["build", "-p", "thorn-svg-ffi"]))?;
     }
     let mut swift = cmd("swift");
-    swift.args(["run", "--package-path", "apps/thorn-mac", "thorn-mac"]);
+    swift.args(["run", "--package-path", "apps/thorn-mac"]);
+    // Before the product: everything after it is the app's own arguments.
     if args.no_build {
         swift.arg("--skip-build");
     }
+    swift.arg("thorn-mac");
     // The subprocess runs from the repo root; the path was typed from wherever
     // the caller stood.
     if let Some(file) = args.file {
