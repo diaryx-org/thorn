@@ -486,9 +486,19 @@ final class CanvasModelTests: XCTestCase {
         model.beginPointer(at: CGPoint(x: 40, y: 40))
         model.pointerDragged(to: CGPoint(x: 60, y: 50))
         XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 20, y: 15))
+        XCTAssertEqual(model.selection, ["s1"])
         model.cancelPointer()
         XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 10, y: 10))
         XCTAssertFalse(try doc.undo(), "and left no step behind")
+        XCTAssertEqual(model.selection, [], "and the selection is as it was: a pinch's first finger picks nothing")
+
+        // Nor does it drop what was selected, when it lands on the desk.
+        model.select("s2")
+        model.beginPointer(at: CGPoint(x: 200, y: 190))
+        XCTAssertEqual(model.selection, [])
+        model.cancelPointer()
+        XCTAssertEqual(model.selection, ["s2"])
+        model.select(nil)
 
         // So is a shape being created.
         model.key("r")
@@ -680,5 +690,55 @@ final class CanvasModelTests: XCTestCase {
         model.commitTextEdit(edits[1], text: "  ")
         XCTAssertNil(doc.shape(id: n))
         XCTAssertNil(doc.shape(id: note.frame))
+    }
+
+    func testAFingerMissesByMoreAndInkTakesEveryCoalescedSample() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        let c = makeContext()
+        model.draw(in: c, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        // s1 is 20…100 × 20…60 in view points. 8 pt off its edge is a
+        // miss for a pointer and a hit for a finger.
+        XCTAssertNil(model.shape(at: CGPoint(x: 108, y: 40)))
+        model.tolerance = 12
+        XCTAssertEqual(model.shape(at: CGPoint(x: 108, y: 40)), "s1")
+        XCTAssertNil(model.shape(at: CGPoint(x: 200, y: 100)), "the desk")
+
+        // The handles are drawn at `handleSize`: an 11 pt box whose fill
+        // reaches 4 pt from the corner, where a 7 pt one does not.
+        model.select("s1")
+        model.handleSize = 11
+        model.draw(in: c, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        XCTAssertTrue(pixel(c, 104, 64) == (255, 255, 255), "the sheet-white handle fill, 4 pt outside the corner")
+
+        // Ink through several samples at once: every one is kept, and the
+        // stroke is still one step.
+        model.key("p")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(through: [CGPoint(x: 120, y: 110), CGPoint(x: 120.2, y: 110.1), CGPoint(x: 140, y: 120)])
+        model.pointerDragged(through: [])
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        XCTAssertTrue(doc.source.contains("data-centreline=\"M50 50 L60 55 L70 60\" data-widths=\"3\" data-id=\"\(id)\""), doc.source)
+        XCTAssertTrue(try doc.undo(), "one step")
+        XCTAssertEqual(doc.shapes.count, 2)
+
+        // Any other drag through several points is a drag to the last.
+        model.select("s1")
+        model.beginPointer(at: CGPoint(x: 60, y: 40))
+        model.pointerDragged(through: [CGPoint(x: 80, y: 40), CGPoint(x: 100, y: 60)])
+        model.pointerUp()
+        XCTAssertEqual(doc.bounds(id: "s1")?.origin, CGPoint(x: 30, y: 20))
+
+        // The lone note or label is what the menu offers to edit.
+        XCTAssertFalse(model.canEditText)
+        var edits: [TextEdit] = []
+        model.onTextEdit = { edits.append($0) }
+        let label = try doc.addText("Hi", at: CGPoint(x: 100, y: 80))
+        model.select(label)
+        XCTAssertTrue(model.canEditText)
+        model.editSelectedText()
+        XCTAssertEqual(edits.map(\.id), [label])
     }
 }

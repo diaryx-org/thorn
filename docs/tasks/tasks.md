@@ -3,7 +3,7 @@ title: Tasks
 description: Deferred work on thorn, one file each — a commitment with a done state
 author: adammharris
 created: 2026-09-19
-updated: 2026-09-20
+updated: 2026-09-21
 contents:
 - '[First release](first-release.md)'
 - '[Move, resize and reorder wait on twig''s drawing branch](gestures-need-twig.md)'
@@ -16,6 +16,7 @@ contents:
 - '[An arrow gesture in the core](add-arrow.md)'
 - '[Freehand ink in the core](add-ink.md)'
 - '[A note gesture in the core](add-note.md)'
+- '[Text on iOS waits on resvg-swift''s font fix](ios-fonts-need-resvg-swift.md)'
 part_of: '[thorn](/README.md)'
 ---
 # Tasks

@@ -1,6 +1,7 @@
 // A SwiftUI editor: the canvas with its tools floating over it — a strip at
-// the top on the Mac, a bar along the bottom on a phone. A host that wants its own chrome uses `DrawingCanvasView` and
-// `CanvasModel` directly; this is the whole thing for one that does not.
+// the top on the Mac and an iPad, a bar along the bottom on a phone. A host
+// that wants its own chrome uses `DrawingCanvasView` and `CanvasModel`
+// directly; this is the whole thing for one that does not.
 
 #if canImport(SwiftUI)
 import SwiftUI
@@ -26,13 +27,21 @@ public struct DrawingCanvas: PlatformViewRepresentable {
 /// a menu of the layering and grouping commands; delete; undo and redo;
 /// and the zoom — out, the percentage (which fits the picture again), in.
 ///
-/// Where the chrome sits is the platform's: on the Mac a strip of capsules
-/// top-centre and the zoom bottom-trailing, the canvas the whole height
-/// under both; on a phone one bar along the bottom, in thumb's reach, the
-/// tools scrolling sideways past a fixed undo/redo/more. A tile is 32 pt on
-/// the Mac and 44 pt on iOS; the one that is on is a solid accent tile with
-/// a white glyph, and every other is monochrome, so the row reads as a
-/// palette with one thing chosen rather than as a line of blue links.
+/// Where the chrome sits is the width's: on the Mac, and on an iPad where
+/// the whole strip fits — a strip of capsules top-centre and the zoom
+/// bottom-trailing, the canvas the whole height under both; narrower than
+/// that — a phone, an iPad's detail column beside a sidebar — one bar
+/// along the bottom, in thumb's reach, the tools scrolling sideways past a
+/// fixed undo/redo/more. Measured, not the size class: a split view's
+/// column is "regular" and 540 pt wide. A tile is 32 pt on the Mac and 44
+/// pt on iOS; the one that is on is a solid accent tile with a white
+/// glyph, and every other is monochrome, so the row reads as a palette
+/// with one thing chosen rather than as a line of blue links.
+///
+/// On iOS the canvas ignores the keyboard's safe area: the field for a
+/// label sits at a view point of the picture, and a canvas that shrank for
+/// the keyboard would slide the picture out from under it. The canvas view
+/// pans the picture up itself when the keyboard would cover the field.
 public struct DrawingEditor: View {
     @ObservedObject private var state: EditorState
 
@@ -48,6 +57,23 @@ public struct DrawingEditor: View {
 
     public var body: some View {
         #if os(macOS)
+        strip
+        #else
+        GeometryReader { geometry in
+            if geometry.size.width >= Self.stripWidth { strip } else { bar }
+        }
+        .ignoresSafeArea(.keyboard)
+        #endif
+    }
+
+    #if !os(macOS)
+    /// What the strip takes across: sixteen tiles in four capsules, and
+    /// the padding around them.
+    static let stripWidth: CGFloat = 16 * (ToolTile.side + 2) + 4 * 8 + 3 * 8 + 2 * 10
+    #endif
+
+    /// The tools top-centre and the zoom bottom-trailing.
+    private var strip: some View {
         DrawingCanvas(model: state.model)
             .overlay(alignment: .top) {
                 HStack(spacing: 8) {
@@ -62,7 +88,12 @@ public struct DrawingEditor: View {
                 ToolCluster { zoomOut; zoomLabel; zoomIn }
                     .padding(10)
             }
-        #else
+    }
+
+    #if !os(macOS)
+    /// One bar along the bottom, the tools scrolling past undo, redo and
+    /// more.
+    private var bar: some View {
         DrawingCanvas(model: state.model)
             .overlay(alignment: .bottom) {
                 HStack(spacing: 8) {
@@ -76,8 +107,8 @@ public struct DrawingEditor: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             }
-        #endif
     }
+    #endif
 
     // MARK: The tiles
 
@@ -146,16 +177,21 @@ public struct DrawingEditor: View {
             .disabled(state.selection.isEmpty)
     }
 
+    /// Undo and redo take ⌘Z and ⇧⌘Z on iOS, where there is no Edit menu
+    /// to hand them down the responder chain; on the Mac the app's menu
+    /// does, through `DrawingCanvasView.undo(_:)`.
     private var undo: some View {
         Button { state.model.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
             .buttonStyle(ToolTile(on: false))
             .help("Undo")
+            .iOSShortcut("z", modifiers: .command)
     }
 
     private var redo: some View {
         Button { state.model.redo() } label: { Label("Redo", systemImage: "arrow.uturn.forward") }
             .buttonStyle(ToolTile(on: false))
             .help("Redo")
+            .iOSShortcut("z", modifiers: [.command, .shift])
     }
 
     private var zoomOut: some View {
@@ -283,6 +319,17 @@ final class EditorState: ObservableObject {
     }
 
     func setTool(_ tool: Tool) { model.tool = tool }
+}
+
+extension View {
+    /// A keyboard shortcut on iOS only.
+    @ViewBuilder func iOSShortcut(_ key: KeyEquivalent, modifiers: EventModifiers) -> some View {
+        #if os(macOS)
+        self
+        #else
+        keyboardShortcut(key, modifiers: modifiers)
+        #endif
+    }
 }
 
 #if canImport(AppKit)

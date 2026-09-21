@@ -106,8 +106,14 @@ public final class CanvasModel {
     /// what was typed, or nothing to leave the label as it was.
     public var onTextEdit: ((TextEdit) -> Void)?
 
-    /// How far, in view points, a click may miss a stroke or a handle.
+    /// How far, in view points, a click may miss a stroke or a handle. A
+    /// view sets it for its pointer: a mouse's few points, a finger's
+    /// dozen.
     public var tolerance: CGFloat = 4
+    /// The side of a handle as drawn, in view points. A view sets it with
+    /// `tolerance`: a handle a finger is to land on is drawn big enough
+    /// to see under it.
+    public var handleSize: CGFloat = 7
     /// The width of a stroke the draw tool makes, in user units.
     public var inkWidth: CGFloat = 3
 
@@ -203,6 +209,15 @@ public final class CanvasModel {
 
     /// View points → user units, for the last `draw`.
     public func userPoint(_ p: CGPoint) -> CGPoint { p.applying(fit.inverted()) }
+
+    /// User units → view points, for the last `draw`, as a rect.
+    public func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
+
+    /// View points → user units, for the last `draw`, as a rect.
+    public func userRect(_ r: CGRect) -> CGRect { r.applying(fit.inverted()) }
+
+    /// View points per user unit, for the last `draw`.
+    public var viewScale: CGFloat { fit.a }
 
     private var userTolerance: CGFloat { tolerance / fit.a }
 
@@ -368,8 +383,6 @@ public final class CanvasModel {
         }
     }
 
-    private func viewRect(_ r: CGRect) -> CGRect { r.applying(fit) }
-
     /// The box `zoomToFit` fits to the view: the page, or, for a drawing
     /// with no `viewBox` to read, the picture's own size.
     private static func sheet(of document: DrawingDocument) -> CGRect {
@@ -393,7 +406,7 @@ public final class CanvasModel {
     }
 
     private func handleBox(at p: CGPoint, in context: CGContext) {
-        let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
+        let box = handleRect(at: p)
         context.fill(box)
         context.stroke(box)
     }
@@ -401,9 +414,13 @@ public final class CanvasModel {
     /// The bend handle: round, so it reads as a different thing from an
     /// end.
     private func handleDot(at p: CGPoint, in context: CGContext) {
-        let box = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
+        let box = handleRect(at: p)
         context.fillEllipse(in: box)
         context.strokeEllipse(in: box)
+    }
+
+    private func handleRect(at p: CGPoint) -> CGRect {
+        CGRect(x: p.x - handleSize / 2, y: p.y - handleSize / 2, width: handleSize, height: handleSize)
     }
 
     /// A selected shape's box as drawn.
@@ -507,6 +524,30 @@ public final class CanvasModel {
         drag = .erase(ids: ids)
     }
 
+    /// Pointer moved through several view points with the button down, in
+    /// order, ending at the last: the samples a touch coalesced between two
+    /// events. The ink takes every one; every other drag is where the
+    /// pointer is now, and the picture is brought up to date once.
+    public func pointerDragged(through viewPoints: [CGPoint]) {
+        guard let last = viewPoints.last else { return }
+        if case .ink(var points) = drag {
+            for p in viewPoints.map(userPoint) where !isNoise(p, after: points.last) {
+                points.append(p)
+            }
+            drag = .ink(points: points)
+            preview()
+            needsDisplay?()
+        } else {
+            pointerDragged(to: last)
+        }
+    }
+
+    /// A point the format could not tell from the last is noise.
+    private func isNoise(_ p: CGPoint, after last: CGPoint?) -> Bool {
+        guard let last else { return false }
+        return abs(last.x - p.x) < 0.5 && abs(last.y - p.y) < 0.5
+    }
+
     /// Pointer moved to a view point with the button down.
     public func pointerDragged(to viewPoint: CGPoint) {
         let p = userPoint(viewPoint)
@@ -524,8 +565,7 @@ public final class CanvasModel {
         case .create(let from, _):
             drag = .create(from: from, to: p)
         case .ink(var points):
-            // A point the format could not tell from the last is noise.
-            if let last = points.last, abs(last.x - p.x) < 0.5, abs(last.y - p.y) < 0.5 { return }
+            if isNoise(p, after: points.last) { return }
             points.append(p)
             drag = .ink(points: points)
         case .pan(let start, let from):
@@ -593,8 +633,11 @@ public final class CanvasModel {
         }
     }
 
-    /// The view point the drag began at, remembered by `pointerDown`.
+    /// The view point the drag began at, remembered by `beginPointer`.
     private var startViewPoint: CGPoint?
+    /// The selection as it stood before the pointer went down, remembered
+    /// by `beginPointer` for `cancelPointer`.
+    private var selectionBefore: [String]?
 
     /// How far a point is from the segment `a`–`b`.
     private func distance(from p: CGPoint, toSegment a: CGPoint, _ b: CGPoint) -> CGFloat {
@@ -607,7 +650,7 @@ public final class CanvasModel {
     /// Pointer up: the gesture in flight lands as one splice — the last
     /// preview, which is already in the document.
     public func pointerUp() {
-        defer { drag = nil; startViewPoint = nil; previewed = false; created = nil; needsDisplay?() }
+        defer { drag = nil; startViewPoint = nil; selectionBefore = nil; previewed = false; created = nil; needsDisplay?() }
         switch drag {
         case .move, .resize, .endpoint, .bend:
             if !previewed { previewed = apply() }
@@ -631,12 +674,16 @@ public final class CanvasModel {
     }
 
     /// The pointer taken away mid-gesture — a second finger turned the
-    /// touch into a pinch, the system took the touches: nothing lands, and
-    /// what was previewed is undone.
+    /// touch into a pinch, the system took the touches: nothing lands,
+    /// what was previewed is undone, and the selection is as it was
+    /// before the pointer went down, so a pinch's first finger does not
+    /// pick or drop a shape.
     public func cancelPointer() {
         if previewed { _ = try? document.undo() }
+        if let selectionBefore { selection = selectionBefore }
         drag = nil
         startViewPoint = nil
+        selectionBefore = nil
         previewed = false
         created = nil
         needsDisplay?()
@@ -658,6 +705,27 @@ public final class CanvasModel {
             return false
         }
         return true
+    }
+
+    /// The outermost shape under a view point, within the tolerance, or
+    /// `nil` over nothing: what a long press asks before it offers a menu.
+    public func shape(at viewPoint: CGPoint) -> String? {
+        guard let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance), let id = hit.id else { return nil }
+        return document.outermost(id: id)?.id
+    }
+
+    /// Whether `editSelectedText` would open a field: one note or one
+    /// label is selected.
+    public var canEditText: Bool {
+        guard selection.count == 1, let id = selection.first else { return false }
+        return document.note(id: id) != nil || document.shape(id: id)?.kind == .text
+    }
+
+    /// Open the lone selected note's or label's field, as a double-click
+    /// on it would.
+    public func editSelectedText() {
+        guard selection.count == 1, let id = selection.first else { return }
+        if document.note(id: id) != nil { editNote(id: id) } else if document.shape(id: id)?.kind == .text { editText(id: id) }
     }
 
     /// A double-click at a view point: on a label, opens it for editing.
@@ -783,6 +851,7 @@ extension CanvasModel {
     /// here. Views call this rather than `pointerDown(at:)`.
     public func beginPointer(at viewPoint: CGPoint, extending: Bool = false) {
         startViewPoint = viewPoint
+        selectionBefore = selection
         pointerDown(at: viewPoint, extending: extending)
     }
 }
