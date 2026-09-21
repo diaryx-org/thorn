@@ -187,6 +187,54 @@ pub(crate) fn widened_for_paths(css: &str) -> Option<String> {
     Some(out)
 }
 
+/// The rules the template draws a `data-dash` by: what a drawing made
+/// before the word gains when a shape first takes it.
+pub(crate) const DASH_RULES: &[&str] = &[
+    "[data-dash=\"dashed\"] { stroke-dasharray: 8 6 }",
+    "[data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }",
+];
+
+/// `css` with `rules` appended after its last rule, in that rule's
+/// indentation, unless a selector already mentions `word` — in which case
+/// its author has said what the word means, and `None`. A stylesheet with
+/// no rules at all takes them on lines of their own.
+pub(crate) fn with_rules(css: &str, word: &str, rules: &[&str]) -> Option<String> {
+    let found = self::rules(css);
+    if found
+        .iter()
+        .any(|r| css[r.selectors.clone()].contains(word))
+    {
+        return None;
+    }
+    let mut out = String::with_capacity(css.len() + 128);
+    match found.last() {
+        Some(last) => {
+            // Just past the `}` of the last rule, each new rule on a line
+            // of its own, indented as that rule is.
+            let end = last.declarations.end + 1;
+            out.push_str(&css[..end]);
+            let list = &css[last.selectors.clone()];
+            let lead = &list[..list.len() - list.trim_start().len()];
+            let indent = lead.rsplit('\n').next().unwrap_or("");
+            for rule in rules {
+                out.push('\n');
+                out.push_str(indent);
+                out.push_str(rule);
+            }
+            out.push_str(&css[end..]);
+        }
+        None => {
+            out.push_str(css.trim_end());
+            for rule in rules {
+                out.push('\n');
+                out.push_str(rule);
+            }
+            out.push('\n');
+        }
+    }
+    Some(out)
+}
+
 /// The rule that keeps an arrowhead a filled triangle once a bare `path`
 /// is stroked, in `fill`: what the template says with `currentColor`,
 /// and what widening adds in the line's own stroke.
@@ -232,6 +280,30 @@ mod tests {
         );
         assert_eq!(widened_for_paths("rect { fill: none }"), None);
         assert_eq!(widened_for_paths(""), None);
+    }
+
+    #[test]
+    fn rules_for_a_word_are_added_once_in_the_last_rules_indentation() {
+        let css = "\n    rect { fill: none }\n    text { font: 16px sans-serif }\n  ";
+        let added = with_rules(css, "[data-dash", DASH_RULES).unwrap();
+        assert_eq!(
+            added,
+            "\n    rect { fill: none }\n    text { font: 16px sans-serif }\n    [data-dash=\"dashed\"] { stroke-dasharray: 8 6 }\n    [data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }\n  "
+        );
+        assert_eq!(with_rules(&added, "[data-dash", DASH_RULES), None, "once");
+        assert_eq!(
+            with_rules(
+                "line.x[data-dash] { stroke: red }",
+                "[data-dash",
+                DASH_RULES
+            ),
+            None,
+            "the author has said what the word means"
+        );
+        assert_eq!(
+            with_rules("", "[data-dash", &["a { b: c }"]).unwrap(),
+            "\na { b: c }\n"
+        );
     }
 
     #[test]

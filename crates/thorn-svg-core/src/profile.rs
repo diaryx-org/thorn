@@ -13,7 +13,7 @@ use crate::connector::Connector;
 use crate::drawing::Drawing;
 use crate::ink::{self, Nib};
 use crate::number;
-use crate::shape::{Heads, ShapeKind};
+use crate::shape::{Dash, Heads, ShapeKind};
 
 /// The profile's version, written as the root's `data-diaryx-drawing` value.
 pub const VERSION: &str = "1";
@@ -71,6 +71,9 @@ pub enum Rule {
     /// `<line>`, or a `<path>` of one segment (`M` then `L` or `Q`) that
     /// is not ink — which is what the editor can bind, settle and bend.
     Connector,
+    /// `data-dash` is `dashed` or `dotted`, on a stroked shape: the values
+    /// the template's `<style>` breaks a stroke for.
+    Dash,
     /// `data-ink` names a nib the editor draws — `monoline` — and the
     /// stroke carries the `data-centreline` and `data-widths` its outline
     /// was computed from.
@@ -96,6 +99,7 @@ impl Rule {
             Self::Connector => {
                 "data-arrow, data-from and data-to are on a <line> or a <path> of one segment"
             }
+            Self::Dash => "data-dash is dashed or dotted, on a stroked shape",
             Self::InkNib => {
                 "data-ink names a nib the editor draws, with data-centreline and data-widths beside it"
             }
@@ -207,6 +211,26 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
                     "<{tag}> carries {name} but is not a <line> or a <path> of one segment (M then L or Q)"
                 ),
             });
+        }
+        if let Some(value) = shape.attr("data-dash") {
+            let wrong = if Dash::from_value(value).is_none() {
+                Some(format!(
+                    "<{tag}> data-dash={value:?} is not dashed or dotted"
+                ))
+            } else if !shape.is_stroked() {
+                Some(format!(
+                    "<{tag}> carries data-dash but is not a stroked shape"
+                ))
+            } else {
+                None
+            };
+            if let Some(message) = wrong {
+                findings.push(Finding {
+                    rule: Rule::Dash,
+                    shape: shape.id.clone(),
+                    message,
+                });
+            }
         }
         if let Some(value) = shape.attr("data-ink") {
             let mut ink = |message: String| {

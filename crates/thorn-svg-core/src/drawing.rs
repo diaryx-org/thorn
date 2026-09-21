@@ -45,7 +45,7 @@ use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
-use crate::shape::{self, Heads, Shape, ShapeKind};
+use crate::shape::{self, Dash, Heads, Shape, ShapeKind};
 use crate::style;
 use crate::transform::Transform;
 
@@ -154,9 +154,37 @@ pub struct Note {
     pub label: String,
 }
 
+/// The words a shape is added with — the canvas's current options, held
+/// here so an added shape is born with them in the one splice that makes
+/// it, rather than restyled in a second step. Never in the file itself;
+/// `Default` is no words at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Pen {
+    /// `data-dash` on a stroked shape.
+    pub dash: Option<Dash>,
+}
+
+impl Pen {
+    /// The words, as attributes, for a shape spelled by `tag` — the
+    /// stroked ones take a dash, the rest nothing.
+    fn words(&self, tag: &str) -> Vec<(&'static str, String)> {
+        let mut out = Vec::new();
+        let stroked = matches!(
+            tag,
+            "rect" | "ellipse" | "circle" | "line" | "polyline" | "polygon"
+        );
+        if stroked && let Some(dash) = self.dash {
+            out.push(("data-dash", dash.value().to_string()));
+        }
+        out
+    }
+}
+
 /// A drawing being edited.
 pub struct Drawing {
     editor: Editor,
+    /// The words the next shape is added with.
+    pen: Pen,
     /// The flat tree as of the last edit; refreshed by [`Drawing::reload`].
     nodes: Vec<FlatNode>,
     root: NodeId,
@@ -186,6 +214,7 @@ impl Drawing {
         let editor = Editor::new_str(source, Format::Svg).map_err(Error::Parse)?;
         let mut drawing = Self {
             editor,
+            pen: Pen::default(),
             nodes: Vec::new(),
             root: NodeId(0),
             shapes: Vec::new(),
@@ -208,6 +237,17 @@ impl Drawing {
     pub fn set_measure(&mut self, measure: Box<dyn Measure>) {
         self.measure = Some(measure);
         self.measured.borrow_mut().clear();
+    }
+
+    /// The words the next shape is added with.
+    pub fn pen(&self) -> Pen {
+        self.pen
+    }
+
+    /// Set the words the next shape is added with. Not an edit: nothing in
+    /// the file moves until a shape is added.
+    pub fn set_pen(&mut self, pen: Pen) {
+        self.pen = pen;
     }
 
     /// The current bytes — what saving writes.
@@ -424,11 +464,16 @@ impl Drawing {
         let inner = (bounds.width - 2.0 * NOTE_PAD).max(1.0);
         let size = self.font_size(None);
         let markup = format!(
-            "<g data-role=\"note\" data-id=\"{group}\">\n    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" data-id=\"{frame}\"/>\n    <text x=\"{}\" y=\"{}\" data-width=\"{}\" data-id=\"{label}\">{}</text>\n  </g>",
+            "<g data-role=\"note\" data-id=\"{group}\">\n    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" data-id=\"{frame}\"{}/>\n    <text x=\"{}\" y=\"{}\" data-width=\"{}\" data-id=\"{label}\">{}</text>\n  </g>",
             f(bounds.x),
             f(bounds.y),
             f(bounds.width),
             f(bounds.height),
+            self.pen
+                .words("rect")
+                .iter()
+                .map(|(name, value)| format!(" {name}=\"{}\"", escape(value)))
+                .collect::<String>(),
             f(bounds.x + NOTE_PAD),
             f(bounds.y + NOTE_PAD + size),
             f(inner),
@@ -438,6 +483,9 @@ impl Drawing {
         // The words are flowed into the width now the label exists to be
         // measured; folded into the insert.
         let mut steps = 1;
+        if self.pen.dash.is_some() {
+            self.style_word("[data-dash", style::DASH_RULES, &mut steps)?;
+        }
         if !text.trim().is_empty() {
             self.rewrap(&label, Some(inner), &mut steps)?;
         }
@@ -508,13 +556,21 @@ impl Drawing {
             write!(markup, " {name}=\"{}\"", escape(value)).expect("writing to a String");
         }
         write!(markup, " data-id=\"{id}\"").expect("writing to a String");
+        let words = self.pen.words(tag);
+        for (name, value) in &words {
+            write!(markup, " {name}=\"{}\"", escape(value)).expect("writing to a String");
+        }
         match content {
             Some(text) => write!(markup, ">{}</{tag}>", escape(text)),
             None => write!(markup, "/>"),
         }
         .expect("writing to a String");
         self.append_to_root(&markup)?;
-        self.follow_page(&mut 1)?;
+        let mut steps = 1;
+        if words.iter().any(|(name, _)| *name == "data-dash") {
+            self.style_word("[data-dash", style::DASH_RULES, &mut steps)?;
+        }
+        self.follow_page(&mut steps)?;
         Ok(id)
     }
 
@@ -1301,6 +1357,42 @@ impl Drawing {
         }
     }
 
+    /// A word the drawing's `<style>` has no rule for is drawn as nothing,
+    /// so the first shape to take one brings the template's `rules` for it
+    /// into the last top-level `<style>`, folded into the gesture's step —
+    /// unless some `<style>` already selects `word`, in which case its
+    /// author has said what the word means. A drawing with no `<style>` at
+    /// all is left as it is: the word is written, and what it looks like
+    /// is a stylesheet's to say.
+    fn style_word(&mut self, word: &str, rules: &[&str], steps: &mut usize) -> Result<(), Error> {
+        let mut sheets = Vec::new();
+        let mut next = self.node(self.root).first_child;
+        while let Some(id) = next {
+            let node = self.node(id);
+            next = node.next_sibling;
+            if node.name.as_deref() == Some("style")
+                && let Some(content) = node.content_span.clone()
+            {
+                sheets.push(content);
+            }
+        }
+        let mut edit = None;
+        for content in sheets {
+            match style::with_rules(&self.source[content.clone()], word, rules) {
+                Some(added) => edit = Some((content, added)),
+                None => return Ok(()),
+            }
+        }
+        let Some((content, added)) = edit else {
+            return Ok(());
+        };
+        self.editor
+            .edit_range(content.start, content.end, &added)
+            .map_err(Error::Edit)?;
+        self.reload()?;
+        self.fold(steps)
+    }
+
     /// Rewrite an element as `<tag>` with `attrs`, its interior kept:
     /// one `edit_range` over the element.
     fn retag(
@@ -1342,6 +1434,64 @@ impl Drawing {
         self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
         let mut steps = 1;
         self.settle(&[id], &mut steps)
+    }
+
+    /// Say how a stroked shape's stroke is broken — `data-dash`, which the
+    /// drawing's `<style>` draws — or, with `None`, solid, the word taken
+    /// off. On a note it is the note's frame. A drawing whose `<style>`
+    /// has no rule for the word gains the template's, in the same step
+    /// (docs/proposals/shape-style.md). One undo step; nothing when the
+    /// shape already says so. `Unsupported` for what is not stroked — ink,
+    /// a label, a group that is not a note, an image.
+    pub fn set_dash(&mut self, id: &str, dash: Option<Dash>) -> Result<(), Error> {
+        let mut steps = 0;
+        self.set_dash_one(id, dash, &mut steps)
+    }
+
+    /// `set_dash` over a selection, as one undo step: the stroked shapes
+    /// among `ids` take the word, and what is not stroked is left as it
+    /// is rather than refused. `NoSuchShape` for an id that is nothing.
+    pub fn set_dash_all(&mut self, ids: &[&str], dash: Option<Dash>) -> Result<(), Error> {
+        let mut steps = 0;
+        for id in ids {
+            match self.set_dash_one(id, dash, &mut steps) {
+                Err(Error::Unsupported { .. }) => {}
+                other => other?,
+            }
+        }
+        Ok(())
+    }
+
+    fn set_dash_one(
+        &mut self,
+        id: &str,
+        dash: Option<Dash>,
+        steps: &mut usize,
+    ) -> Result<(), Error> {
+        let shape = self
+            .shape(id)
+            .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+        let shape = match self.note(id) {
+            Some(note) => self.shape(&note.frame).expect("a note has its frame"),
+            None if shape.is_stroked() => shape,
+            None => {
+                return Err(Error::Unsupported {
+                    gesture: "set_dash",
+                    kind: shape.kind,
+                });
+            }
+        };
+        if shape.attr("data-dash").map(str::trim) == dash.map(Dash::value) {
+            return Ok(());
+        }
+        let (node, attrs) = (shape.node, shape.attrs.clone());
+        let updates = [("data-dash", dash.map(|d| d.value().to_string()))];
+        self.write_attrs(node, &attrs, &updates)?;
+        self.fold(steps)?;
+        if dash.is_some() {
+            self.style_word("[data-dash", style::DASH_RULES, steps)?;
+        }
+        Ok(())
     }
 
     /// Say which ends of a connector have a head — `data-arrow`, the
@@ -2994,6 +3144,127 @@ mod tests {
             painted(d.source()),
             vec![Paint::Stroked, Paint::Filled, Paint::Filled]
         );
+    }
+
+    /// The dash rules the template carries, as `style_word` adds them to
+    /// a drawing that has none.
+    const DASH_RULES_ADDED: &str = "    [data-dash=\"dashed\"] { stroke-dasharray: 8 6 }\n    [data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }\n";
+
+    #[test]
+    fn set_dash_writes_the_word_and_brings_its_rules_to_an_older_stylesheet() {
+        // A drawing from before the word: a `<style>` with no rule for it.
+        let old = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <style>\n    rect { fill: none; stroke: #222 }\n  </style>\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"20\" data-id=\"s1\"/>\n  <text x=\"5\" y=\"50\" data-id=\"s2\">hi</text>\n</svg>\n".to_string();
+        let mut d = Drawing::open(&old).unwrap();
+        d.set_dash("s1", Some(Dash::Dashed)).unwrap();
+        assert_eq!(d.shape("s1").unwrap().dash(), Some(Dash::Dashed));
+        assert!(
+            d.source().contains(&format!(
+                "    rect {{ fill: none; stroke: #222 }}\n{DASH_RULES_ADDED}  </style>"
+            )),
+            "{}",
+            d.source()
+        );
+        assert!(d.source().contains("data-id=\"s1\" data-dash=\"dashed\"/>"));
+        assert_eq!(d.check(), []);
+        // The word and the rules are one step.
+        d.undo().unwrap();
+        assert_eq!(d.source(), old);
+        d.redo().unwrap();
+        // A second word finds the rules there; solid takes the word off
+        // and leaves them.
+        d.set_dash("s1", Some(Dash::Dotted)).unwrap();
+        assert_eq!(d.shape("s1").unwrap().dash(), Some(Dash::Dotted));
+        assert_eq!(d.source().matches("[data-dash=\"dashed\"]").count(), 1);
+        d.set_dash("s1", None).unwrap();
+        assert_eq!(d.shape("s1").unwrap().dash(), None);
+        assert!(d.source().contains("data-id=\"s1\"/>"), "{}", d.source());
+        assert!(d.source().contains(DASH_RULES_ADDED), "the rules stay");
+        // Not a stroke: refused; a selection skips it.
+        assert!(matches!(
+            d.set_dash("s2", Some(Dash::Dashed)),
+            Err(Error::Unsupported {
+                gesture: "set_dash",
+                ..
+            })
+        ));
+        d.set_dash_all(&["s2", "s1"], Some(Dash::Dashed)).unwrap();
+        assert_eq!(d.shape("s1").unwrap().dash(), Some(Dash::Dashed));
+        assert_eq!(d.shape("s2").unwrap().dash(), None);
+
+        // A stylesheet that says what the word means is left alone.
+        let themed = old.replace("rect {", "[data-dash] { stroke-dasharray: 2 }\n    rect {");
+        let mut d = Drawing::open(&themed).unwrap();
+        d.set_dash("s1", Some(Dash::Dashed)).unwrap();
+        assert!(!d.source().contains("8 6"), "{}", d.source());
+    }
+
+    #[test]
+    fn the_pen_writes_its_words_into_a_shape_as_it_is_added() {
+        let mut d = Drawing::fresh();
+        assert_eq!(d.pen(), Pen::default());
+        d.set_pen(Pen {
+            dash: Some(Dash::Dotted),
+        });
+        let r = d
+            .add_rect(Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            })
+            .unwrap();
+        let l = d.add_line(0.0, 0.0, 10.0, 10.0).unwrap();
+        let t = d.add_text(0.0, 0.0, "hi").unwrap();
+        let i = d
+            .add_ink(&[(0.0, 0.0), (5.0, 5.0)], &[2.0], Nib::Monoline)
+            .unwrap();
+        let n = d
+            .add_note(
+                Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 60.0,
+                    height: 40.0,
+                },
+                "note",
+            )
+            .unwrap();
+        for id in [&r, &l] {
+            assert_eq!(d.shape(id).unwrap().dash(), Some(Dash::Dotted), "{id}");
+        }
+        for id in [&t, &i, &n] {
+            assert_eq!(d.shape(id).unwrap().attr("data-dash"), None, "{id}");
+        }
+        let frame = d.note(&n).unwrap().frame;
+        assert_eq!(
+            d.shape(&frame).unwrap().dash(),
+            Some(Dash::Dotted),
+            "a note's frame"
+        );
+        assert_eq!(d.check(), []);
+        // The template has the rules; the shape's step is one step.
+        assert_eq!(d.source().matches("[data-dash=\"dotted\"]").count(), 1);
+        for _ in 0..5 {
+            assert!(d.undo().unwrap());
+        }
+        assert_eq!(d.source(), crate::profile::TEMPLATE);
+        // A note's dash is its frame's, either way.
+        d.set_pen(Pen::default());
+        let n = d
+            .add_note(
+                Bounds {
+                    x: 0.0,
+                    y: 0.0,
+                    width: 60.0,
+                    height: 40.0,
+                },
+                "note",
+            )
+            .unwrap();
+        d.set_dash(&n, Some(Dash::Dashed)).unwrap();
+        let frame = d.note(&n).unwrap().frame;
+        assert_eq!(d.shape(&frame).unwrap().dash(), Some(Dash::Dashed));
+        assert_eq!(d.shape(&n).unwrap().attr("data-dash"), None);
     }
 
     #[test]

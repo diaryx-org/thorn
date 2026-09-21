@@ -121,6 +121,53 @@ impl From<Heads> for core::Heads {
     }
 }
 
+/// Mirrors `thorn_svg_core::Dash`: how a stroke is broken.
+#[derive(Clone, Copy, Debug, uniffi::Enum)]
+pub enum Dash {
+    Dashed,
+    Dotted,
+}
+
+impl From<core::Dash> for Dash {
+    fn from(d: core::Dash) -> Self {
+        match d {
+            core::Dash::Dashed => Self::Dashed,
+            core::Dash::Dotted => Self::Dotted,
+        }
+    }
+}
+
+impl From<Dash> for core::Dash {
+    fn from(d: Dash) -> Self {
+        match d {
+            Dash::Dashed => Self::Dashed,
+            Dash::Dotted => Self::Dotted,
+        }
+    }
+}
+
+/// Mirrors `thorn_svg_core::Pen`: the words the next shape is added with.
+#[derive(Clone, Copy, Debug, Default, uniffi::Record)]
+pub struct Pen {
+    pub dash: Option<Dash>,
+}
+
+impl From<core::Pen> for Pen {
+    fn from(p: core::Pen) -> Self {
+        Self {
+            dash: p.dash.map(Into::into),
+        }
+    }
+}
+
+impl From<Pen> for core::Pen {
+    fn from(p: Pen) -> Self {
+        Self {
+            dash: p.dash.map(Into::into),
+        }
+    }
+}
+
 /// Mirrors `thorn_svg_core::Nib`: the rule an ink stroke's outline is
 /// drawn by.
 #[derive(Clone, Copy, Debug, uniffi::Enum)]
@@ -696,6 +743,44 @@ impl Drawing {
     /// with no target, unbind it. One undo step.
     pub fn bind(&self, id: String, end: End, target: Option<String>) -> Result<(), DrawingError> {
         Ok(self.lock().bind(&id, end.into(), target.as_deref())?)
+    }
+
+    /// The words the next shape is added with.
+    pub fn pen(&self) -> Pen {
+        self.lock().pen().into()
+    }
+
+    /// Set the words the next shape is added with; not an edit.
+    pub fn set_pen(&self, pen: Pen) {
+        self.lock().set_pen(pen.into());
+    }
+
+    /// Whether the editor draws a shape as a stroke, and so whether a
+    /// dash means anything on it; a note counts, through its frame.
+    pub fn is_stroked(&self, id: String) -> bool {
+        let d = self.lock();
+        d.shape(&id).is_some_and(|s| s.is_stroked()) || d.note(&id).is_some()
+    }
+
+    /// How a shape's stroke is broken — a note's frame's — or `None` for
+    /// solid.
+    pub fn dash(&self, id: String) -> Option<Dash> {
+        let d = self.lock();
+        let id = d.note(&id).map_or(id, |n| n.frame);
+        d.shape(&id).and_then(|s| s.dash()).map(Dash::from)
+    }
+
+    /// Say how a stroked shape's stroke is broken, or with `None` solid.
+    /// One undo step; `Unsupported` for what is not stroked.
+    pub fn set_dash(&self, id: String, dash: Option<Dash>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_dash(&id, dash.map(Into::into))?)
+    }
+
+    /// `set_dash` over a selection as one undo step, what is not stroked
+    /// left as it is.
+    pub fn set_dash_all(&self, ids: Vec<String>, dash: Option<Dash>) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_dash_all(&ids, dash.map(Into::into))?)
     }
 
     /// Say which ends of a connector have a head, or with `None` none — a

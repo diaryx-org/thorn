@@ -361,6 +361,25 @@ fn a_diamond_is_a_polygon_and_a_note_is_a_group_resized_as_one() {
     assert_eq!(findings[0].shape.as_deref(), Some("s2"));
 }
 
+/// `data-dash` is a closed word on a stroked shape: a value outside it, or
+/// the word on a label, is a finding.
+#[test]
+fn a_dash_is_dashed_or_dotted_on_a_stroked_shape() {
+    let src = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"20\" data-dash=\"dotted\" data-id=\"s1\"/>\n  <text x=\"5\" y=\"50\" data-id=\"s2\">hi</text>\n</svg>\n";
+    assert_eq!(Drawing::open(src).unwrap().check(), []);
+    let odd = src.replace("data-dash=\"dotted\"", "data-dash=\"wavy\"");
+    let findings = Drawing::open(&odd).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].rule, Rule::Dash);
+    let label = src.replace("data-id=\"s2\"", "data-dash=\"dashed\" data-id=\"s2\"");
+    let findings = Drawing::open(&label).unwrap().check();
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(
+        (findings[0].rule, findings[0].shape.as_deref()),
+        (Rule::Dash, Some("s2"))
+    );
+}
+
 /// `fresh.svg` is the template a new drawing is created with — the same bytes
 /// `Drawing::fresh` opens — and it is empty: nothing to select on a new page.
 #[test]

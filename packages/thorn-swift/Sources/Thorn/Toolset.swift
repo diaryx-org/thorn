@@ -86,4 +86,13 @@ extension Tool {
         case .rect, .diamond, .ellipse, .arrow, .line, .draw, .text, .note: true
         }
     }
+
+    /// Whether the shape this tool makes is drawn as a stroke, so a dash
+    /// picked with nothing selected is its to take. A note's frame is.
+    var makesStroke: Bool {
+        switch self {
+        case .rect, .diamond, .ellipse, .arrow, .line, .note: true
+        case .hand, .select, .eraser, .draw, .text: false
+        }
+    }
 }

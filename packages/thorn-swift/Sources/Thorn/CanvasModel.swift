@@ -76,9 +76,20 @@ public final class CanvasModel {
     public var heads: Heads? = .end {
         didSet { if heads != oldValue { onOptionsChange?() } }
     }
+    /// How the next stroked shape's stroke is broken — the dash the strip
+    /// picked with nothing selected; `nil` is solid. The document's pen,
+    /// so the shape is born with the word in the splice that makes it.
+    public var dash: Dash? {
+        get { document.pen.dash }
+        set {
+            guard newValue != document.pen.dash else { return }
+            document.pen.dash = newValue
+            onOptionsChange?()
+        }
+    }
     /// Called when what an options strip shows may have changed: the
-    /// tool's `heads`, or the document after any edit — an undo can take a
-    /// head off the selected arrow.
+    /// tool's `heads` or `dash`, or the document after any edit — an undo
+    /// can take a head off the selected arrow.
     public var onOptionsChange: (() -> Void)?
     /// How far the picture has been dragged from where it fits, in view
     /// points: the hand tool's doing, and a scroll's.
@@ -859,6 +870,30 @@ public final class CanvasModel {
             self.heads = heads
         } else {
             try? document.setHeads(ids: connectors, heads)
+        }
+    }
+
+    /// The stroked shapes among the selection — what a dash applies to.
+    public var selectedStroked: [String] {
+        selection.filter { document.isStroked(id: $0) }
+    }
+
+    /// The dash the selected stroked shapes agree on: `.some(nil)` when
+    /// every one is solid, `nil` when none is stroked or they differ.
+    public var selectionDash: Dash?? {
+        let all = selectedStroked.map { document.dash(id: $0) }
+        guard let first = all.first, all.allSatisfy({ $0 == first }) else { return nil }
+        return .some(first)
+    }
+
+    /// Say how the stroke is broken: of the selected stroked shapes, as
+    /// one undo step, when there are any; otherwise of the next drawn.
+    public func setDash(_ dash: Dash?) {
+        let stroked = selectedStroked
+        if stroked.isEmpty {
+            self.dash = dash
+        } else {
+            try? document.setDash(ids: stroked, dash)
         }
     }
 

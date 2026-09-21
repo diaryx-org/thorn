@@ -13,5 +13,7 @@
     marker path { fill: currentColor; stroke: none }
     path[data-ink] { fill: currentColor; stroke: none }
     text { font: 16px sans-serif; fill: currentColor }
+    [data-dash="dashed"] { stroke-dasharray: 8 6 }
+    [data-dash="dotted"] { stroke-dasharray: 1 5; stroke-linecap: round }
   </style>
 </svg>

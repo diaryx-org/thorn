@@ -15,6 +15,13 @@ part_of: '[Proposals](proposals.md)'
 in the order under *The order of work*; this section names them as they
 land.
 
+- `data-arrow` from the editor: commit 1663707.
+- `data-dash`: the commit that closes this line. One thing the argument
+  below did not say: the "current style" with nothing selected is held by
+  the core as a `Pen` the canvas sets, not by the canvas alone, so that a
+  shape is born with its words in the one splice that makes it rather than
+  restyled in a second undo step. It is still never in the file.
+
 ## The question
 
 Excalidraw and tldraw give every shape a strip of options — stroke colour,
@@ -117,8 +124,8 @@ bend.
 
 Excalidraw's shape: a strip of options shown for the selection and, with
 nothing selected, for the current tool, so a colour picked before drawing
-is the next shape's. The "current style" is `CanvasModel` state and never
-in the file. Applied to a selection it is one `set_node_attrs` per shape,
+is the next shape's. The "current style" is the canvas's and never in the
+file. Applied to a selection it is one `set_node_attrs` per shape,
 folded into one undo step, as a group's are; a word a shape cannot take is
 skipped, not an error, so a mixed selection takes what applies.
 

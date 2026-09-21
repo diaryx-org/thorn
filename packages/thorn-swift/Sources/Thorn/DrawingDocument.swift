@@ -177,6 +177,33 @@ public final class DrawingDocument {
     /// Which ends of a shape have a head; `nil` for one that is not an arrow.
     public func heads(id: String) -> Heads? { inner.heads(id: id) }
 
+    /// The words the next shape is added with — the canvas's current
+    /// options; not in the file until a shape is drawn with them.
+    public var pen: Pen {
+        get { inner.pen() }
+        set { inner.setPen(pen: newValue) }
+    }
+
+    /// Whether the editor draws a shape as a stroke — a box, a line, a
+    /// connector, a note through its frame — and so whether a dash means
+    /// anything on it.
+    public func isStroked(id: String) -> Bool { inner.isStroked(id: id) }
+
+    /// How a shape's stroke is broken; `nil` for solid.
+    public func dash(id: String) -> Dash? { inner.dash(id: id) }
+
+    /// Say how a stroked shape's stroke is broken, or with `nil` solid.
+    /// One undo step.
+    public func setDash(id: String, _ dash: Dash?) throws {
+        try changed { try inner.setDash(id: id, dash: dash) }
+    }
+
+    /// `setDash` over a selection as one undo step; what is not stroked is
+    /// left as it is.
+    public func setDash(ids: [String], _ dash: Dash?) throws {
+        try changed { try inner.setDashAll(ids: ids, dash: dash) }
+    }
+
     /// Say which ends of a connector have a head, or with `nil` none — a
     /// plain line. One undo step.
     public func setHeads(id: String, _ heads: Heads?) throws {

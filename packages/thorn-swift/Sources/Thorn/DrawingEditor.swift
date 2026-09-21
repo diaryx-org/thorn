@@ -126,8 +126,28 @@ public struct DrawingEditor: View {
     /// selected; nothing at all when neither has any.
     @ViewBuilder private var options: some View {
         let _ = state.revision
-        if !state.model.selectedConnectors.isEmpty || (state.selection.isEmpty && state.tool == .arrow) {
-            ToolCluster { headsTiles }
+        let selected = !state.selection.isEmpty
+        let dash = selected ? !state.model.selectedStroked.isEmpty : state.tool.makesStroke
+        let heads = selected ? !state.model.selectedConnectors.isEmpty : state.tool == .arrow
+        if dash || heads {
+            HStack(spacing: 8) {
+                if dash { ToolCluster { dashTiles } }
+                if heads { ToolCluster { headsTiles } }
+            }
+        }
+    }
+
+    /// How the stroke is broken: solid, dashed, dotted. For a selection it
+    /// is what the stroked shapes agree on, and lights nothing when they
+    /// differ.
+    @ViewBuilder private var dashTiles: some View {
+        let current: Dash?? = state.selection.isEmpty ? .some(state.model.dash) : state.model.selectionDash
+        ForEach(DashChoice.all, id: \.self) { choice in
+            Button { state.model.setDash(choice.dash) } label: {
+                Label(choice.name, systemImage: choice.symbol)
+            }
+            .buttonStyle(ToolTile(on: current == .some(choice.dash)))
+            .help(choice.name)
         }
     }
 
@@ -363,6 +383,38 @@ enum Arrowheads: Hashable {
         case .end: "arrow.right"
         case .start: "arrow.left"
         case .both: "arrow.left.and.right"
+        }
+    }
+}
+
+/// The choices for how a stroke is broken, as the options strip offers
+/// them: the values of `data-dash`, and solid.
+enum DashChoice: Hashable {
+    case solid, dashed, dotted
+
+    static let all: [DashChoice] = [.solid, .dashed, .dotted]
+
+    var dash: Dash? {
+        switch self {
+        case .solid: nil
+        case .dashed: .dashed
+        case .dotted: .dotted
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .solid: "Solid"
+        case .dashed: "Dashed"
+        case .dotted: "Dotted"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .solid: "square"
+        case .dashed: "square.dashed"
+        case .dotted: "circle.dotted"
         }
     }
 }

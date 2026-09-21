@@ -604,6 +604,51 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertNil(model.selectionHeads, "no connector: nothing to say")
     }
 
+    func testTheDashOptionIsTheNextShapesOrTheSelectedStrokes() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+
+        // Nothing selected: the choice is the pen's, and a drawn box is
+        // born with the word — one step, the stylesheet's rules with it.
+        model.setDash(.dashed)
+        XCTAssertEqual(model.dash, .dashed)
+        XCTAssertEqual(doc.pen.dash, .dashed)
+        model.key("r")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 150))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        XCTAssertEqual(doc.dash(id: id), .dashed)
+        XCTAssertTrue(doc.source.contains("data-id=\"\(id)\" data-dash=\"dashed\"/>"), doc.source)
+        XCTAssertFalse(doc.source.contains("[data-dash"), "the scene has no <style> to bring the rule to")
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.source, scene, "one step")
+        XCTAssertTrue(try doc.redo())
+
+        // Selected: the choice is the shape's; the tool's stays.
+        model.select([id])
+        XCTAssertEqual(model.selectedStroked, [id])
+        XCTAssertEqual(model.selectionDash, .some(.dashed))
+        model.setDash(.dotted)
+        XCTAssertEqual(doc.dash(id: id), .dotted)
+        XCTAssertEqual(model.dash, .dashed)
+        model.setDash(nil)
+        XCTAssertNil(doc.dash(id: id))
+        XCTAssertEqual(model.selectionDash, .some(nil))
+
+        // A label in the selection is skipped, and shows nothing alone.
+        let label = try doc.addText("hi", at: CGPoint(x: 10, y: 90))
+        model.select([id, label])
+        XCTAssertEqual(model.selectedStroked, [id])
+        model.setDash(.dotted)
+        XCTAssertEqual(doc.dash(id: id), .dotted)
+        XCTAssertNil(doc.dash(id: label))
+        model.select([label])
+        XCTAssertNil(model.selectionDash)
+        XCTAssertTrue(model.selectedStroked.isEmpty)
+    }
+
     func testALineIsBentByItsMidpointHandleAndStraightenedByDraggingItBack() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

@@ -134,7 +134,58 @@ impl Heads {
     }
 }
 
+/// How a stroke is broken: the values `data-dash` takes. Solid is the
+/// word's absence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Dash {
+    Dashed,
+    Dotted,
+}
+
+impl Dash {
+    /// The value `data-dash` spells this as.
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Dashed => "dashed",
+            Self::Dotted => "dotted",
+        }
+    }
+
+    /// The dash a `data-dash` value names, or `None` for a value the
+    /// profile does not admit.
+    pub fn from_value(value: &str) -> Option<Self> {
+        Some(match value.trim() {
+            "dashed" => Self::Dashed,
+            "dotted" => Self::Dotted,
+            _ => return None,
+        })
+    }
+}
+
 impl Shape {
+    /// Whether the editor draws this shape as a stroke — a box, a line, a
+    /// connector — and so whether a `data-dash` or a `data-weight` means
+    /// anything on it. Ink is a filled outline, a label is glyphs, a group
+    /// and an image are neither.
+    pub fn is_stroked(&self) -> bool {
+        match self.kind {
+            ShapeKind::Rect
+            | ShapeKind::Ellipse
+            | ShapeKind::Circle
+            | ShapeKind::Line
+            | ShapeKind::Polyline
+            | ShapeKind::Polygon => true,
+            ShapeKind::Path => self.attr("data-ink").is_none(),
+            ShapeKind::Text | ShapeKind::Group | ShapeKind::Image => false,
+        }
+    }
+
+    /// How the stroke is broken, from `data-dash`; `None` for solid, or a
+    /// value the profile does not admit (which `check` reports).
+    pub fn dash(&self) -> Option<Dash> {
+        self.attr("data-dash").and_then(Dash::from_value)
+    }
+
     /// Whether this is an arrow, and which ends have a head: what
     /// `data-arrow` says (the profile's spelling, which the template's
     /// `<style>` draws), or, failing that, a `marker-end`/`marker-start`

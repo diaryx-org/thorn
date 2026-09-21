@@ -36,11 +36,11 @@ mod style;
 pub mod transform;
 
 pub use connector::{Connector, End};
-pub use drawing::{Drawing, Error, NOTE_PAD, Note, Order, PAGE_MARGIN, Rect};
+pub use drawing::{Drawing, Error, NOTE_PAD, Note, Order, PAGE_MARGIN, Pen, Rect};
 pub use geometry::Bounds;
 pub use hit::Handle;
 pub use ink::Nib;
 pub use measure::Measure;
 pub use profile::{Finding, Rule};
-pub use shape::{Heads, Shape, ShapeKind};
+pub use shape::{Dash, Heads, Shape, ShapeKind};
 pub use transform::Transform;

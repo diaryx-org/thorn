@@ -579,6 +579,12 @@ public protocol DrawingProtocol : AnyObject {
     func connector(id: String)  -> Connector?
     
     /**
+     * How a shape's stroke is broken — a note's frame's — or `None` for
+     * solid.
+     */
+    func dash(id: String)  -> Dash?
+    
+    /**
      * Delete the shape with this `data-id`.
      */
     func delete(id: String) throws 
@@ -639,6 +645,12 @@ public protocol DrawingProtocol : AnyObject {
     func hit(x: Double, y: Double, tolerance: Double)  -> Shape?
     
     /**
+     * Whether the editor draws a shape as a stroke, and so whether a
+     * dash means anything on it; a note counts, through its frame.
+     */
+    func isStroked(id: String)  -> Bool
+    
+    /**
      * The shapes directly inside a `<g>`, in paint order.
      */
     func members(id: String)  -> [Shape]
@@ -673,6 +685,11 @@ public protocol DrawingProtocol : AnyObject {
     func page()  -> Bounds?
     
     /**
+     * The words the next shape is added with.
+     */
+    func pen()  -> Pen
+    
+    /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
      */
     func redo() throws  -> Bool
@@ -689,6 +706,18 @@ public protocol DrawingProtocol : AnyObject {
     func resize(id: String, to: Bounds) throws 
     
     /**
+     * Say how a stroked shape's stroke is broken, or with `None` solid.
+     * One undo step; `Unsupported` for what is not stroked.
+     */
+    func setDash(id: String, dash: Dash?) throws 
+    
+    /**
+     * `set_dash` over a selection as one undo step, what is not stroked
+     * left as it is.
+     */
+    func setDashAll(ids: [String], dash: Dash?) throws 
+    
+    /**
      * Say which ends of a connector have a head, or with `None` none — a
      * plain line. One undo step; `Unsupported` for what is not a connector.
      */
@@ -699,6 +728,11 @@ public protocol DrawingProtocol : AnyObject {
      * connector left as it is.
      */
     func setHeadsAll(ids: [String], heads: Heads?) throws 
+    
+    /**
+     * Set the words the next shape is added with; not an edit.
+     */
+    func setPen(pen: Pen) 
     
     /**
      * Replace a `<text>`'s characters; plain text, written escaped.
@@ -987,6 +1021,18 @@ open func connector(id: String) -> Connector? {
 }
     
     /**
+     * How a shape's stroke is broken — a note's frame's — or `None` for
+     * solid.
+     */
+open func dash(id: String) -> Dash? {
+    return try!  FfiConverterOptionTypeDash.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_dash(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * Delete the shape with this `data-id`.
      */
 open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
@@ -1111,6 +1157,18 @@ open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
 }
     
     /**
+     * Whether the editor draws a shape as a stroke, and so whether a
+     * dash means anything on it; a note counts, through its frame.
+     */
+open func isStroked(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_is_stroked(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * The shapes directly inside a `<g>`, in paint order.
      */
 open func members(id: String) -> [Shape] {
@@ -1182,6 +1240,16 @@ open func page() -> Bounds? {
 }
     
     /**
+     * The words the next shape is added with.
+     */
+open func pen() -> Pen {
+    return try!  FfiConverterTypePen.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_pen(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
      */
 open func redo()throws  -> Bool {
@@ -1216,6 +1284,30 @@ open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConver
 }
     
     /**
+     * Say how a stroked shape's stroke is broken, or with `None` solid.
+     * One undo step; `Unsupported` for what is not stroked.
+     */
+open func setDash(id: String, dash: Dash?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionTypeDash.lower(dash),$0
+    )
+}
+}
+    
+    /**
+     * `set_dash` over a selection as one undo step, what is not stroked
+     * left as it is.
+     */
+open func setDashAll(ids: [String], dash: Dash?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionTypeDash.lower(dash),$0
+    )
+}
+}
+    
+    /**
      * Say which ends of a connector have a head, or with `None` none — a
      * plain line. One undo step; `Unsupported` for what is not a connector.
      */
@@ -1235,6 +1327,16 @@ open func setHeadsAll(ids: [String], heads: Heads?)throws  {try rustCallWithErro
     uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(self.uniffiClonePointer(),
         FfiConverterSequenceString.lower(ids),
         FfiConverterOptionTypeHeads.lower(heads),$0
+    )
+}
+}
+    
+    /**
+     * Set the words the next shape is added with; not an edit.
+     */
+open func setPen(pen: Pen) {try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_pen(self.uniffiClonePointer(),
+        FfiConverterTypePen.lower(pen),$0
     )
 }
 }
@@ -1836,6 +1938,67 @@ public func FfiConverterTypeNote_lower(_ value: Note) -> RustBuffer {
 
 
 /**
+ * Mirrors `thorn_svg_core::Pen`: the words the next shape is added with.
+ */
+public struct Pen {
+    public var dash: Dash?
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(dash: Dash?) {
+        self.dash = dash
+    }
+}
+
+
+
+extension Pen: Equatable, Hashable {
+    public static func ==(lhs: Pen, rhs: Pen) -> Bool {
+        if lhs.dash != rhs.dash {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(dash)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePen: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Pen {
+        return
+            try Pen(
+                dash: FfiConverterOptionTypeDash.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Pen, into buf: inout [UInt8]) {
+        FfiConverterOptionTypeDash.write(value.dash, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePen_lift(_ buf: RustBuffer) throws -> Pen {
+    return try FfiConverterTypePen.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePen_lower(_ value: Pen) -> RustBuffer {
+    return FfiConverterTypePen.lower(value)
+}
+
+
+/**
  * A point in user units.
  */
 public struct Point {
@@ -2095,6 +2258,73 @@ public func FfiConverterTypeShape_lift(_ buf: RustBuffer) throws -> Shape {
 public func FfiConverterTypeShape_lower(_ value: Shape) -> RustBuffer {
     return FfiConverterTypeShape.lower(value)
 }
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
+ * Mirrors `thorn_svg_core::Dash`: how a stroke is broken.
+ */
+
+public enum Dash {
+    
+    case dashed
+    case dotted
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeDash: FfiConverterRustBuffer {
+    typealias SwiftType = Dash
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Dash {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .dashed
+        
+        case 2: return .dotted
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Dash, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .dashed:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .dotted:
+            writeInt(&buf, Int32(2))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDash_lift(_ buf: RustBuffer) throws -> Dash {
+    return try FfiConverterTypeDash.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDash_lower(_ value: Dash) -> RustBuffer {
+    return FfiConverterTypeDash.lower(value)
+}
+
+
+
+extension Dash: Equatable, Hashable {}
+
+
 
 
 /**
@@ -2914,6 +3144,30 @@ fileprivate struct FfiConverterOptionTypeShape: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeDash: FfiConverterRustBuffer {
+    typealias SwiftType = Dash?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeDash.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeDash.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterOptionTypeHandle: FfiConverterRustBuffer {
     typealias SwiftType = Handle?
 
@@ -3249,6 +3503,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 14022) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dash() != 1377) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 53757) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3279,6 +3536,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 61470) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_is_stroked() != 53530) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_members() != 17237) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3297,6 +3557,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_page() != 28014) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_pen() != 55165) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_redo() != 64887) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3306,10 +3569,19 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 64941) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash() != 19368) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash_all() != 7871) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads() != 28688) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads_all() != 61916) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_pen() != 29617) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {
