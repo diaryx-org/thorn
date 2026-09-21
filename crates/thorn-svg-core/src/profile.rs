@@ -13,7 +13,7 @@ use crate::connector::Connector;
 use crate::drawing::Drawing;
 use crate::ink::{self, Nib};
 use crate::number;
-use crate::shape::{Dash, Heads, ShapeKind};
+use crate::shape::{Dash, Heads, Hue, ShapeKind};
 
 /// The profile's version, written as the root's `data-diaryx-drawing` value.
 pub const VERSION: &str = "1";
@@ -74,6 +74,11 @@ pub enum Rule {
     /// `data-dash` is `dashed` or `dotted`, on a stroked shape: the values
     /// the template's `<style>` breaks a stroke for.
     Dash,
+    /// `data-color` is a hue of the palette, on a shape the template draws
+    /// in `currentColor` — anything but a group or an image.
+    Color,
+    /// `data-fill` is a hue of the palette, on a closed shape.
+    Fill,
     /// `data-ink` names a nib the editor draws — `monoline` — and the
     /// stroke carries the `data-centreline` and `data-widths` its outline
     /// was computed from.
@@ -100,6 +105,10 @@ impl Rule {
                 "data-arrow, data-from and data-to are on a <line> or a <path> of one segment"
             }
             Self::Dash => "data-dash is dashed or dotted, on a stroked shape",
+            Self::Color => {
+                "data-color is a hue of the palette, on a shape that is not a group or an image"
+            }
+            Self::Fill => "data-fill is a hue of the palette, on a closed shape",
             Self::InkNib => {
                 "data-ink names a nib the editor draws, with data-centreline and data-widths beside it"
             }
@@ -227,6 +236,35 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
             if let Some(message) = wrong {
                 findings.push(Finding {
                     rule: Rule::Dash,
+                    shape: shape.id.clone(),
+                    message,
+                });
+            }
+        }
+        for (name, rule, applies, on) in [
+            (
+                "data-color",
+                Rule::Color,
+                shape.takes_color(),
+                "a shape that is not a group or an image",
+            ),
+            ("data-fill", Rule::Fill, shape.is_closed(), "a closed shape"),
+        ] {
+            let Some(value) = shape.attr(name) else {
+                continue;
+            };
+            let wrong = if Hue::from_value(value).is_none() {
+                Some(format!(
+                    "<{tag}> {name}={value:?} is not a hue of the palette"
+                ))
+            } else if !applies {
+                Some(format!("<{tag}> carries {name} but is not {on}"))
+            } else {
+                None
+            };
+            if let Some(message) = wrong {
+                findings.push(Finding {
+                    rule,
                     shape: shape.id.clone(),
                     message,
                 });

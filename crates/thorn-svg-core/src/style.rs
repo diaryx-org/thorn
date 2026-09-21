@@ -16,6 +16,8 @@
 
 use std::ops::Range;
 
+use crate::shape::Hue;
+
 /// A top-level rule: where its selector list and its declarations are in
 /// the stylesheet text.
 #[derive(Debug, PartialEq)]
@@ -194,11 +196,64 @@ pub(crate) const DASH_RULES: &[&str] = &[
     "[data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }",
 ];
 
+/// The rules the template draws a `data-color` and a `data-fill` by, one
+/// block per hue — the `color` the word sets, on the shape and on the
+/// arrowhead marker that hue has; the tint a fill is; and which marker a
+/// coloured arrow's ends take — and then the darker page's variants, in
+/// one `@media` block. What a drawing made before the palette gains when
+/// a shape first takes a hue.
+pub(crate) fn color_rules() -> Vec<String> {
+    let mut out = Vec::new();
+    for hue in Hue::ALL {
+        let name = hue.value();
+        out.push(format!(
+            "[data-color=\"{name}\"], #arrow-{name} {{ color: {} }}",
+            hue.stroke(false)
+        ));
+        out.push(format!(
+            "[data-fill=\"{name}\"] {{ fill: {} }}",
+            hue.tint(false)
+        ));
+        out.push(format!(
+            "[data-arrow=\"end\"][data-color=\"{name}\"], [data-arrow=\"both\"][data-color=\"{name}\"] {{ marker-end: url(#arrow-{name}) }}"
+        ));
+        out.push(format!(
+            "[data-arrow=\"start\"][data-color=\"{name}\"], [data-arrow=\"both\"][data-color=\"{name}\"] {{ marker-start: url(#arrow-{name}) }}"
+        ));
+    }
+    let mut dark = String::from("@media (prefers-color-scheme: dark) {");
+    for hue in Hue::ALL {
+        let name = hue.value();
+        dark.push_str(&format!(
+            "\n  [data-color=\"{name}\"], #arrow-{name} {{ color: {} }}",
+            hue.stroke(true)
+        ));
+        dark.push_str(&format!(
+            "\n  [data-fill=\"{name}\"] {{ fill: {} }}",
+            hue.tint(true)
+        ));
+    }
+    dark.push_str("\n}");
+    out.push(dark);
+    out
+}
+
+/// The `<marker>` an arrow of `hue` takes its head from: the template's
+/// `#arrow` under another id, coloured by the rule that names it. The
+/// inner line is indented one step past `indent`.
+pub(crate) fn marker_markup(hue: Hue, indent: &str) -> String {
+    format!(
+        "<marker id=\"arrow-{}\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"8\" markerHeight=\"8\" orient=\"auto-start-reverse\">\n{indent}  <path d=\"M 0 0 L 10 5 L 0 10 z\"/>\n{indent}</marker>",
+        hue.value()
+    )
+}
+
 /// `css` with `rules` appended after its last rule, in that rule's
-/// indentation, unless a selector already mentions `word` — in which case
-/// its author has said what the word means, and `None`. A stylesheet with
-/// no rules at all takes them on lines of their own.
-pub(crate) fn with_rules(css: &str, word: &str, rules: &[&str]) -> Option<String> {
+/// indentation (a rule of several lines has each indented), unless a
+/// selector already mentions `word` — in which case its author has said
+/// what the word means, and `None`. A stylesheet with no rules at all
+/// takes them on lines of their own.
+pub(crate) fn with_rules<S: AsRef<str>>(css: &str, word: &str, rules: &[S]) -> Option<String> {
     let found = self::rules(css);
     if found
         .iter()
@@ -207,32 +262,100 @@ pub(crate) fn with_rules(css: &str, word: &str, rules: &[&str]) -> Option<String
         return None;
     }
     let mut out = String::with_capacity(css.len() + 128);
-    match found.last() {
-        Some(last) => {
-            // Just past the `}` of the last rule, each new rule on a line
-            // of its own, indented as that rule is.
-            let end = last.declarations.end + 1;
-            out.push_str(&css[..end]);
-            let list = &css[last.selectors.clone()];
-            let lead = &list[..list.len() - list.trim_start().len()];
-            let indent = lead.rsplit('\n').next().unwrap_or("");
-            for rule in rules {
-                out.push('\n');
-                out.push_str(indent);
-                out.push_str(rule);
-            }
-            out.push_str(&css[end..]);
+    // Just past the last top-level `}` — a plain rule's or an at-rule
+    // block's — indented as the line that `}` is on.
+    let (head, indent, tail) = match last_block_end(css) {
+        Some(end) => {
+            let line = css[..end].rfind('\n').map_or(0, |i| i + 1);
+            let text = &css[line..end];
+            (
+                &css[..end],
+                &text[..text.len() - text.trim_start().len()],
+                &css[end..],
+            )
         }
-        None => {
-            out.push_str(css.trim_end());
-            for rule in rules {
-                out.push('\n');
-                out.push_str(rule);
+        None => (css.trim_end(), "", "\n"),
+    };
+    out.push_str(head);
+    for rule in rules {
+        out.push('\n');
+        out.push_str(indent);
+        out.push_str(&rule.as_ref().replace('\n', &format!("\n{indent}")));
+    }
+    out.push_str(tail);
+    Some(out)
+}
+
+/// One past the last top-level `}` in `css`, at-rule blocks included;
+/// `None` when there is no block at all.
+fn last_block_end(css: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut end = None;
+    let mut i = 0;
+    let bytes = css.as_bytes();
+    while i < bytes.len() {
+        match bytes[i] {
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                i = css[i + 2..]
+                    .find("*/")
+                    .map_or(bytes.len(), |n| i + 2 + n + 2);
+                continue;
             }
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    end = Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    end
+}
+
+/// The rules a drawing keeps for a darker page — the body of every
+/// `@media (prefers-color-scheme: dark)` block in `css`, joined — so an
+/// editor drawing the file in dark mode can apply them itself: resvg does
+/// not read `@media`. Empty when the stylesheet has none.
+pub(crate) fn dark_rules(css: &str) -> String {
+    let mut out = String::new();
+    let mut at = 0;
+    while let Some(i) = css[at..].find("@media") {
+        let start = at + i;
+        let Some(brace) = css[start..].find('{') else {
+            break;
+        };
+        let prelude: String = css[start + "@media".len()..start + brace]
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let open = start + brace;
+        // The block's close, nesting counted.
+        let mut depth = 0usize;
+        let mut close = None;
+        for (j, b) in css[open..].bytes().enumerate() {
+            match b {
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + j);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(close) = close else { break };
+        if prelude == "(prefers-color-scheme:dark)" {
+            out.push_str(css[open + 1..close].trim());
             out.push('\n');
         }
+        at = close + 1;
     }
-    Some(out)
+    out
 }
 
 /// The rule that keeps an arrowhead a filled triangle once a bare `path`
@@ -304,6 +427,27 @@ mod tests {
             with_rules("", "[data-dash", &["a { b: c }"]).unwrap(),
             "\na { b: c }\n"
         );
+    }
+
+    #[test]
+    fn a_dark_block_is_hoisted_and_a_rule_of_several_lines_is_indented() {
+        let css = "\n    @media (prefers-color-scheme: dark) { svg { color: #eee } }\n    rect { fill: none }\n    @media print { rect { fill: red } }\n  ";
+        assert_eq!(dark_rules(css), "svg { color: #eee }\n");
+        assert_eq!(dark_rules("rect { fill: none }"), "");
+        let added = with_rules(
+            css,
+            "[data-color",
+            &[
+                "a { b: c }",
+                "@media (prefers-color-scheme: dark) {\n  a { b: d }\n}",
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            added,
+            "\n    @media (prefers-color-scheme: dark) { svg { color: #eee } }\n    rect { fill: none }\n    @media print { rect { fill: red } }\n    a { b: c }\n    @media (prefers-color-scheme: dark) {\n      a { b: d }\n    }\n  "
+        );
+        assert_eq!(dark_rules(&added), "svg { color: #eee }\na { b: d }\n");
     }
 
     #[test]

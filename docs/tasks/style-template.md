@@ -4,7 +4,7 @@ description: What <style> the app writes into a fresh drawing so a viewer with n
 author: adammharris
 status: done
 created: 2026-09-19
-updated: 2026-09-20
+updated: 2026-09-21
 part_of: '[Tasks](tasks.md)'
 ---
 # The style block a new drawing is created with
@@ -32,6 +32,13 @@ head hollow; the template now fills `marker path` on its own. A drawing
 made from an earlier template gets these rules the first time it is bent
 (`docs/profile.md`, *A connector*), so the template's history is not a
 thing a file is stuck with.
+
+**2026-09-21.** The template carries the words of
+`docs/proposals/shape-style.md` as they land: the two `data-dash` rules,
+the palette — a `color` per hue, a tint per hue, and the marker rules —
+with its dark-page variants in a second `@media` block, and a `<marker>`
+per hue in `<defs>`. It is exactly what the widening of an older drawing
+produces, and a core test holds the two equal.
 
 The profile does not write a `<style>`; a shape with no fill or stroke
 is drawn by SVG's defaults (black fill, no stroke), which is a silhouette

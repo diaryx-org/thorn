@@ -18,16 +18,20 @@ public final class DrawingDocument {
     /// say — in which case the canvas shows nothing but the selection.
     public private(set) var picture: SVGPicture?
 
-    /// What `currentColor` is drawn as in `picture` — a CSS colour — or
-    /// `nil` for the file's own. The template's ink is `currentColor` off
-    /// the root's `color`, so a canvas in dark mode sets this to a light
-    /// ink and the picture follows without a byte of the file changing:
-    /// the rule is appended to the source resvg parses, not to `source`.
-    /// A file that spells its colours out — an older template, a red box
-    /// — is drawn as it says.
-    public var ink: String? {
-        didSet { guard ink != oldValue else { return }; reparse() }
+    /// Whether `picture` is drawn for a dark page: the drawing's own
+    /// `@media (prefers-color-scheme: dark)` rules — the template's light
+    /// ink, and what each hue of the palette is on a dark page — applied
+    /// as a browser would, by appending them to the source resvg parses
+    /// (which reads no `@media`), never to `source`. A file with no such
+    /// rules — an older template, a hand-written one — is drawn as it
+    /// says, whichever way this is set.
+    public var dark = false {
+        didSet { guard dark != oldValue else { return }; reparse() }
     }
+
+    /// The rules the file keeps for a dark page, hoisted out of its
+    /// `@media` blocks; empty when it has none.
+    public var darkRules: String { inner.darkRules() }
 
     /// Called after every gesture; a view redraws here.
     public var onChange: (() -> Void)?
@@ -184,13 +188,51 @@ public final class DrawingDocument {
         set { inner.setPen(pen: newValue) }
     }
 
-    /// Whether the editor draws a shape as a stroke — a box, a line, a
-    /// connector, a note through its frame — and so whether a dash means
-    /// anything on it.
-    public func isStroked(id: String) -> Bool { inner.isStroked(id: id) }
+    /// Whether a dash means anything on a shape: a stroked one — a box, a
+    /// line, a connector — or a group with one inside.
+    public func takesDash(id: String) -> Bool { inner.takesDash(id: id) }
 
-    /// How a shape's stroke is broken; `nil` for solid.
+    /// Whether a colour means anything on a shape: anything but an image.
+    public func takesColor(id: String) -> Bool { inner.takesColor(id: id) }
+
+    /// Whether a fill means anything on a shape: a closed one, or a group
+    /// with one inside.
+    public func takesFill(id: String) -> Bool { inner.takesFill(id: id) }
+
+    /// How a shape's stroke is broken — a group's, what its members agree
+    /// on; `nil` for solid.
     public func dash(id: String) -> Dash? { inner.dash(id: id) }
+
+    /// A shape's hue — a group's, what its members agree on; `nil` for the
+    /// drawing's ink.
+    public func color(id: String) -> Hue? { inner.color(id: id) }
+
+    /// A shape's background hue — a group's, what its closed members agree
+    /// on; `nil` for none.
+    public func fill(id: String) -> Hue? { inner.fill(id: id) }
+
+    /// Colour a shape — every member, for a group — with a hue of the
+    /// palette, or with `nil` the drawing's ink. One undo step.
+    public func setColor(id: String, _ hue: Hue?) throws {
+        try changed { try inner.setColor(id: id, hue: hue) }
+    }
+
+    /// `setColor` over a selection as one undo step; what takes no colour
+    /// is left as it is.
+    public func setColor(ids: [String], _ hue: Hue?) throws {
+        try changed { try inner.setColorAll(ids: ids, hue: hue) }
+    }
+
+    /// Give a closed shape a background, or with `nil` none. One undo step.
+    public func setFill(id: String, _ hue: Hue?) throws {
+        try changed { try inner.setFill(id: id, hue: hue) }
+    }
+
+    /// `setFill` over a selection as one undo step; what is not closed is
+    /// left as it is.
+    public func setFill(ids: [String], _ hue: Hue?) throws {
+        try changed { try inner.setFillAll(ids: ids, hue: hue) }
+    }
 
     /// Say how a stroked shape's stroke is broken, or with `nil` solid.
     /// One undo step.
@@ -349,10 +391,14 @@ public final class DrawingDocument {
 
     private func reparse() {
         var text = source
-        // Last, so it wins over the file's own `svg { color }` at the
-        // same specificity; a `<style>` is a style wherever it sits.
-        if let ink, let end = text.range(of: "</svg>", options: .backwards) {
-            text.replaceSubrange(end, with: "<style>svg{color:\(ink)}</style></svg>")
+        // Last, so each wins over the file's own rule at the same
+        // specificity, as a later rule does; a `<style>` is a style
+        // wherever it sits.
+        if dark, let end = text.range(of: "</svg>", options: .backwards) {
+            let rules = darkRules
+            if !rules.isEmpty {
+                text.replaceSubrange(end, with: "<style>\(rules)</style></svg>")
+            }
         }
         picture = try? SVGPicture(data: Data(text.utf8))
     }

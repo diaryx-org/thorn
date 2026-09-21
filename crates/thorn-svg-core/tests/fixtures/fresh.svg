@@ -3,6 +3,30 @@
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z"/>
     </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-yellow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-pink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
+    <marker id="arrow-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z"/>
+    </marker>
   </defs>
   <style>
     @media (prefers-color-scheme: dark) { svg { color: #e6e6e6 } }
@@ -15,5 +39,55 @@
     text { font: 16px sans-serif; fill: currentColor }
     [data-dash="dashed"] { stroke-dasharray: 8 6 }
     [data-dash="dotted"] { stroke-dasharray: 1 5; stroke-linecap: round }
+    [data-color="red"], #arrow-red { color: #c62828 }
+    [data-fill="red"] { fill: #ffcdd2 }
+    [data-arrow="end"][data-color="red"], [data-arrow="both"][data-color="red"] { marker-end: url(#arrow-red) }
+    [data-arrow="start"][data-color="red"], [data-arrow="both"][data-color="red"] { marker-start: url(#arrow-red) }
+    [data-color="orange"], #arrow-orange { color: #ef6c00 }
+    [data-fill="orange"] { fill: #ffe0b2 }
+    [data-arrow="end"][data-color="orange"], [data-arrow="both"][data-color="orange"] { marker-end: url(#arrow-orange) }
+    [data-arrow="start"][data-color="orange"], [data-arrow="both"][data-color="orange"] { marker-start: url(#arrow-orange) }
+    [data-color="yellow"], #arrow-yellow { color: #f9a825 }
+    [data-fill="yellow"] { fill: #fff9c4 }
+    [data-arrow="end"][data-color="yellow"], [data-arrow="both"][data-color="yellow"] { marker-end: url(#arrow-yellow) }
+    [data-arrow="start"][data-color="yellow"], [data-arrow="both"][data-color="yellow"] { marker-start: url(#arrow-yellow) }
+    [data-color="green"], #arrow-green { color: #2e7d32 }
+    [data-fill="green"] { fill: #c8e6c9 }
+    [data-arrow="end"][data-color="green"], [data-arrow="both"][data-color="green"] { marker-end: url(#arrow-green) }
+    [data-arrow="start"][data-color="green"], [data-arrow="both"][data-color="green"] { marker-start: url(#arrow-green) }
+    [data-color="blue"], #arrow-blue { color: #1565c0 }
+    [data-fill="blue"] { fill: #bbdefb }
+    [data-arrow="end"][data-color="blue"], [data-arrow="both"][data-color="blue"] { marker-end: url(#arrow-blue) }
+    [data-arrow="start"][data-color="blue"], [data-arrow="both"][data-color="blue"] { marker-start: url(#arrow-blue) }
+    [data-color="violet"], #arrow-violet { color: #6a1b9a }
+    [data-fill="violet"] { fill: #e1bee7 }
+    [data-arrow="end"][data-color="violet"], [data-arrow="both"][data-color="violet"] { marker-end: url(#arrow-violet) }
+    [data-arrow="start"][data-color="violet"], [data-arrow="both"][data-color="violet"] { marker-start: url(#arrow-violet) }
+    [data-color="pink"], #arrow-pink { color: #ad1457 }
+    [data-fill="pink"] { fill: #f8bbd0 }
+    [data-arrow="end"][data-color="pink"], [data-arrow="both"][data-color="pink"] { marker-end: url(#arrow-pink) }
+    [data-arrow="start"][data-color="pink"], [data-arrow="both"][data-color="pink"] { marker-start: url(#arrow-pink) }
+    [data-color="grey"], #arrow-grey { color: #757575 }
+    [data-fill="grey"] { fill: #e0e0e0 }
+    [data-arrow="end"][data-color="grey"], [data-arrow="both"][data-color="grey"] { marker-end: url(#arrow-grey) }
+    [data-arrow="start"][data-color="grey"], [data-arrow="both"][data-color="grey"] { marker-start: url(#arrow-grey) }
+    @media (prefers-color-scheme: dark) {
+      [data-color="red"], #arrow-red { color: #ef5350 }
+      [data-fill="red"] { fill: #4e1c1c }
+      [data-color="orange"], #arrow-orange { color: #ffa726 }
+      [data-fill="orange"] { fill: #4e2f0f }
+      [data-color="yellow"], #arrow-yellow { color: #ffee58 }
+      [data-fill="yellow"] { fill: #4a4210 }
+      [data-color="green"], #arrow-green { color: #66bb6a }
+      [data-fill="green"] { fill: #1b3d1f }
+      [data-color="blue"], #arrow-blue { color: #42a5f5 }
+      [data-fill="blue"] { fill: #10305a }
+      [data-color="violet"], #arrow-violet { color: #ab47bc }
+      [data-fill="violet"] { fill: #3a1550 }
+      [data-color="pink"], #arrow-pink { color: #ec407a }
+      [data-fill="pink"] { fill: #4a1330 }
+      [data-color="grey"], #arrow-grey { color: #9e9e9e }
+      [data-fill="grey"] { fill: #3a3a3a }
+    }
   </style>
 </svg>

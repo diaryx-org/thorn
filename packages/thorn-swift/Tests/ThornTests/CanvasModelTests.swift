@@ -649,6 +649,63 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertTrue(model.selectedStroked.isEmpty)
     }
 
+    func testAColourIsTheNextShapesOrTheSelectionsAndFollowsTheAppearance() throws {
+        let doc = DrawingDocument.fresh()
+        // The pen: a red, yellow-filled box is born with both words.
+        doc.pen.hue = .red
+        doc.pen.fill = .yellow
+        let box = try doc.addRect(CGRect(x: 0, y: 0, width: 200, height: 100)) // the page fits around it
+        XCTAssertEqual(doc.color(id: box), .red)
+        XCTAssertEqual(doc.fill(id: box), .yellow)
+        XCTAssertTrue(doc.source.contains("data-color=\"red\" data-fill=\"yellow\"/>"), doc.source)
+        XCTAssertTrue(try doc.undo(), "one step")
+        XCTAssertTrue(try doc.redo())
+        let model = CanvasModel(document: doc)
+        XCTAssertEqual(model.hue, .red, "the pen is the document's")
+        model.setColor(.orange)
+        XCTAssertEqual(model.hue, .orange, "nothing selected: the pen's")
+        XCTAssertEqual(doc.pen.hue, .orange)
+        model.setFill(.green)
+        XCTAssertEqual(model.fill, .green)
+
+        // Drawn in the template's red on a light page, and its lighter red
+        // on a dark one — the file's own dark rules, hoisted. (Nothing
+        // selected: a handle would sit on the probed edge.)
+        let context = makeContext()
+        let view = CGRect(x: 0, y: 0, width: 400, height: 200)
+        model.setZoom(1, about: .zero)
+        model.draw(in: context, rect: view, scale: 1)
+        let edge = model.viewPoint(CGPoint(x: 0, y: 50))
+        let inside = model.viewPoint(CGPoint(x: 100, y: 50))
+        XCTAssertEqual(pixel(context, Int(edge.x), Int(edge.y)).0, 0xc6, "light red stroke")
+        XCTAssertEqual(pixel(context, Int(inside.x), Int(inside.y)).2, 0xc4, "light yellow tint")
+        model.appearance = .dark
+        model.draw(in: context, rect: view, scale: 1)
+        XCTAssertEqual(pixel(context, Int(edge.x), Int(edge.y)).0, 0xef, "dark red stroke")
+        XCTAssertEqual(pixel(context, Int(inside.x), Int(inside.y)).0, 0x4a, "dark yellow tint")
+        XCTAssertTrue(doc.darkRules.contains("[data-color=\"red\"]"))
+
+        // The selection: a hue lands on the box, a fill too; a line among
+        // them takes the colour and not the fill; the ink is the word off.
+        model.select([box])
+        XCTAssertEqual(model.selectionColor, .some(.red))
+        model.setColor(.blue)
+        XCTAssertEqual(doc.color(id: box), .blue)
+        XCTAssertEqual(model.hue, .orange, "the pen is untouched")
+        let line = try doc.addLine(from: CGPoint(x: 0, y: 0), to: CGPoint(x: 10, y: 10))
+        model.select([box, line])
+        XCTAssertEqual(model.selectedColorable, [box, line])
+        XCTAssertEqual(model.selectedClosed, [box])
+        XCTAssertNil(model.selectionColor, "they differ")
+        model.setFill(.green)
+        model.setColor(nil)
+        XCTAssertEqual(doc.fill(id: box), .green)
+        XCTAssertNil(doc.color(id: box))
+        XCTAssertNil(doc.color(id: line))
+        XCTAssertEqual(model.selectionColor, .some(nil))
+        XCTAssertEqual(model.selectionFill, .some(.green))
+    }
+
     func testALineIsBentByItsMidpointHandleAndStraightenedByDraggingItBack() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

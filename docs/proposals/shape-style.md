@@ -16,11 +16,21 @@ in the order under *The order of work*; this section names them as they
 land.
 
 - `data-arrow` from the editor: commit 1663707.
-- `data-dash`: the commit that closes this line. One thing the argument
-  below did not say: the "current style" with nothing selected is held by
-  the core as a `Pen` the canvas sets, not by the canvas alone, so that a
-  shape is born with its words in the one splice that makes it rather than
-  restyled in a second undo step. It is still never in the file.
+- `data-dash`: commit 57cc325. One thing the argument below did not say:
+  the "current style" with nothing selected is held by the core as a `Pen`
+  the canvas sets, not by the canvas alone, so that a shape is born with
+  its words in the one splice that makes it rather than restyled in a
+  second undo step. It is still never in the file. Dotted is `1 5` with
+  round caps, not `2 4`.
+- `data-color` and `data-fill`: the commit that closes this line. Two
+  things settled differently from the table: a group takes no word of its
+  own — colouring one colours its members, so a member arrow's head is
+  chosen by the same rule as any arrow's, and the group's colour is what
+  they agree on; and the marker rules drop the type selectors,
+  `[data-arrow="end"][data-color="red"]` being enough and outranking
+  `line[data-arrow="end"]`. The editor in dark mode applies the file's own
+  `@media` rules, hoisted (`Drawing::dark_rules`), rather than a light ink
+  of its own, so a hue's dark variant is the stylesheet's to say.
 
 ## The question
 

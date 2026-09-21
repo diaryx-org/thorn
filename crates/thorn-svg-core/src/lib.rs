@@ -42,5 +42,5 @@ pub use hit::Handle;
 pub use ink::Nib;
 pub use measure::Measure;
 pub use profile::{Finding, Rule};
-pub use shape::{Dash, Heads, Shape, ShapeKind};
+pub use shape::{Dash, Heads, Hue, Shape, ShapeKind};
 pub use transform::Transform;

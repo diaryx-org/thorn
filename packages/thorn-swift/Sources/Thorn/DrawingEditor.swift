@@ -123,17 +123,64 @@ public struct DrawingEditor: View {
     // MARK: The options
 
     /// The words the selection can take, or the tool's when nothing is
-    /// selected; nothing at all when neither has any.
+    /// selected; nothing at all when neither has any. The palette on one
+    /// row — a colour, a background — and the stroke's words on the next.
     @ViewBuilder private var options: some View {
         let _ = state.revision
         let selected = !state.selection.isEmpty
+        let color = selected ? !state.model.selectedColorable.isEmpty : state.tool.makesShape
+        let fill = selected ? !state.model.selectedClosed.isEmpty : state.tool.makesClosedShape
         let dash = selected ? !state.model.selectedStroked.isEmpty : state.tool.makesStroke
         let heads = selected ? !state.model.selectedConnectors.isEmpty : state.tool == .arrow
+        if color || fill {
+            HStack(spacing: 8) {
+                if color { ToolCluster { colorTiles } }
+                if fill { ToolCluster { fillTiles } }
+            }
+        }
         if dash || heads {
             HStack(spacing: 8) {
                 if dash { ToolCluster { dashTiles } }
                 if heads { ToolCluster { headsTiles } }
             }
+        }
+    }
+
+    /// The palette: the drawing's ink, then a swatch per hue in the
+    /// colour the page's appearance draws it. For a selection it is what
+    /// the shapes agree on, and lights nothing when they differ.
+    @ViewBuilder private var colorTiles: some View {
+        let current: Hue?? = state.selection.isEmpty ? .some(state.model.hue) : state.model.selectionColor
+        let dark = state.model.appearance == .dark
+        Button { state.model.setColor(nil) } label: {
+            Label("Ink", systemImage: "circle")
+        }
+        .buttonStyle(ToolTile(on: current == .some(nil)))
+        .help("The drawing's ink")
+        ForEach(hues(), id: \.self) { hue in
+            Button { state.model.setColor(hue) } label: {
+                Label { Text(hue.name) } icon: { Swatch(hex: hueHex(hue: hue, dark: dark, tint: false)) }
+            }
+            .buttonStyle(ToolTile(on: current == .some(hue)))
+            .help(hue.name)
+        }
+    }
+
+    /// The backgrounds: none, then a tint per hue.
+    @ViewBuilder private var fillTiles: some View {
+        let current: Hue?? = state.selection.isEmpty ? .some(state.model.fill) : state.model.selectionFill
+        let dark = state.model.appearance == .dark
+        Button { state.model.setFill(nil) } label: {
+            Label("No background", systemImage: "square.slash")
+        }
+        .buttonStyle(ToolTile(on: current == .some(nil)))
+        .help("No background")
+        ForEach(hues(), id: \.self) { hue in
+            Button { state.model.setFill(hue) } label: {
+                Label { Text("\(hue.name) background") } icon: { Swatch(hex: hueHex(hue: hue, dark: dark, tint: true), square: true) }
+            }
+            .buttonStyle(ToolTile(on: current == .some(hue)))
+            .help("\(hue.name) background")
         }
     }
 
@@ -383,6 +430,58 @@ enum Arrowheads: Hashable {
         case .end: "arrow.right"
         case .start: "arrow.left"
         case .both: "arrow.left.and.right"
+        }
+    }
+}
+
+/// A swatch of the palette: a disc of a hue, or a square of its tint,
+/// with a hairline so a pale one has an edge on a pale tile.
+struct Swatch: View {
+    let hex: String
+    var square = false
+
+    var body: some View {
+        let color = Color(hex: hex)
+        let side = ToolTile.glyph + 2
+        if square {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(color)
+                .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(Color.primary.opacity(0.25)))
+                .frame(width: side, height: side)
+        } else {
+            Circle()
+                .fill(color)
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15)))
+                .frame(width: side, height: side)
+        }
+    }
+}
+
+extension Color {
+    /// A CSS hex colour, `#rgb` or `#rrggbb`, as the template spells them.
+    init(hex: String) {
+        var digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
+        let value = UInt64(digits, radix: 16) ?? 0
+        self.init(
+            red: Double((value >> 16) & 0xff) / 255,
+            green: Double((value >> 8) & 0xff) / 255,
+            blue: Double(value & 0xff) / 255)
+    }
+}
+
+extension Hue {
+    /// The hue's name, capitalised, for a tooltip.
+    var name: String {
+        switch self {
+        case .red: "Red"
+        case .orange: "Orange"
+        case .yellow: "Yellow"
+        case .green: "Green"
+        case .blue: "Blue"
+        case .violet: "Violet"
+        case .pink: "Pink"
+        case .grey: "Grey"
         }
     }
 }

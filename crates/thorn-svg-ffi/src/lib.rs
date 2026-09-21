@@ -146,16 +146,83 @@ impl From<Dash> for core::Dash {
     }
 }
 
+/// Mirrors `thorn_svg_core::Hue`: a colour of the palette, by name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, uniffi::Enum)]
+pub enum Hue {
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Violet,
+    Pink,
+    Grey,
+}
+
+impl From<core::Hue> for Hue {
+    fn from(h: core::Hue) -> Self {
+        match h {
+            core::Hue::Red => Self::Red,
+            core::Hue::Orange => Self::Orange,
+            core::Hue::Yellow => Self::Yellow,
+            core::Hue::Green => Self::Green,
+            core::Hue::Blue => Self::Blue,
+            core::Hue::Violet => Self::Violet,
+            core::Hue::Pink => Self::Pink,
+            core::Hue::Grey => Self::Grey,
+        }
+    }
+}
+
+impl From<Hue> for core::Hue {
+    fn from(h: Hue) -> Self {
+        match h {
+            Hue::Red => Self::Red,
+            Hue::Orange => Self::Orange,
+            Hue::Yellow => Self::Yellow,
+            Hue::Green => Self::Green,
+            Hue::Blue => Self::Blue,
+            Hue::Violet => Self::Violet,
+            Hue::Pink => Self::Pink,
+            Hue::Grey => Self::Grey,
+        }
+    }
+}
+
+/// Every hue, in the order a palette shows them.
+#[uniffi::export]
+pub fn hues() -> Vec<Hue> {
+    core::Hue::ALL.into_iter().map(Hue::from).collect()
+}
+
+/// What the template draws a hue as — the `color` a `data-color` sets and
+/// the tint a `data-fill` is — on a light page and a dark one, as CSS
+/// hex; what a palette swatch shows.
+#[uniffi::export]
+pub fn hue_hex(hue: Hue, dark: bool, tint: bool) -> String {
+    let hue: core::Hue = hue.into();
+    if tint {
+        hue.tint(dark)
+    } else {
+        hue.stroke(dark)
+    }
+    .to_string()
+}
+
 /// Mirrors `thorn_svg_core::Pen`: the words the next shape is added with.
 #[derive(Clone, Copy, Debug, Default, uniffi::Record)]
 pub struct Pen {
     pub dash: Option<Dash>,
+    pub hue: Option<Hue>,
+    pub fill: Option<Hue>,
 }
 
 impl From<core::Pen> for Pen {
     fn from(p: core::Pen) -> Self {
         Self {
             dash: p.dash.map(Into::into),
+            hue: p.hue.map(Into::into),
+            fill: p.fill.map(Into::into),
         }
     }
 }
@@ -164,6 +231,8 @@ impl From<Pen> for core::Pen {
     fn from(p: Pen) -> Self {
         Self {
             dash: p.dash.map(Into::into),
+            hue: p.hue.map(Into::into),
+            fill: p.fill.map(Into::into),
         }
     }
 }
@@ -755,19 +824,74 @@ impl Drawing {
         self.lock().set_pen(pen.into());
     }
 
-    /// Whether the editor draws a shape as a stroke, and so whether a
-    /// dash means anything on it; a note counts, through its frame.
-    pub fn is_stroked(&self, id: String) -> bool {
-        let d = self.lock();
-        d.shape(&id).is_some_and(|s| s.is_stroked()) || d.note(&id).is_some()
+    /// Whether a dash means anything on a shape: a stroked one, or a group
+    /// with one inside.
+    pub fn takes_dash(&self, id: String) -> bool {
+        self.lock().takes_dash(&id)
     }
 
-    /// How a shape's stroke is broken — a note's frame's — or `None` for
-    /// solid.
+    /// Whether a colour means anything on a shape: anything but an image,
+    /// or a group of only images.
+    pub fn takes_color(&self, id: String) -> bool {
+        self.lock().takes_color(&id)
+    }
+
+    /// Whether a fill means anything on a shape: a closed one, or a group
+    /// with one inside.
+    pub fn takes_fill(&self, id: String) -> bool {
+        self.lock().takes_fill(&id)
+    }
+
+    /// How a shape's stroke is broken — a group's, what its stroked
+    /// members agree on — or `None` for solid.
     pub fn dash(&self, id: String) -> Option<Dash> {
-        let d = self.lock();
-        let id = d.note(&id).map_or(id, |n| n.frame);
-        d.shape(&id).and_then(|s| s.dash()).map(Dash::from)
+        self.lock().dash(&id).map(Dash::from)
+    }
+
+    /// A shape's hue — a group's, what its members agree on — or `None`
+    /// for the drawing's ink.
+    pub fn color(&self, id: String) -> Option<Hue> {
+        self.lock().color(&id).map(Hue::from)
+    }
+
+    /// A shape's background hue — a group's, what its closed members
+    /// agree on — or `None` for none.
+    pub fn fill(&self, id: String) -> Option<Hue> {
+        self.lock().fill(&id).map(Hue::from)
+    }
+
+    /// Colour a shape — every member, for a group — with a hue of the
+    /// palette, or with `None` the drawing's ink. One undo step;
+    /// `Unsupported` for what takes no colour.
+    pub fn set_color(&self, id: String, hue: Option<Hue>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_color(&id, hue.map(Into::into))?)
+    }
+
+    /// `set_color` over a selection as one undo step, what takes no colour
+    /// left as it is.
+    pub fn set_color_all(&self, ids: Vec<String>, hue: Option<Hue>) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_color_all(&ids, hue.map(Into::into))?)
+    }
+
+    /// Give a closed shape a background, or with `None` none. One undo
+    /// step; `Unsupported` for what is not closed.
+    pub fn set_fill(&self, id: String, hue: Option<Hue>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_fill(&id, hue.map(Into::into))?)
+    }
+
+    /// `set_fill` over a selection as one undo step, what is not closed
+    /// left as it is.
+    pub fn set_fill_all(&self, ids: Vec<String>, hue: Option<Hue>) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_fill_all(&ids, hue.map(Into::into))?)
+    }
+
+    /// The rules the drawing keeps for a darker page — the body of its
+    /// `@media (prefers-color-scheme: dark)` blocks — for a canvas in dark
+    /// mode to append to what resvg parses. Empty when it has none.
+    pub fn dark_rules(&self) -> String {
+        self.lock().dark_rules()
     }
 
     /// Say how a stroked shape's stroke is broken, or with `None` solid.

@@ -332,9 +332,19 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_bounds(void*_Nonnull ptr, Rust
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_check(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_COLOR
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_color(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CONNECTOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CONNECTOR
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_connector(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DARK_RULES
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DARK_RULES
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DASH
@@ -367,6 +377,11 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_end_point(void*_Nonnull ptr, R
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_extent(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FILL
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_fill(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_font(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
@@ -390,11 +405,6 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_heads(void*_Nonnull ptr, RustB
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HIT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HIT
 RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_hit(void*_Nonnull ptr, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_IS_STROKED
-#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_IS_STROKED
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_is_stroked(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MEMBERS
@@ -447,6 +457,16 @@ int8_t uniffi_thorn_svg_ffi_fn_method_drawing_reorder(void*_Nonnull ptr, RustBuf
 void uniffi_thorn_svg_ffi_fn_method_drawing_resize(void*_Nonnull ptr, RustBuffer id, RustBuffer to, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_color(void*_Nonnull ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR_ALL
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH
 void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(void*_Nonnull ptr, RustBuffer id, RustBuffer dash, RustCallStatus *_Nonnull out_status
@@ -455,6 +475,16 @@ void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(void*_Nonnull ptr, RustBuff
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH_ALL
 void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer dash, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(void*_Nonnull ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL_ALL
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS
@@ -497,6 +527,21 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_source(void*_Nonnull ptr, Rust
 int8_t uniffi_thorn_svg_ffi_fn_method_drawing_straighten(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_COLOR
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_DASH
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_DASH
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_FILL
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNDO
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNDO
 int8_t uniffi_thorn_svg_ffi_fn_method_drawing_undo(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
@@ -520,6 +565,17 @@ RustBuffer uniffi_thorn_svg_ffi_fn_func_handle_drag(RustBuffer handle, RustBuffe
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HANDLE_POSITION
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HANDLE_POSITION
 RustBuffer uniffi_thorn_svg_ffi_fn_func_handle_position(RustBuffer handle, RustBuffer bounds, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HUE_HEX
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HUE_HEX
+RustBuffer uniffi_thorn_svg_ffi_fn_func_hue_hex(RustBuffer hue, int8_t dark, int8_t tint, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HUES
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HUES
+RustBuffer uniffi_thorn_svg_ffi_fn_func_hues(RustCallStatus *_Nonnull out_status
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_IS_DRAWING
@@ -837,6 +893,18 @@ uint16_t uniffi_thorn_svg_ffi_checksum_func_handle_position(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_HUE_HEX
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_HUE_HEX
+uint16_t uniffi_thorn_svg_ffi_checksum_func_hue_hex(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_HUES
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_HUES
+uint16_t uniffi_thorn_svg_ffi_checksum_func_hues(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_IS_DRAWING
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_FUNC_IS_DRAWING
 uint16_t uniffi_thorn_svg_ffi_checksum_func_is_drawing(void
@@ -927,9 +995,21 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_check(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_COLOR
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_color(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_CONNECTOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_CONNECTOR
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_connector(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_DARK_RULES
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_DARK_RULES
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_dark_rules(void
     
 );
 #endif
@@ -969,6 +1049,12 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_extent(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FILL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_fill(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FONT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_FONT
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_font(void
@@ -996,12 +1082,6 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_heads(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_HIT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_HIT
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_hit(void
-    
-);
-#endif
-#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_IS_STROKED
-#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_IS_STROKED
-uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_is_stroked(void
     
 );
 #endif
@@ -1065,6 +1145,18 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_resize(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_COLOR
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_color(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_COLOR_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_COLOR_ALL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_color_all(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_DASH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_DASH
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash(void
@@ -1074,6 +1166,18 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_DASH_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_DASH_ALL
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash_all(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_FILL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_FILL_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_FILL_ALL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill_all(void
     
 );
 #endif
@@ -1122,6 +1226,24 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_source(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_STRAIGHTEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_STRAIGHTEN
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_straighten(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_COLOR
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_COLOR
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_takes_color(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_DASH
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_DASH
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_takes_dash(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_FILL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_TAKES_FILL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_takes_fill(void
     
 );
 #endif

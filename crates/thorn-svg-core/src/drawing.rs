@@ -45,7 +45,7 @@ use crate::measure::{Font, Measure};
 use crate::number;
 use crate::path::Subpath;
 use crate::profile::{self, Finding};
-use crate::shape::{self, Dash, Heads, Shape, ShapeKind};
+use crate::shape::{self, Dash, Heads, Hue, Shape, ShapeKind};
 use crate::style;
 use crate::transform::Transform;
 
@@ -162,21 +162,78 @@ pub struct Note {
 pub struct Pen {
     /// `data-dash` on a stroked shape.
     pub dash: Option<Dash>,
+    /// `data-color` on any shape but a group or an image.
+    pub hue: Option<Hue>,
+    /// `data-fill` on a closed shape.
+    pub fill: Option<Hue>,
 }
 
 impl Pen {
-    /// The words, as attributes, for a shape spelled by `tag` — the
-    /// stroked ones take a dash, the rest nothing.
+    /// The words, as attributes, for a shape spelled by `tag`: a dash for
+    /// a stroked one, a fill for a closed one, a colour for any but a
+    /// group or an image.
     fn words(&self, tag: &str) -> Vec<(&'static str, String)> {
         let mut out = Vec::new();
         let stroked = matches!(
             tag,
             "rect" | "ellipse" | "circle" | "line" | "polyline" | "polygon"
         );
+        let closed = matches!(tag, "rect" | "ellipse" | "circle" | "polygon");
         if stroked && let Some(dash) = self.dash {
             out.push(("data-dash", dash.value().to_string()));
         }
+        if !matches!(tag, "g" | "image")
+            && let Some(hue) = self.hue
+        {
+            out.push(("data-color", hue.value().to_string()));
+        }
+        if closed && let Some(fill) = self.fill {
+            out.push(("data-fill", fill.value().to_string()));
+        }
         out
+    }
+
+    /// The words as markup, ` name="value"` each.
+    fn markup(&self, tag: &str) -> String {
+        self.words(tag)
+            .iter()
+            .map(|(name, value)| format!(" {name}=\"{}\"", escape(value)))
+            .collect()
+    }
+}
+
+/// A word a shape says about its look — the `data-` attribute, and which
+/// shapes it means anything on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Word {
+    Dash,
+    Color,
+    Fill,
+}
+
+impl Word {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Dash => "data-dash",
+            Self::Color => "data-color",
+            Self::Fill => "data-fill",
+        }
+    }
+
+    fn gesture(self) -> &'static str {
+        match self {
+            Self::Dash => "set_dash",
+            Self::Color => "set_color",
+            Self::Fill => "set_fill",
+        }
+    }
+
+    fn applies(self, shape: &Shape) -> bool {
+        match self {
+            Self::Dash => shape.is_stroked(),
+            Self::Color => shape.takes_color(),
+            Self::Fill => shape.is_closed(),
+        }
     }
 }
 
@@ -464,28 +521,24 @@ impl Drawing {
         let inner = (bounds.width - 2.0 * NOTE_PAD).max(1.0);
         let size = self.font_size(None);
         let markup = format!(
-            "<g data-role=\"note\" data-id=\"{group}\">\n    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" data-id=\"{frame}\"{}/>\n    <text x=\"{}\" y=\"{}\" data-width=\"{}\" data-id=\"{label}\">{}</text>\n  </g>",
+            "<g data-role=\"note\" data-id=\"{group}\">\n    <rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" data-id=\"{frame}\"{}/>\n    <text x=\"{}\" y=\"{}\" data-width=\"{}\" data-id=\"{label}\"{}>{}</text>\n  </g>",
             f(bounds.x),
             f(bounds.y),
             f(bounds.width),
             f(bounds.height),
-            self.pen
-                .words("rect")
-                .iter()
-                .map(|(name, value)| format!(" {name}=\"{}\"", escape(value)))
-                .collect::<String>(),
+            self.pen.markup("rect"),
             f(bounds.x + NOTE_PAD),
             f(bounds.y + NOTE_PAD + size),
             f(inner),
+            self.pen.markup("text"),
             escape(text.trim()),
         );
         self.append_to_root(&markup)?;
         // The words are flowed into the width now the label exists to be
         // measured; folded into the insert.
         let mut steps = 1;
-        if self.pen.dash.is_some() {
-            self.style_word("[data-dash", style::DASH_RULES, &mut steps)?;
-        }
+        let words = self.pen.words("rect");
+        self.style_words(&words, &mut steps)?;
         if !text.trim().is_empty() {
             self.rewrap(&label, Some(inner), &mut steps)?;
         }
@@ -567,11 +620,25 @@ impl Drawing {
         .expect("writing to a String");
         self.append_to_root(&markup)?;
         let mut steps = 1;
-        if words.iter().any(|(name, _)| *name == "data-dash") {
-            self.style_word("[data-dash", style::DASH_RULES, &mut steps)?;
-        }
+        self.style_words(&words, &mut steps)?;
         self.follow_page(&mut steps)?;
         Ok(id)
+    }
+
+    /// The template's rules for whichever of `words` the drawing's
+    /// stylesheet has none for, folded into the gesture's step.
+    fn style_words(&mut self, words: &[(&str, String)], steps: &mut usize) -> Result<(), Error> {
+        for (name, _) in words {
+            match *name {
+                "data-dash" => self.style_word("[data-dash", style::DASH_RULES, steps)?,
+                "data-color" | "data-fill" => {
+                    self.style_word("[data-color", &style::color_rules(), steps)?;
+                    self.defs_markers(steps)?;
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     /// Delete the shape with this `data-id`: one splice, one undo step —
@@ -1364,7 +1431,12 @@ impl Drawing {
     /// author has said what the word means. A drawing with no `<style>` at
     /// all is left as it is: the word is written, and what it looks like
     /// is a stylesheet's to say.
-    fn style_word(&mut self, word: &str, rules: &[&str], steps: &mut usize) -> Result<(), Error> {
+    fn style_word<S: AsRef<str>>(
+        &mut self,
+        word: &str,
+        rules: &[S],
+        steps: &mut usize,
+    ) -> Result<(), Error> {
         let mut sheets = Vec::new();
         let mut next = self.node(self.root).first_child;
         while let Some(id) = next {
@@ -1388,6 +1460,53 @@ impl Drawing {
         };
         self.editor
             .edit_range(content.start, content.end, &added)
+            .map_err(Error::Edit)?;
+        self.reload()?;
+        self.fold(steps)
+    }
+
+    /// A coloured arrow's head is a `<marker>` of its hue, since a
+    /// marker's contents take no colour from the line that names it and
+    /// Quick Look draws no `context-stroke`. The first shape to take a hue
+    /// brings the template's marker for every hue into `<defs>`, after
+    /// the last marker there, folded into the gesture's step — unless one
+    /// is there already, or there is no `<defs>` with a marker to copy,
+    /// in which case heads were never drawn and the stylesheet is left to
+    /// say what they are.
+    fn defs_markers(&mut self, steps: &mut usize) -> Result<(), Error> {
+        let mut next = self.node(self.root).first_child;
+        let mut defs = None;
+        while let Some(id) = next {
+            let node = self.node(id);
+            next = node.next_sibling;
+            if node.name.as_deref() == Some("defs") {
+                defs = Some(id);
+                break;
+            }
+        }
+        let Some(defs) = defs else { return Ok(()) };
+        let mut last = None;
+        let mut next = self.node(defs).first_child;
+        while let Some(id) = next {
+            let node = self.node(id);
+            next = node.next_sibling;
+            if node.name.as_deref() == Some("marker") {
+                if shape::attr_of(node, "id").is_some_and(|id| id.starts_with("arrow-")) {
+                    return Ok(());
+                }
+                last = Some(node.span.clone());
+            }
+        }
+        let Some(last) = last else { return Ok(()) };
+        let indent = self.indent_before(last.start).to_string();
+        let mut markup = String::new();
+        for hue in Hue::ALL {
+            markup.push('\n');
+            markup.push_str(&indent);
+            markup.push_str(&style::marker_markup(hue, &indent));
+        }
+        self.editor
+            .edit_range(last.end, last.end, &markup)
             .map_err(Error::Edit)?;
         self.reload()?;
         self.fold(steps)
@@ -1438,23 +1557,122 @@ impl Drawing {
 
     /// Say how a stroked shape's stroke is broken — `data-dash`, which the
     /// drawing's `<style>` draws — or, with `None`, solid, the word taken
-    /// off. On a note it is the note's frame. A drawing whose `<style>`
-    /// has no rule for the word gains the template's, in the same step
-    /// (docs/proposals/shape-style.md). One undo step; nothing when the
-    /// shape already says so. `Unsupported` for what is not stroked — ink,
-    /// a label, a group that is not a note, an image.
+    /// off. On a group — a note — it is the stroked members'. A drawing
+    /// whose `<style>` has no rule for the word gains the template's, in
+    /// the same step (docs/proposals/shape-style.md). One undo step;
+    /// nothing when the shape already says so. `Unsupported` for what is
+    /// not stroked — ink, a label, an image, a group with no stroke in it.
     pub fn set_dash(&mut self, id: &str, dash: Option<Dash>) -> Result<(), Error> {
         let mut steps = 0;
-        self.set_dash_one(id, dash, &mut steps)
+        self.set_word_one(id, Word::Dash, dash.map(Dash::value), &mut steps)
     }
 
     /// `set_dash` over a selection, as one undo step: the stroked shapes
     /// among `ids` take the word, and what is not stroked is left as it
     /// is rather than refused. `NoSuchShape` for an id that is nothing.
     pub fn set_dash_all(&mut self, ids: &[&str], dash: Option<Dash>) -> Result<(), Error> {
+        self.set_word_all(ids, Word::Dash, dash.map(Dash::value))
+    }
+
+    /// How a shape's stroke is broken — a group's, what its stroked
+    /// members agree on. `None` for solid, for a shape that takes no
+    /// dash, and for members that differ.
+    pub fn dash(&self, id: &str) -> Option<Dash> {
+        self.agreed(id, Word::Dash).and_then(Dash::from_value)
+    }
+
+    /// Colour a shape — `data-color`, a hue of the palette the drawing's
+    /// `<style>` says the colour of, on a light page and a dark one — or,
+    /// with `None`, the drawing's ink again. On a group it is every
+    /// member's, so a member arrow's head follows. The stylesheet gains
+    /// the palette's rules and `<defs>` a marker per hue when it has none.
+    /// One undo step. `Unsupported` for an image, or a group of nothing
+    /// colourable.
+    pub fn set_color(&mut self, id: &str, hue: Option<Hue>) -> Result<(), Error> {
+        let mut steps = 0;
+        self.set_word_one(id, Word::Color, hue.map(Hue::value), &mut steps)
+    }
+
+    /// `set_color` over a selection, as one undo step, what cannot take a
+    /// colour left as it is.
+    pub fn set_color_all(&mut self, ids: &[&str], hue: Option<Hue>) -> Result<(), Error> {
+        self.set_word_all(ids, Word::Color, hue.map(Hue::value))
+    }
+
+    /// A shape's hue — a group's, what its members agree on. `None` for
+    /// the drawing's ink, and for members that differ.
+    pub fn color(&self, id: &str) -> Option<Hue> {
+        self.agreed(id, Word::Color).and_then(Hue::from_value)
+    }
+
+    /// Give a closed shape a background — `data-fill`, a hue the
+    /// stylesheet draws as a tint — or, with `None`, none. On a group it
+    /// is the closed members' — a note's frame. One undo step.
+    /// `Unsupported` for what is not closed.
+    pub fn set_fill(&mut self, id: &str, hue: Option<Hue>) -> Result<(), Error> {
+        let mut steps = 0;
+        self.set_word_one(id, Word::Fill, hue.map(Hue::value), &mut steps)
+    }
+
+    /// `set_fill` over a selection, as one undo step, what is not closed
+    /// left as it is.
+    pub fn set_fill_all(&mut self, ids: &[&str], hue: Option<Hue>) -> Result<(), Error> {
+        self.set_word_all(ids, Word::Fill, hue.map(Hue::value))
+    }
+
+    /// A shape's background hue — a group's, what its closed members
+    /// agree on. `None` for none, and for members that differ.
+    pub fn fill(&self, id: &str) -> Option<Hue> {
+        self.agreed(id, Word::Fill).and_then(Hue::from_value)
+    }
+
+    /// The rules the drawing keeps for a darker page — the body of its
+    /// `@media (prefers-color-scheme: dark)` blocks — for an editor that
+    /// draws it in dark mode to apply itself, since resvg reads no
+    /// `@media`. The template's say the ink is light and what each hue is
+    /// on a dark page. Empty for a drawing with none.
+    pub fn dark_rules(&self) -> String {
+        let mut out = String::new();
+        let mut next = self.node(self.root).first_child;
+        while let Some(id) = next {
+            let node = self.node(id);
+            next = node.next_sibling;
+            if node.name.as_deref() == Some("style")
+                && let Some(content) = node.content_span.clone()
+            {
+                out.push_str(&style::dark_rules(&self.source[content]));
+            }
+        }
+        out
+    }
+
+    /// Whether `set_dash` on this shape would land anywhere: a stroked
+    /// shape, or a group with one inside.
+    pub fn takes_dash(&self, id: &str) -> bool {
+        self.takes(id, Word::Dash)
+    }
+
+    /// Whether `set_color` on this shape would land anywhere: anything
+    /// but an image, or a group with only images inside.
+    pub fn takes_color(&self, id: &str) -> bool {
+        self.takes(id, Word::Color)
+    }
+
+    /// Whether `set_fill` on this shape would land anywhere: a closed
+    /// shape, or a group with one inside.
+    pub fn takes_fill(&self, id: &str) -> bool {
+        self.takes(id, Word::Fill)
+    }
+
+    fn takes(&self, id: &str, word: Word) -> bool {
+        self.shape(id)
+            .is_some_and(|s| !self.word_targets(s, word).is_empty())
+    }
+
+    fn set_word_all(&mut self, ids: &[&str], word: Word, value: Option<&str>) -> Result<(), Error> {
         let mut steps = 0;
         for id in ids {
-            match self.set_dash_one(id, dash, &mut steps) {
+            match self.set_word_one(id, word, value, &mut steps) {
                 Err(Error::Unsupported { .. }) => {}
                 other => other?,
             }
@@ -1462,36 +1680,81 @@ impl Drawing {
         Ok(())
     }
 
-    fn set_dash_one(
+    /// The shapes a word on `id` lands on: the shape itself when the word
+    /// applies to it, or, for a group, every shape inside it that it
+    /// applies to. Empty when it applies to nothing there.
+    fn word_targets(&self, shape: &Shape, word: Word) -> Vec<NodeId> {
+        if shape.kind == ShapeKind::Group {
+            let mut out = Vec::new();
+            for member in self.members_of(shape) {
+                out.extend(self.word_targets(member, word));
+            }
+            out
+        } else if word.applies(shape) {
+            vec![shape.node]
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn set_word_one(
         &mut self,
         id: &str,
-        dash: Option<Dash>,
+        word: Word,
+        value: Option<&str>,
         steps: &mut usize,
     ) -> Result<(), Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
-        let shape = match self.note(id) {
-            Some(note) => self.shape(&note.frame).expect("a note has its frame"),
-            None if shape.is_stroked() => shape,
-            None => {
-                return Err(Error::Unsupported {
-                    gesture: "set_dash",
-                    kind: shape.kind,
-                });
-            }
-        };
-        if shape.attr("data-dash").map(str::trim) == dash.map(Dash::value) {
-            return Ok(());
+        let targets = self.word_targets(shape, word);
+        if targets.is_empty() {
+            return Err(Error::Unsupported {
+                gesture: word.gesture(),
+                kind: shape.kind,
+            });
         }
-        let (node, attrs) = (shape.node, shape.attrs.clone());
-        let updates = [("data-dash", dash.map(|d| d.value().to_string()))];
-        self.write_attrs(node, &attrs, &updates)?;
-        self.fold(steps)?;
-        if dash.is_some() {
-            self.style_word("[data-dash", style::DASH_RULES, steps)?;
+        let mut written = false;
+        for node in targets {
+            let shape = self
+                .shapes
+                .iter()
+                .find(|s| s.node == node)
+                .expect("a target is a shape");
+            if shape.attr(word.name()).map(str::trim) == value {
+                continue;
+            }
+            let attrs = shape.attrs.clone();
+            let updates = [(word.name(), value.map(str::to_string))];
+            self.write_attrs(node, &attrs, &updates)?;
+            self.fold(steps)?;
+            written = true;
+        }
+        if written && let Some(value) = value {
+            self.style_words(&[(word.name(), value.to_string())], steps)?;
         }
         Ok(())
+    }
+
+    /// The value of a word the shapes it lands on agree on; `None` when
+    /// they differ, or none carries it.
+    fn agreed(&self, id: &str, word: Word) -> Option<&str> {
+        let shape = self.shape(id)?;
+        let mut agreed: Option<&str> = None;
+        for node in self.word_targets(shape, word) {
+            let value = self
+                .shapes
+                .iter()
+                .find(|s| s.node == node)
+                .and_then(|s| s.attr(word.name()))
+                .map(str::trim);
+            match (agreed, value) {
+                (None, Some(v)) if agreed.is_none() => agreed = Some(v),
+                (Some(a), Some(v)) if a == v => {}
+                _ => return None,
+            }
+        }
+        agreed
     }
 
     /// Say which ends of a connector have a head — `data-arrow`, the
@@ -3199,11 +3462,109 @@ mod tests {
     }
 
     #[test]
+    fn a_colour_lands_on_a_shape_or_a_groups_members_and_brings_the_palette_with_it() {
+        // A drawing from the template as it was before the palette — the
+        // dash rules there, nothing of colour, one marker.
+        let before = crate::profile::TEMPLATE;
+        let style_start = before.find("<style>").unwrap();
+        let old_style = "<style>\n    @media (prefers-color-scheme: dark) { svg { color: #e6e6e6 } }\n    rect, ellipse, polygon { fill: none; stroke: currentColor; stroke-width: 2 }\n    line, path { fill: none; stroke: currentColor; stroke-width: 2 }\n    line[data-arrow=\"end\"], line[data-arrow=\"both\"], path[data-arrow=\"end\"], path[data-arrow=\"both\"] { marker-end: url(#arrow) }\n    line[data-arrow=\"start\"], line[data-arrow=\"both\"], path[data-arrow=\"start\"], path[data-arrow=\"both\"] { marker-start: url(#arrow) }\n    marker path { fill: currentColor; stroke: none }\n    path[data-ink] { fill: currentColor; stroke: none }\n    text { font: 16px sans-serif; fill: currentColor }\n    [data-dash=\"dashed\"] { stroke-dasharray: 8 6 }\n    [data-dash=\"dotted\"] { stroke-dasharray: 1 5; stroke-linecap: round }\n  </style>\n</svg>\n";
+        let defs_end = before.find("  </defs>").unwrap();
+        let first_marker_end = before.find("</marker>").unwrap() + "</marker>\n".len();
+        let old = format!(
+            "{}{}{}",
+            &before[..first_marker_end],
+            &before[defs_end..style_start],
+            old_style
+        );
+        let mut d = Drawing::open(&old).unwrap();
+        assert_eq!(d.check(), []);
+        let a = d.add_arrow(20.0, 20.0, 120.0, 20.0, Heads::End).unwrap();
+        let r = d
+            .add_rect(Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 10.0,
+                height: 10.0,
+            })
+            .unwrap();
+        let t = d.add_text(0.0, 50.0, "hi").unwrap();
+        let g = d.group(&[&a, &r, &t]).unwrap();
+        let steps_before = 4;
+
+        // Colouring the group colours every member; the stylesheet and the
+        // <defs> become the template's, in one step.
+        d.set_color(&g, Some(Hue::Red)).unwrap();
+        for id in [&a, &r, &t] {
+            assert_eq!(d.shape(id).unwrap().hue(), Some(Hue::Red), "{id}");
+        }
+        assert_eq!(d.shape(&g).unwrap().attr("data-color"), None);
+        assert_eq!(d.color(&g), Some(Hue::Red));
+        assert_eq!(d.check(), []);
+        let fresh = Drawing::fresh();
+        let between = |src: &str, from: &str, to: &str| {
+            let s = src.find(from).unwrap();
+            let e = src.find(to).unwrap();
+            src[s..e].to_string()
+        };
+        let style_of = |src: &str| between(src, "<style>", "</style>");
+        let defs_of = |src: &str| between(src, "<defs>", "</defs>");
+        assert_eq!(style_of(d.source()), style_of(fresh.source()));
+        assert_eq!(defs_of(d.source()), defs_of(fresh.source()));
+        d.undo().unwrap();
+        assert_eq!(d.color(&g), None);
+        assert_eq!(style_of(d.source()), style_of(&old), "one step");
+        assert_eq!(defs_of(d.source()), defs_of(&old));
+        for _ in 0..steps_before {
+            assert!(d.undo().unwrap());
+        }
+        assert_eq!(d.source(), old);
+        for _ in 0..=steps_before {
+            assert!(d.redo().unwrap());
+        }
+
+        // Members that differ agree on nothing; the ink is a word taken
+        // off; a fill lands on the box alone.
+        d.set_color(&t, Some(Hue::Blue)).unwrap();
+        assert_eq!(d.color(&g), None);
+        assert_eq!(d.color(&t), Some(Hue::Blue));
+        d.set_color(&g, None).unwrap();
+        for id in [&a, &r, &t] {
+            assert_eq!(d.shape(id).unwrap().attr("data-color"), None, "{id}");
+        }
+        d.set_fill(&g, Some(Hue::Green)).unwrap();
+        assert_eq!(d.shape(&r).unwrap().fill(), Some(Hue::Green));
+        assert_eq!(d.shape(&a).unwrap().attr("data-fill"), None);
+        assert_eq!(d.fill(&g), Some(Hue::Green));
+        assert!(matches!(
+            d.set_fill(&a, Some(Hue::Green)),
+            Err(Error::Unsupported {
+                gesture: "set_fill",
+                ..
+            })
+        ));
+        assert_eq!(d.check(), []);
+        assert_eq!(
+            d.source().matches("id=\"arrow-red\"").count(),
+            1,
+            "markers once"
+        );
+
+        // The dark rules are the file's own, hoisted for an editor.
+        let dark = d.dark_rules();
+        assert!(dark.starts_with("svg { color: #e6e6e6 }\n"), "{dark}");
+        assert!(dark.contains("[data-color=\"red\"], #arrow-red { color: #ef5350 }"));
+        assert!(dark.contains("[data-fill=\"green\"] { fill: #1b3d1f }"));
+        assert!(!dark.contains("@media"));
+    }
+
+    #[test]
     fn the_pen_writes_its_words_into_a_shape_as_it_is_added() {
         let mut d = Drawing::fresh();
         assert_eq!(d.pen(), Pen::default());
         d.set_pen(Pen {
             dash: Some(Dash::Dotted),
+            hue: Some(Hue::Blue),
+            fill: Some(Hue::Yellow),
         });
         let r = d
             .add_rect(Rect {
@@ -3235,12 +3596,32 @@ mod tests {
         for id in [&t, &i, &n] {
             assert_eq!(d.shape(id).unwrap().attr("data-dash"), None, "{id}");
         }
-        let frame = d.note(&n).unwrap().frame;
+        for id in [&r, &l, &t, &i] {
+            assert_eq!(d.shape(id).unwrap().hue(), Some(Hue::Blue), "{id}");
+        }
+        assert_eq!(d.shape(&r).unwrap().fill(), Some(Hue::Yellow));
+        for id in [&l, &t, &i, &n] {
+            assert_eq!(d.shape(id).unwrap().attr("data-fill"), None, "{id}");
+        }
+        let Note { frame, label } = d.note(&n).unwrap();
         assert_eq!(
             d.shape(&frame).unwrap().dash(),
             Some(Dash::Dotted),
             "a note's frame"
         );
+        assert_eq!(d.shape(&frame).unwrap().fill(), Some(Hue::Yellow));
+        assert_eq!(d.shape(&frame).unwrap().hue(), Some(Hue::Blue));
+        assert_eq!(
+            d.shape(&label).unwrap().hue(),
+            Some(Hue::Blue),
+            "and its label"
+        );
+        assert_eq!(
+            d.shape(&n).unwrap().attr("data-color"),
+            None,
+            "never the group"
+        );
+        assert_eq!(d.color(&n), Some(Hue::Blue));
         assert_eq!(d.check(), []);
         // The template has the rules; the shape's step is one step.
         assert_eq!(d.source().matches("[data-dash=\"dotted\"]").count(), 1);

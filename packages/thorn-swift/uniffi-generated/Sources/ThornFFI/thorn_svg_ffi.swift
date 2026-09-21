@@ -572,6 +572,12 @@ public protocol DrawingProtocol : AnyObject {
     func check()  -> [Finding]
     
     /**
+     * A shape's hue — a group's, what its members agree on — or `None`
+     * for the drawing's ink.
+     */
+    func color(id: String)  -> Hue?
+    
+    /**
      * A shape as a connector — a `<line>`, or a `<path>` of one straight
      * or bent segment — in the root's user units; `None` for what is not
      * one.
@@ -579,8 +585,15 @@ public protocol DrawingProtocol : AnyObject {
     func connector(id: String)  -> Connector?
     
     /**
-     * How a shape's stroke is broken — a note's frame's — or `None` for
-     * solid.
+     * The rules the drawing keeps for a darker page — the body of its
+     * `@media (prefers-color-scheme: dark)` blocks — for a canvas in dark
+     * mode to append to what resvg parses. Empty when it has none.
+     */
+    func darkRules()  -> String
+    
+    /**
+     * How a shape's stroke is broken — a group's, what its stroked
+     * members agree on — or `None` for solid.
      */
     func dash(id: String)  -> Dash?
     
@@ -614,6 +627,12 @@ public protocol DrawingProtocol : AnyObject {
     func extent()  -> Bounds?
     
     /**
+     * A shape's background hue — a group's, what its closed members
+     * agree on — or `None` for none.
+     */
+    func fill(id: String)  -> Hue?
+    
+    /**
      * The face and size a label lays out in, as resvg resolved them —
      * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
      * label's. `None` when the label lays out to nothing.
@@ -643,12 +662,6 @@ public protocol DrawingProtocol : AnyObject {
      * member of a group is returned itself; `outermost` names the group.
      */
     func hit(x: Double, y: Double, tolerance: Double)  -> Shape?
-    
-    /**
-     * Whether the editor draws a shape as a stroke, and so whether a
-     * dash means anything on it; a note counts, through its frame.
-     */
-    func isStroked(id: String)  -> Bool
     
     /**
      * The shapes directly inside a `<g>`, in paint order.
@@ -706,6 +719,19 @@ public protocol DrawingProtocol : AnyObject {
     func resize(id: String, to: Bounds) throws 
     
     /**
+     * Colour a shape — every member, for a group — with a hue of the
+     * palette, or with `None` the drawing's ink. One undo step;
+     * `Unsupported` for what takes no colour.
+     */
+    func setColor(id: String, hue: Hue?) throws 
+    
+    /**
+     * `set_color` over a selection as one undo step, what takes no colour
+     * left as it is.
+     */
+    func setColorAll(ids: [String], hue: Hue?) throws 
+    
+    /**
      * Say how a stroked shape's stroke is broken, or with `None` solid.
      * One undo step; `Unsupported` for what is not stroked.
      */
@@ -716,6 +742,18 @@ public protocol DrawingProtocol : AnyObject {
      * left as it is.
      */
     func setDashAll(ids: [String], dash: Dash?) throws 
+    
+    /**
+     * Give a closed shape a background, or with `None` none. One undo
+     * step; `Unsupported` for what is not closed.
+     */
+    func setFill(id: String, hue: Hue?) throws 
+    
+    /**
+     * `set_fill` over a selection as one undo step, what is not closed
+     * left as it is.
+     */
+    func setFillAll(ids: [String], hue: Hue?) throws 
     
     /**
      * Say which ends of a connector have a head, or with `None` none — a
@@ -760,6 +798,24 @@ public protocol DrawingProtocol : AnyObject {
      * `false` when it was a `<line>` already, and nothing was written.
      */
     func straighten(id: String) throws  -> Bool
+    
+    /**
+     * Whether a colour means anything on a shape: anything but an image,
+     * or a group of only images.
+     */
+    func takesColor(id: String)  -> Bool
+    
+    /**
+     * Whether a dash means anything on a shape: a stroked one, or a group
+     * with one inside.
+     */
+    func takesDash(id: String)  -> Bool
+    
+    /**
+     * Whether a fill means anything on a shape: a closed one, or a group
+     * with one inside.
+     */
+    func takesFill(id: String)  -> Bool
     
     /**
      * Undo the last gesture; `false` when there was nothing to undo.
@@ -1008,6 +1064,18 @@ open func check() -> [Finding] {
 }
     
     /**
+     * A shape's hue — a group's, what its members agree on — or `None`
+     * for the drawing's ink.
+     */
+open func color(id: String) -> Hue? {
+    return try!  FfiConverterOptionTypeHue.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_color(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * A shape as a connector — a `<line>`, or a `<path>` of one straight
      * or bent segment — in the root's user units; `None` for what is not
      * one.
@@ -1021,8 +1089,20 @@ open func connector(id: String) -> Connector? {
 }
     
     /**
-     * How a shape's stroke is broken — a note's frame's — or `None` for
-     * solid.
+     * The rules the drawing keeps for a darker page — the body of its
+     * `@media (prefers-color-scheme: dark)` blocks — for a canvas in dark
+     * mode to append to what resvg parses. Empty when it has none.
+     */
+open func darkRules() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(self.uniffiClonePointer(),$0
+    )
+})
+}
+    
+    /**
+     * How a shape's stroke is broken — a group's, what its stroked
+     * members agree on — or `None` for solid.
      */
 open func dash(id: String) -> Dash? {
     return try!  FfiConverterOptionTypeDash.lift(try! rustCall() {
@@ -1094,6 +1174,18 @@ open func extent() -> Bounds? {
 }
     
     /**
+     * A shape's background hue — a group's, what its closed members
+     * agree on — or `None` for none.
+     */
+open func fill(id: String) -> Hue? {
+    return try!  FfiConverterOptionTypeHue.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_fill(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
      * The face and size a label lays out in, as resvg resolved them —
      * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
      * label's. `None` when the label lays out to nothing.
@@ -1152,18 +1244,6 @@ open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),
         FfiConverterDouble.lower(tolerance),$0
-    )
-})
-}
-    
-    /**
-     * Whether the editor draws a shape as a stroke, and so whether a
-     * dash means anything on it; a note counts, through its frame.
-     */
-open func isStroked(id: String) -> Bool {
-    return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_is_stroked(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
     )
 })
 }
@@ -1284,6 +1364,31 @@ open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConver
 }
     
     /**
+     * Colour a shape — every member, for a group — with a hue of the
+     * palette, or with `None` the drawing's ink. One undo step;
+     * `Unsupported` for what takes no colour.
+     */
+open func setColor(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_color(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionTypeHue.lower(hue),$0
+    )
+}
+}
+    
+    /**
+     * `set_color` over a selection as one undo step, what takes no colour
+     * left as it is.
+     */
+open func setColorAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionTypeHue.lower(hue),$0
+    )
+}
+}
+    
+    /**
      * Say how a stroked shape's stroke is broken, or with `None` solid.
      * One undo step; `Unsupported` for what is not stroked.
      */
@@ -1303,6 +1408,30 @@ open func setDashAll(ids: [String], dash: Dash?)throws  {try rustCallWithError(F
     uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(self.uniffiClonePointer(),
         FfiConverterSequenceString.lower(ids),
         FfiConverterOptionTypeDash.lower(dash),$0
+    )
+}
+}
+    
+    /**
+     * Give a closed shape a background, or with `None` none. One undo
+     * step; `Unsupported` for what is not closed.
+     */
+open func setFill(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionTypeHue.lower(hue),$0
+    )
+}
+}
+    
+    /**
+     * `set_fill` over a selection as one undo step, what is not closed
+     * left as it is.
+     */
+open func setFillAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionTypeHue.lower(hue),$0
     )
 }
 }
@@ -1391,6 +1520,42 @@ open func source() -> String {
 open func straighten(id: String)throws  -> Bool {
     return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_straighten(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * Whether a colour means anything on a shape: anything but an image,
+     * or a group of only images.
+     */
+open func takesColor(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * Whether a dash means anything on a shape: a stroked one, or a group
+     * with one inside.
+     */
+open func takesDash(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * Whether a fill means anything on a shape: a closed one, or a group
+     * with one inside.
+     */
+open func takesFill(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 })
@@ -1942,11 +2107,15 @@ public func FfiConverterTypeNote_lower(_ value: Note) -> RustBuffer {
  */
 public struct Pen {
     public var dash: Dash?
+    public var hue: Hue?
+    public var fill: Hue?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(dash: Dash?) {
+    public init(dash: Dash?, hue: Hue?, fill: Hue?) {
         self.dash = dash
+        self.hue = hue
+        self.fill = fill
     }
 }
 
@@ -1957,11 +2126,19 @@ extension Pen: Equatable, Hashable {
         if lhs.dash != rhs.dash {
             return false
         }
+        if lhs.hue != rhs.hue {
+            return false
+        }
+        if lhs.fill != rhs.fill {
+            return false
+        }
         return true
     }
 
     public func hash(into hasher: inout Hasher) {
         hasher.combine(dash)
+        hasher.combine(hue)
+        hasher.combine(fill)
     }
 }
 
@@ -1973,12 +2150,16 @@ public struct FfiConverterTypePen: FfiConverterRustBuffer {
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Pen {
         return
             try Pen(
-                dash: FfiConverterOptionTypeDash.read(from: &buf)
+                dash: FfiConverterOptionTypeDash.read(from: &buf), 
+                hue: FfiConverterOptionTypeHue.read(from: &buf), 
+                fill: FfiConverterOptionTypeHue.read(from: &buf)
         )
     }
 
     public static func write(_ value: Pen, into buf: inout [UInt8]) {
         FfiConverterOptionTypeDash.write(value.dash, into: &buf)
+        FfiConverterOptionTypeHue.write(value.hue, into: &buf)
+        FfiConverterOptionTypeHue.write(value.fill, into: &buf)
     }
 }
 
@@ -2687,6 +2868,115 @@ extension Heads: Equatable, Hashable {}
 // Note that we don't yet support `indirect` for enums.
 // See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
+ * Mirrors `thorn_svg_core::Hue`: a colour of the palette, by name.
+ */
+
+public enum Hue {
+    
+    case red
+    case orange
+    case yellow
+    case green
+    case blue
+    case violet
+    case pink
+    case grey
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeHue: FfiConverterRustBuffer {
+    typealias SwiftType = Hue
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Hue {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+        
+        case 1: return .red
+        
+        case 2: return .orange
+        
+        case 3: return .yellow
+        
+        case 4: return .green
+        
+        case 5: return .blue
+        
+        case 6: return .violet
+        
+        case 7: return .pink
+        
+        case 8: return .grey
+        
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: Hue, into buf: inout [UInt8]) {
+        switch value {
+        
+        
+        case .red:
+            writeInt(&buf, Int32(1))
+        
+        
+        case .orange:
+            writeInt(&buf, Int32(2))
+        
+        
+        case .yellow:
+            writeInt(&buf, Int32(3))
+        
+        
+        case .green:
+            writeInt(&buf, Int32(4))
+        
+        
+        case .blue:
+            writeInt(&buf, Int32(5))
+        
+        
+        case .violet:
+            writeInt(&buf, Int32(6))
+        
+        
+        case .pink:
+            writeInt(&buf, Int32(7))
+        
+        
+        case .grey:
+            writeInt(&buf, Int32(8))
+        
+        }
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHue_lift(_ buf: RustBuffer) throws -> Hue {
+    return try FfiConverterTypeHue.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeHue_lower(_ value: Hue) -> RustBuffer {
+    return FfiConverterTypeHue.lower(value)
+}
+
+
+
+extension Hue: Equatable, Hashable {}
+
+
+
+// Note that we don't yet support `indirect` for enums.
+// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+/**
  * Mirrors `thorn_svg_core::Nib`: the rule an ink stroke's outline is
  * drawn by.
  */
@@ -3216,6 +3506,30 @@ fileprivate struct FfiConverterOptionTypeHeads: FfiConverterRustBuffer {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterOptionTypeHue: FfiConverterRustBuffer {
+    typealias SwiftType = Hue?
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        guard let value = value else {
+            writeInt(&buf, Int8(0))
+            return
+        }
+        writeInt(&buf, Int8(1))
+        FfiConverterTypeHue.write(value, into: &buf)
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> SwiftType {
+        switch try readInt(&buf) as Int8 {
+        case 0: return nil
+        case 1: return try FfiConverterTypeHue.read(from: &buf)
+        default: throw UniffiInternalError.unexpectedOptionalTag
+        }
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceDouble: FfiConverterRustBuffer {
     typealias SwiftType = [Double]
 
@@ -3362,6 +3676,31 @@ fileprivate struct FfiConverterSequenceTypeShape: FfiConverterRustBuffer {
         return seq
     }
 }
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeHue: FfiConverterRustBuffer {
+    typealias SwiftType = [Hue]
+
+    public static func write(_ value: [Hue], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeHue.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Hue] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Hue]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeHue.read(from: &buf))
+        }
+        return seq
+    }
+}
 /**
  * The handle of `bounds` within `tolerance` of the point, if any.
  */
@@ -3396,6 +3735,29 @@ public func handlePosition(handle: Handle, bounds: Bounds) -> Point {
     uniffi_thorn_svg_ffi_fn_func_handle_position(
         FfiConverterTypeHandle.lower(handle),
         FfiConverterTypeBounds.lower(bounds),$0
+    )
+})
+}
+/**
+ * What the template draws a hue as — the `color` a `data-color` sets and
+ * the tint a `data-fill` is — on a light page and a dark one, as CSS
+ * hex; what a palette swatch shows.
+ */
+public func hueHex(hue: Hue, dark: Bool, tint: Bool) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_func_hue_hex(
+        FfiConverterTypeHue.lower(hue),
+        FfiConverterBool.lower(dark),
+        FfiConverterBool.lower(tint),$0
+    )
+})
+}
+/**
+ * Every hue, in the order a palette shows them.
+ */
+public func hues() -> [Hue] {
+    return try!  FfiConverterSequenceTypeHue.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_func_hues($0
     )
 })
 }
@@ -3455,6 +3817,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_func_handle_position() != 51884) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_func_hue_hex() != 33511) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_func_hues() != 21350) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_func_is_drawing() != 27928) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3500,10 +3868,16 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_check() != 12937) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_color() != 24385) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 14022) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dash() != 1377) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dark_rules() != 56993) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dash() != 17019) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 53757) {
@@ -3521,6 +3895,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_extent() != 23471) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_fill() != 15855) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 674) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -3534,9 +3911,6 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 61470) {
-        return InitializationResult.apiChecksumMismatch
-    }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_is_stroked() != 53530) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_members() != 17237) {
@@ -3569,10 +3943,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 64941) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color() != 27) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color_all() != 30276) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash() != 19368) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash_all() != 7871) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill() != 50466) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill_all() != 4086) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads() != 28688) {
@@ -3597,6 +3983,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 9983) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_color() != 15959) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_dash() != 3408) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_fill() != 19718) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {

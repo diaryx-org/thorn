@@ -162,7 +162,141 @@ impl Dash {
     }
 }
 
+/// A colour of the palette: the values `data-color` and `data-fill` take.
+/// A name, not a hex, so the drawing's `<style>` can say what red is on a
+/// light page and on a dark one (docs/proposals/shape-style.md).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum Hue {
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Violet,
+    Pink,
+    Grey,
+}
+
+impl Hue {
+    /// Every hue, in the order a palette shows them.
+    pub const ALL: [Hue; 8] = [
+        Hue::Red,
+        Hue::Orange,
+        Hue::Yellow,
+        Hue::Green,
+        Hue::Blue,
+        Hue::Violet,
+        Hue::Pink,
+        Hue::Grey,
+    ];
+
+    /// The value `data-color` or `data-fill` spells this as.
+    pub fn value(self) -> &'static str {
+        match self {
+            Self::Red => "red",
+            Self::Orange => "orange",
+            Self::Yellow => "yellow",
+            Self::Green => "green",
+            Self::Blue => "blue",
+            Self::Violet => "violet",
+            Self::Pink => "pink",
+            Self::Grey => "grey",
+        }
+    }
+
+    /// The hue a value names, or `None` for one the profile does not admit.
+    pub fn from_value(value: &str) -> Option<Self> {
+        Some(match value.trim() {
+            "red" => Self::Red,
+            "orange" => Self::Orange,
+            "yellow" => Self::Yellow,
+            "green" => Self::Green,
+            "blue" => Self::Blue,
+            "violet" => Self::Violet,
+            "pink" => Self::Pink,
+            "grey" => Self::Grey,
+            _ => return None,
+        })
+    }
+
+    /// What the template draws a `data-color` of this hue as: the `color`
+    /// a stroke, an ink stroke, a label and an arrowhead take, on a light
+    /// page and on a dark one.
+    pub fn stroke(self, dark: bool) -> &'static str {
+        match (self, dark) {
+            (Self::Red, false) => "#c62828",
+            (Self::Red, true) => "#ef5350",
+            (Self::Orange, false) => "#ef6c00",
+            (Self::Orange, true) => "#ffa726",
+            (Self::Yellow, false) => "#f9a825",
+            (Self::Yellow, true) => "#ffee58",
+            (Self::Green, false) => "#2e7d32",
+            (Self::Green, true) => "#66bb6a",
+            (Self::Blue, false) => "#1565c0",
+            (Self::Blue, true) => "#42a5f5",
+            (Self::Violet, false) => "#6a1b9a",
+            (Self::Violet, true) => "#ab47bc",
+            (Self::Pink, false) => "#ad1457",
+            (Self::Pink, true) => "#ec407a",
+            (Self::Grey, false) => "#757575",
+            (Self::Grey, true) => "#9e9e9e",
+        }
+    }
+
+    /// What the template draws a `data-fill` of this hue as: a tint, on a
+    /// light page and on a dark one.
+    pub fn tint(self, dark: bool) -> &'static str {
+        match (self, dark) {
+            (Self::Red, false) => "#ffcdd2",
+            (Self::Red, true) => "#4e1c1c",
+            (Self::Orange, false) => "#ffe0b2",
+            (Self::Orange, true) => "#4e2f0f",
+            (Self::Yellow, false) => "#fff9c4",
+            (Self::Yellow, true) => "#4a4210",
+            (Self::Green, false) => "#c8e6c9",
+            (Self::Green, true) => "#1b3d1f",
+            (Self::Blue, false) => "#bbdefb",
+            (Self::Blue, true) => "#10305a",
+            (Self::Violet, false) => "#e1bee7",
+            (Self::Violet, true) => "#3a1550",
+            (Self::Pink, false) => "#f8bbd0",
+            (Self::Pink, true) => "#4a1330",
+            (Self::Grey, false) => "#e0e0e0",
+            (Self::Grey, true) => "#3a3a3a",
+        }
+    }
+}
+
 impl Shape {
+    /// Whether the editor draws this shape as a closed figure — a box, an
+    /// ellipse, a polygon — and so whether a `data-fill` means anything on
+    /// it.
+    pub fn is_closed(&self) -> bool {
+        matches!(
+            self.kind,
+            ShapeKind::Rect | ShapeKind::Ellipse | ShapeKind::Circle | ShapeKind::Polygon
+        )
+    }
+
+    /// Whether a `data-color` means anything on this shape: every kind
+    /// the template draws in `currentColor` — everything but a group,
+    /// which is coloured through its members, and an image.
+    pub fn takes_color(&self) -> bool {
+        !matches!(self.kind, ShapeKind::Group | ShapeKind::Image)
+    }
+
+    /// The hue of `data-color`; `None` for the drawing's ink, or a value
+    /// the profile does not admit (which `check` reports).
+    pub fn hue(&self) -> Option<Hue> {
+        self.attr("data-color").and_then(Hue::from_value)
+    }
+
+    /// The hue of `data-fill`; `None` for no background, or a value the
+    /// profile does not admit.
+    pub fn fill(&self) -> Option<Hue> {
+        self.attr("data-fill").and_then(Hue::from_value)
+    }
+
     /// Whether the editor draws this shape as a stroke — a box, a line, a
     /// connector — and so whether a `data-dash` or a `data-weight` means
     /// anything on it. Ink is a filled outline, a label is glyphs, a group

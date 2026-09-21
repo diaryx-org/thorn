@@ -87,9 +87,28 @@ public final class CanvasModel {
             onOptionsChange?()
         }
     }
+    /// The hue the next shape is drawn in; `nil` is the drawing's ink.
+    /// The document's pen, as `dash` is.
+    public var hue: Hue? {
+        get { document.pen.hue }
+        set {
+            guard newValue != document.pen.hue else { return }
+            document.pen.hue = newValue
+            onOptionsChange?()
+        }
+    }
+    /// The background the next closed shape is drawn with; `nil` is none.
+    public var fill: Hue? {
+        get { document.pen.fill }
+        set {
+            guard newValue != document.pen.fill else { return }
+            document.pen.fill = newValue
+            onOptionsChange?()
+        }
+    }
     /// Called when what an options strip shows may have changed: the
-    /// tool's `heads` or `dash`, or the document after any edit — an undo
-    /// can take a head off the selected arrow.
+    /// pen, or the document after any edit — an undo can take a head off
+    /// the selected arrow.
     public var onOptionsChange: (() -> Void)?
     /// How far the picture has been dragged from where it fits, in view
     /// points: the hand tool's doing, and a scroll's.
@@ -178,14 +197,6 @@ public final class CanvasModel {
     public enum Appearance: Equatable {
         case light, dark
 
-        /// What `currentColor` is drawn as: dark ink on a light sheet, and
-        /// the reverse.
-        var ink: String {
-            switch self {
-            case .light: "#222"
-            case .dark: "#e6e6e6"
-            }
-        }
         var sheet: CGColor {
             switch self {
             case .light: CGColor(gray: 1, alpha: 1)
@@ -202,7 +213,7 @@ public final class CanvasModel {
     public var appearance: Appearance = .light {
         didSet {
             guard appearance != oldValue else { return }
-            document.ink = appearance.ink
+            document.dark = appearance == .dark
             needsDisplay?()
         }
     }
@@ -215,7 +226,7 @@ public final class CanvasModel {
     public init(document: DrawingDocument) {
         self.document = document
         fitted = Self.sheet(of: document)
-        document.ink = appearance.ink
+        document.dark = appearance == .dark
         document.onChange = { [weak self] in
             guard let self else { return }
             selection = selection.filter { document.shape(id: $0) != nil }
@@ -873,16 +884,63 @@ public final class CanvasModel {
         }
     }
 
-    /// The stroked shapes among the selection — what a dash applies to.
+    /// The shapes among the selection a dash lands on.
     public var selectedStroked: [String] {
-        selection.filter { document.isStroked(id: $0) }
+        selection.filter { document.takesDash(id: $0) }
+    }
+
+    /// The shapes among the selection a colour lands on.
+    public var selectedColorable: [String] {
+        selection.filter { document.takesColor(id: $0) }
+    }
+
+    /// The shapes among the selection a fill lands on.
+    public var selectedClosed: [String] {
+        selection.filter { document.takesFill(id: $0) }
     }
 
     /// The dash the selected stroked shapes agree on: `.some(nil)` when
     /// every one is solid, `nil` when none is stroked or they differ.
     public var selectionDash: Dash?? {
-        let all = selectedStroked.map { document.dash(id: $0) }
-        guard let first = all.first, all.allSatisfy({ $0 == first }) else { return nil }
+        agreed(selectedStroked.map { document.dash(id: $0) })
+    }
+
+    /// The hue the selected shapes agree on: `.some(nil)` when every one
+    /// is the ink, `nil` when none takes a colour or they differ.
+    public var selectionColor: Hue?? {
+        agreed(selectedColorable.map { document.color(id: $0) })
+    }
+
+    /// The background the selected closed shapes agree on: `.some(nil)`
+    /// when every one has none, `nil` when none is closed or they differ.
+    public var selectionFill: Hue?? {
+        agreed(selectedClosed.map { document.fill(id: $0) })
+    }
+
+    /// Colour: the selected shapes, as one undo step, when any takes one;
+    /// otherwise the next drawn.
+    public func setColor(_ hue: Hue?) {
+        let shapes = selectedColorable
+        if shapes.isEmpty {
+            self.hue = hue
+        } else {
+            try? document.setColor(ids: shapes, hue)
+        }
+    }
+
+    /// A background: the selected closed shapes, as one undo step, when
+    /// there are any; otherwise the next drawn.
+    public func setFill(_ hue: Hue?) {
+        let shapes = selectedClosed
+        if shapes.isEmpty {
+            self.fill = hue
+        } else {
+            try? document.setFill(ids: shapes, hue)
+        }
+    }
+
+    private func agreed<T: Equatable>(_ values: [T?]) -> T?? {
+        guard let first = values.first, values.allSatisfy({ $0 == first }) else { return nil }
         return .some(first)
     }
 

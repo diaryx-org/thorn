@@ -380,6 +380,44 @@ fn a_dash_is_dashed_or_dotted_on_a_stroked_shape() {
     );
 }
 
+/// `data-color` and `data-fill` are hues of the palette: any other value,
+/// a colour on a group, a fill on a line, is a finding.
+#[test]
+fn a_colour_and_a_fill_are_hues_on_the_shapes_that_take_them() {
+    let src = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" data-diaryx-drawing=\"1\">\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"20\" data-color=\"red\" data-fill=\"blue\" data-id=\"s1\"/>\n  <line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\" data-color=\"grey\" data-id=\"s2\"/>\n  <g data-id=\"s3\"><text x=\"5\" y=\"50\" data-color=\"pink\" data-id=\"s4\">hi</text></g>\n</svg>\n";
+    assert_eq!(Drawing::open(src).unwrap().check(), []);
+    for (from, to, rule, shape) in [
+        (
+            "data-color=\"red\"",
+            "data-color=\"crimson\"",
+            Rule::Color,
+            "s1",
+        ),
+        ("data-fill=\"blue\"", "data-fill=\"navy\"", Rule::Fill, "s1"),
+        (
+            "data-id=\"s2\"",
+            "data-fill=\"blue\" data-id=\"s2\"",
+            Rule::Fill,
+            "s2",
+        ),
+        (
+            "<g data-id=\"s3\">",
+            "<g data-color=\"red\" data-id=\"s3\">",
+            Rule::Color,
+            "s3",
+        ),
+    ] {
+        let odd = src.replace(from, to);
+        let findings = Drawing::open(&odd).unwrap().check();
+        assert_eq!(findings.len(), 1, "{to}: {findings:?}");
+        assert_eq!(
+            (findings[0].rule, findings[0].shape.as_deref()),
+            (rule, Some(shape)),
+            "{to}"
+        );
+    }
+}
+
 /// `fresh.svg` is the template a new drawing is created with — the same bytes
 /// `Drawing::fresh` opens — and it is empty: nothing to select on a new page.
 #[test]
