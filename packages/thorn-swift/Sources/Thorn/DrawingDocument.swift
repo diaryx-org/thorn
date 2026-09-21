@@ -254,8 +254,10 @@ public final class DrawingDocument {
     /// Bend a connector to pass through a point half-way along — a
     /// `<line>` becomes a `<path>` — or, with `nil`, straighten it back
     /// into a `<line>`. Bound ends re-settle to leave their shapes along
-    /// the new tangent. One undo step.
-    public func bend(id: String, through point: CGPoint?) throws {
+    /// the new tangent. One undo step; `false` when a `<line>` was asked
+    /// to be straight, and nothing was written.
+    @discardableResult
+    public func bend(id: String, through point: CGPoint?) throws -> Bool {
         try changed {
             if let point { try inner.bend(id: id, x: Double(point.x), y: Double(point.y)) } else { try inner.straighten(id: id) }
         }

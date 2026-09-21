@@ -609,6 +609,32 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertNil(doc.connector(id: id)?.control)
     }
 
+    /// A drag's first event lands a point or two from where it began —
+    /// on the chord, within the tolerance — so the first preview asks a
+    /// line to be straight, which writes nothing. Nothing is what the
+    /// next preview must undo: the step before it is the line itself.
+    func testABendThatBeginsOnTheChordUndoesNothingBeforeIt() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        model.key("a")
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 100))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+
+        model.beginPointer(at: CGPoint(x: 150, y: 100))
+        for dy in stride(from: 1, through: 40, by: 3) {
+            model.pointerDragged(to: CGPoint(x: 150, y: 100 + CGFloat(dy)))
+            XCTAssertNotNil(doc.shape(id: id), "the arrow is still there after a drag of \(dy)")
+        }
+        model.pointerUp()
+        XCTAssertEqual(doc.shape(id: id)?.kind, .path)
+        XCTAssertEqual(doc.connector(id: id)?.control?.cgPoint, CGPoint(x: 75, y: 90))
+        XCTAssertTrue(try doc.undo(), "one step for the bend")
+        XCTAssertEqual(doc.shape(id: id)?.kind, .line, "and the arrow is under it")
+    }
+
     func testTheDrawToolInksAStrokeAsOneStep() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

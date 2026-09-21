@@ -314,7 +314,7 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_text(void*_Nonnull ptr, do
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BEND
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BEND
-void uniffi_thorn_svg_ffi_fn_method_drawing_bend(void*_Nonnull ptr, RustBuffer id, double x, double y, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_bend(void*_Nonnull ptr, RustBuffer id, double x, double y, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BIND
@@ -454,7 +454,7 @@ RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_source(void*_Nonnull ptr, Rust
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_STRAIGHTEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_STRAIGHTEN
-void uniffi_thorn_svg_ffi_fn_method_drawing_straighten(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_straighten(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNDO

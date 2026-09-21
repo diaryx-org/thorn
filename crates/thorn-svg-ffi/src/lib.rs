@@ -682,12 +682,13 @@ impl Drawing {
     /// Bend a connector to pass through a point half-way along — a
     /// `<line>` becomes a `<path>` — and re-settle its bound ends. One
     /// undo step.
-    pub fn bend(&self, id: String, x: f64, y: f64) -> Result<(), DrawingError> {
+    pub fn bend(&self, id: String, x: f64, y: f64) -> Result<bool, DrawingError> {
         Ok(self.lock().bend(&id, Some((x, y)))?)
     }
 
-    /// Straighten a bent connector: a `<line>` again. One undo step.
-    pub fn straighten(&self, id: String) -> Result<(), DrawingError> {
+    /// Straighten a bent connector: a `<line>` again. One undo step;
+    /// `false` when it was a `<line>` already, and nothing was written.
+    pub fn straighten(&self, id: String) -> Result<bool, DrawingError> {
         Ok(self.lock().bend(&id, None)?)
     }
 

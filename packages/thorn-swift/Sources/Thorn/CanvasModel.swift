@@ -606,11 +606,11 @@ public final class CanvasModel {
             return true
         case .bend(let id, let to):
             // Dragged back onto the chord, within the tolerance, it is
-            // straight again.
+            // straight again — which, for a line not yet bent, writes
+            // nothing, and `preview` must not undo the step before it.
             guard let c = document.connector(id: id) else { return false }
             let straight = distance(from: to, toSegment: c.from.cgPoint, c.to.cgPoint) <= userTolerance
-            try? document.bend(id: id, through: straight ? nil : to)
-            return true
+            return (try? document.bend(id: id, through: straight ? nil : to)) ?? false
         case .create(let from, let to):
             let box = CGRect(from: from, to: to)
             guard box.width > 0 || box.height > 0 else { return false }

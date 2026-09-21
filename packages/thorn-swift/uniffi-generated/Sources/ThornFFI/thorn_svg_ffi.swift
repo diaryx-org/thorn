@@ -551,7 +551,7 @@ public protocol DrawingProtocol : AnyObject {
      * `<line>` becomes a `<path>` — and re-settle its bound ends. One
      * undo step.
      */
-    func bend(id: String, x: Double, y: Double) throws 
+    func bend(id: String, x: Double, y: Double) throws  -> Bool
     
     /**
      * Bind an end of a connector to a shape, the end put on its edge; or,
@@ -710,9 +710,10 @@ public protocol DrawingProtocol : AnyObject {
     func source()  -> String
     
     /**
-     * Straighten a bent connector: a `<line>` again. One undo step.
+     * Straighten a bent connector: a `<line>` again. One undo step;
+     * `false` when it was a `<line>` already, and nothing was written.
      */
-    func straighten(id: String) throws 
+    func straighten(id: String) throws  -> Bool
     
     /**
      * Undo the last gesture; `false` when there was nothing to undo.
@@ -914,13 +915,14 @@ open func addText(x: Double, y: Double, text: String)throws  -> String {
      * `<line>` becomes a `<path>` — and re-settle its bound ends. One
      * undo step.
      */
-open func bend(id: String, x: Double, y: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+open func bend(id: String, x: Double, y: Double)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_bend(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),$0
     )
-}
+})
 }
     
     /**
@@ -1245,13 +1247,15 @@ open func source() -> String {
 }
     
     /**
-     * Straighten a bent connector: a `<line>` again. One undo step.
+     * Straighten a bent connector: a `<line>` again. One undo step;
+     * `false` when it was a `<line>` already, and nothing was written.
      */
-open func straighten(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+open func straighten(id: String)throws  -> Bool {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
     uniffi_thorn_svg_ffi_fn_method_drawing_straighten(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
-}
+})
 }
     
     /**
@@ -3194,7 +3198,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 58303) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bend() != 27315) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bend() != 17026) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 20832) {
@@ -3278,7 +3282,7 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_source() != 3308) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 20524) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 9983) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {

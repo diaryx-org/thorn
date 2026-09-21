@@ -1191,8 +1191,11 @@ impl Drawing {
     /// a `<path>` with a `Q`, every other attribute kept in place; a
     /// `<path>` straightened becomes a `<line>` again. An end bound to a
     /// shape is re-settled to leave the shape along the new tangent. One
-    /// undo step. `Unsupported` for what is not a connector.
-    pub fn bend(&mut self, id: &str, through: Option<(f64, f64)>) -> Result<(), Error> {
+    /// undo step; `Ok(false)` when a `<line>` was asked to be straight,
+    /// and nothing was written — a host previewing a drag by undoing the
+    /// last application must know there is none to undo. `Unsupported`
+    /// for what is not a connector.
+    pub fn bend(&mut self, id: &str, through: Option<(f64, f64)>) -> Result<bool, Error> {
         let (shape, c) = self.arrow(id, "bend")?;
         let shape = shape.clone();
         let unsupported = || Error::Unsupported {
@@ -1242,7 +1245,7 @@ impl Drawing {
             }
             (_, false) => {
                 // A `<line>` is already straight.
-                return Ok(());
+                return Ok(false);
             }
             (_, true) => {
                 // The `<line>` becomes a `<path>`: `d` where `x1` was, the
@@ -1258,7 +1261,8 @@ impl Drawing {
         if bent.is_bent() {
             self.style_paths(&mut steps)?;
         }
-        self.settle(&[id], &mut steps)
+        self.settle(&[id], &mut steps)?;
+        Ok(true)
     }
 
     /// A bent connector is a `<path>`, and how it looks is the drawing's
@@ -3024,7 +3028,7 @@ mod tests {
         assert_eq!((c.to, c.control), ((150.0, 90.0), unbound.control));
 
         // Straightened, it is a `<line>` again, its ends where they were.
-        d.bend("s3", None).unwrap();
+        assert!(d.bend("s3", None).unwrap());
         let shape = d.shape("s3").unwrap();
         assert_eq!(shape.kind, ShapeKind::Line);
         assert_eq!(
@@ -3033,8 +3037,10 @@ mod tests {
         );
         assert!(d.source().contains("<line x1=\""));
         assert_eq!(d.connector("s3").unwrap().control, None);
-        // Straightening a line is nothing.
-        d.bend("s3", None).unwrap();
+        // Straightening a line is nothing: no step, and it says so.
+        let before = d.source().to_string();
+        assert!(!d.bend("s3", None).unwrap());
+        assert_eq!(d.source(), before);
         assert!(d.check().is_empty());
 
         assert!(matches!(
