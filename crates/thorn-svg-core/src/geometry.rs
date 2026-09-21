@@ -281,8 +281,8 @@ pub fn moved(shape: &Shape, dx: f64, dy: f64) -> Option<Vec<Update>> {
 /// into, and `None` says keep the `transform`. So does a circle under an
 /// unequal scale (it would be an ellipse), a label under a flip or an
 /// unequal scale, and one under a scale with no `font-size` of its own to
-/// scale. `stroke-width` is left alone, as a resize leaves it. A `<g>` has
-/// nothing to bake into.
+/// scale. `stroke-width` is left alone, as a resize leaves it, and so is a
+/// box's corner radius. A `<g>` has nothing to bake into.
 pub fn baked(shape: &Shape, t: &Transform) -> Option<Vec<Update>> {
     if !t.is_axis_aligned() {
         return None;
@@ -294,19 +294,14 @@ pub fn baked(shape: &Shape, t: &Transform) -> Option<Vec<Update>> {
         ShapeKind::Rect | ShapeKind::Image => {
             let (x0, y0) = t.apply(n("x"), n("y"));
             let (x1, y1) = t.apply(n("x") + n("width"), n("y") + n("height"));
-            let mut u = vec![
+            // A corner's radius is kept, as a stroke's width is: a box
+            // resized is the same box with round corners, not a scaled one.
+            vec![
                 ("x", f(x0.min(x1))),
                 ("y", f(y0.min(y1))),
                 ("width", f((x1 - x0).abs())),
                 ("height", f((y1 - y0).abs())),
-            ];
-            if let Some(rx) = shape.number("rx") {
-                u.push(("rx", f(rx * sx)));
-            }
-            if let Some(ry) = shape.number("ry") {
-                u.push(("ry", f(ry * sy)));
-            }
-            u
+            ]
         }
         ShapeKind::Ellipse => {
             let (cx, cy) = t.apply(n("cx"), n("cy"));
@@ -694,9 +689,9 @@ mod tests {
                 ("y", s("11")),
                 ("width", s("6")),
                 ("height", s("2")),
-                ("rx", s("2")),
                 ("transform", None)
-            ]
+            ],
+            "a corner's radius is kept, as a stroke's width is"
         );
         assert_eq!(
             b(

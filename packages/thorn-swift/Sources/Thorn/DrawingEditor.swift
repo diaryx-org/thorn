@@ -132,18 +132,36 @@ public struct DrawingEditor: View {
         let fill = selected ? !state.model.selectedClosed.isEmpty : state.tool.makesClosedShape
         let dash = selected ? !state.model.selectedStroked.isEmpty : state.tool.makesStroke
         let heads = selected ? !state.model.selectedConnectors.isEmpty : state.tool == .arrow
+        let corner = selected ? !state.model.selectedBoxes.isEmpty : state.tool.makesBox
         if color || fill {
             HStack(spacing: 8) {
                 if color { ToolCluster { colorTiles } }
                 if fill { ToolCluster { fillTiles } }
             }
         }
-        if dash || heads {
+        if dash || heads || corner {
             HStack(spacing: 8) {
                 if dash { ToolCluster { weightTiles }; ToolCluster { dashTiles } }
+                if corner { ToolCluster { cornerTiles } }
                 if heads { ToolCluster { headsTiles } }
             }
         }
+    }
+
+    /// A box's corners: sharp or round. For a selection it is what the
+    /// boxes agree on; a radius other than the strip's own lights nothing.
+    @ViewBuilder private var cornerTiles: some View {
+        let current: CGFloat?? = state.selection.isEmpty ? .some(state.model.corner) : state.model.selectionCorner
+        Button { state.model.setCorner(nil) } label: {
+            Label("Sharp corners", systemImage: "square")
+        }
+        .buttonStyle(ToolTile(on: current == .some(nil)))
+        .help("Sharp corners")
+        Button { state.model.setCorner(CanvasModel.roundCorner) } label: {
+            Label("Round corners", systemImage: "app")
+        }
+        .buttonStyle(ToolTile(on: current == .some(CanvasModel.roundCorner)))
+        .help("Round corners")
     }
 
     /// How heavy the stroke is: thin, the template's, bold.

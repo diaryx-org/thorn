@@ -265,6 +265,26 @@ public final class DrawingDocument {
         try changed { try inner.setWeightAll(ids: ids, weight: weight) }
     }
 
+    /// Whether a corner radius means anything on a shape: a box, or a
+    /// group with one inside.
+    public func takesCorner(id: String) -> Bool { inner.takesCorner(id: id) }
+
+    /// A box's corner radius — a group's, what its boxes agree on; `nil`
+    /// for square corners.
+    public func corner(id: String) -> CGFloat? { inner.corner(id: id).map { CGFloat($0) } }
+
+    /// Round a box's corners to `radius`, or with `nil` square them. One
+    /// undo step.
+    public func setCorner(id: String, _ radius: CGFloat?) throws {
+        try changed { try inner.setCorner(id: id, radius: radius.map { Double($0) }) }
+    }
+
+    /// `setCorner` over a selection as one undo step; what is not a box is
+    /// left as it is.
+    public func setCorner(ids: [String], _ radius: CGFloat?) throws {
+        try changed { try inner.setCornerAll(ids: ids, radius: radius.map { Double($0) }) }
+    }
+
     /// Say which ends of a connector have a head, or with `nil` none — a
     /// plain line. One undo step.
     public func setHeads(id: String, _ heads: Heads?) throws {

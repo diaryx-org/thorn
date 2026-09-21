@@ -585,6 +585,12 @@ public protocol DrawingProtocol : AnyObject {
     func connector(id: String)  -> Connector?
     
     /**
+     * A box's corner radius — a group's, what its boxes agree on — or
+     * `None` for square corners.
+     */
+    func corner(id: String)  -> Double?
+    
+    /**
      * The rules the drawing keeps for a darker page — the body of its
      * `@media (prefers-color-scheme: dark)` blocks — for a canvas in dark
      * mode to append to what resvg parses. Empty when it has none.
@@ -732,6 +738,18 @@ public protocol DrawingProtocol : AnyObject {
     func setColorAll(ids: [String], hue: Hue?) throws 
     
     /**
+     * Round a box's corners to `radius`, or with `None` square them. One
+     * undo step; `Unsupported` for what is not a box.
+     */
+    func setCorner(id: String, radius: Double?) throws 
+    
+    /**
+     * `set_corner` over a selection as one undo step, what is not a box
+     * left as it is.
+     */
+    func setCornerAll(ids: [String], radius: Double?) throws 
+    
+    /**
      * Say how a stroked shape's stroke is broken, or with `None` solid.
      * One undo step; `Unsupported` for what is not stroked.
      */
@@ -817,6 +835,12 @@ public protocol DrawingProtocol : AnyObject {
      * or a group of only images.
      */
     func takesColor(id: String)  -> Bool
+    
+    /**
+     * Whether a corner radius means anything on a shape: a box, or a
+     * group with one inside.
+     */
+    func takesCorner(id: String)  -> Bool
     
     /**
      * Whether a dash means anything on a shape: a stroked one, or a group
@@ -1107,6 +1131,18 @@ open func color(id: String) -> Hue? {
 open func connector(id: String) -> Connector? {
     return try!  FfiConverterOptionTypeConnector.lift(try! rustCall() {
     uniffi_thorn_svg_ffi_fn_method_drawing_connector(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * A box's corner radius — a group's, what its boxes agree on — or
+     * `None` for square corners.
+     */
+open func corner(id: String) -> Double? {
+    return try!  FfiConverterOptionDouble.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_corner(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 })
@@ -1413,6 +1449,30 @@ open func setColorAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(Ff
 }
     
     /**
+     * Round a box's corners to `radius`, or with `None` square them. One
+     * undo step; `Unsupported` for what is not a box.
+     */
+open func setCorner(id: String, radius: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionDouble.lower(radius),$0
+    )
+}
+}
+    
+    /**
+     * `set_corner` over a selection as one undo step, what is not a box
+     * left as it is.
+     */
+open func setCornerAll(ids: [String], radius: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionDouble.lower(radius),$0
+    )
+}
+}
+    
+    /**
      * Say how a stroked shape's stroke is broken, or with `None` solid.
      * One undo step; `Unsupported` for what is not stroked.
      */
@@ -1581,6 +1641,18 @@ open func straighten(id: String)throws  -> Bool {
 open func takesColor(id: String) -> Bool {
     return try!  FfiConverterBool.lift(try! rustCall() {
     uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),$0
+    )
+})
+}
+    
+    /**
+     * Whether a corner radius means anything on a shape: a box, or a
+     * group with one inside.
+     */
+open func takesCorner(id: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_corner(self.uniffiClonePointer(),
         FfiConverterString.lower(id),$0
     )
 })
@@ -2182,14 +2254,22 @@ public struct Pen {
     public var hue: Hue?
     public var fill: Hue?
     public var weight: Weight?
+    /**
+     * A box's corner radius, in user units.
+     */
+    public var corner: Double?
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(dash: Dash?, hue: Hue?, fill: Hue?, weight: Weight?) {
+    public init(dash: Dash?, hue: Hue?, fill: Hue?, weight: Weight?, 
+        /**
+         * A box's corner radius, in user units.
+         */corner: Double?) {
         self.dash = dash
         self.hue = hue
         self.fill = fill
         self.weight = weight
+        self.corner = corner
     }
 }
 
@@ -2209,6 +2289,9 @@ extension Pen: Equatable, Hashable {
         if lhs.weight != rhs.weight {
             return false
         }
+        if lhs.corner != rhs.corner {
+            return false
+        }
         return true
     }
 
@@ -2217,6 +2300,7 @@ extension Pen: Equatable, Hashable {
         hasher.combine(hue)
         hasher.combine(fill)
         hasher.combine(weight)
+        hasher.combine(corner)
     }
 }
 
@@ -2231,7 +2315,8 @@ public struct FfiConverterTypePen: FfiConverterRustBuffer {
                 dash: FfiConverterOptionTypeDash.read(from: &buf), 
                 hue: FfiConverterOptionTypeHue.read(from: &buf), 
                 fill: FfiConverterOptionTypeHue.read(from: &buf), 
-                weight: FfiConverterOptionTypeWeight.read(from: &buf)
+                weight: FfiConverterOptionTypeWeight.read(from: &buf), 
+                corner: FfiConverterOptionDouble.read(from: &buf)
         )
     }
 
@@ -2240,6 +2325,7 @@ public struct FfiConverterTypePen: FfiConverterRustBuffer {
         FfiConverterOptionTypeHue.write(value.hue, into: &buf)
         FfiConverterOptionTypeHue.write(value.fill, into: &buf)
         FfiConverterOptionTypeWeight.write(value.weight, into: &buf)
+        FfiConverterOptionDouble.write(value.corner, into: &buf)
     }
 }
 
@@ -4045,6 +4131,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 14022) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_corner() != 56824) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_dark_rules() != 56993) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4120,6 +4209,12 @@ private var initializationResult: InitializationResult = {
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color_all() != 30276) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner() != 459) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner_all() != 40198) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash() != 19368) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -4163,6 +4258,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_color() != 15959) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_corner() != 62916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_dash() != 3408) {

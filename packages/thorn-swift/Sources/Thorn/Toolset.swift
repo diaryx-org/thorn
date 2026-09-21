@@ -100,6 +100,15 @@ extension Tool {
     /// tool does.
     var makesShape: Bool { isOneShot }
 
+    /// Whether this tool makes a box, so a corner picked with nothing
+    /// selected is its to take. A note's frame is one.
+    var makesBox: Bool {
+        switch self {
+        case .rect, .note: true
+        case .hand, .select, .eraser, .draw, .text, .arrow, .line, .diamond, .ellipse: false
+        }
+    }
+
     /// Whether the shape this tool makes is closed, so a background picked
     /// with nothing selected is its to take. A note's frame is.
     var makesClosedShape: Bool {

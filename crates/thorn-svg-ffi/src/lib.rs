@@ -241,6 +241,8 @@ pub struct Pen {
     pub hue: Option<Hue>,
     pub fill: Option<Hue>,
     pub weight: Option<Weight>,
+    /// A box's corner radius, in user units.
+    pub corner: Option<f64>,
 }
 
 impl From<core::Pen> for Pen {
@@ -250,6 +252,7 @@ impl From<core::Pen> for Pen {
             hue: p.hue.map(Into::into),
             fill: p.fill.map(Into::into),
             weight: p.weight.map(Into::into),
+            corner: p.corner,
         }
     }
 }
@@ -261,6 +264,7 @@ impl From<Pen> for core::Pen {
             hue: p.hue.map(Into::into),
             fill: p.fill.map(Into::into),
             weight: p.weight.map(Into::into),
+            corner: p.corner,
         }
     }
 }
@@ -942,6 +946,35 @@ impl Drawing {
     ) -> Result<(), DrawingError> {
         let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
         Ok(self.lock().set_weight_all(&ids, weight.map(Into::into))?)
+    }
+
+    /// Whether a corner radius means anything on a shape: a box, or a
+    /// group with one inside.
+    pub fn takes_corner(&self, id: String) -> bool {
+        self.lock().takes_corner(&id)
+    }
+
+    /// A box's corner radius — a group's, what its boxes agree on — or
+    /// `None` for square corners.
+    pub fn corner(&self, id: String) -> Option<f64> {
+        self.lock().corner(&id)
+    }
+
+    /// Round a box's corners to `radius`, or with `None` square them. One
+    /// undo step; `Unsupported` for what is not a box.
+    pub fn set_corner(&self, id: String, radius: Option<f64>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_corner(&id, radius)?)
+    }
+
+    /// `set_corner` over a selection as one undo step, what is not a box
+    /// left as it is.
+    pub fn set_corner_all(
+        &self,
+        ids: Vec<String>,
+        radius: Option<f64>,
+    ) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_corner_all(&ids, radius)?)
     }
 
     /// The rules the drawing keeps for a darker page — the body of its

@@ -116,6 +116,19 @@ public final class CanvasModel {
             onOptionsChange?()
         }
     }
+    /// The corner radius the next box is drawn with, in user units; `nil`
+    /// is square.
+    public var corner: CGFloat? {
+        get { document.pen.corner.map { CGFloat($0) } }
+        set {
+            guard newValue.map({ Double($0) }) != document.pen.corner else { return }
+            document.pen.corner = newValue.map { Double($0) }
+            onOptionsChange?()
+        }
+    }
+    /// The radius a rounded box takes: Excalidraw's round edges, in user
+    /// units.
+    public static let roundCorner: CGFloat = 8
     /// Called when what an options strip shows may have changed: the
     /// pen, or the document after any edit — an undo can take a head off
     /// the selected arrow.
@@ -964,6 +977,28 @@ public final class CanvasModel {
             self.weight = weight
         } else {
             try? document.setWeight(ids: stroked, weight)
+        }
+    }
+
+    /// The boxes among the selection a corner radius lands on.
+    public var selectedBoxes: [String] {
+        selection.filter { document.takesCorner(id: $0) }
+    }
+
+    /// The corner radius the selected boxes agree on: `.some(nil)` when
+    /// every one is square, `nil` when none is a box or they differ.
+    public var selectionCorner: CGFloat?? {
+        agreed(selectedBoxes.map { document.corner(id: $0) })
+    }
+
+    /// A corner radius: the selected boxes, as one undo step, when there
+    /// are any; otherwise the next drawn.
+    public func setCorner(_ radius: CGFloat?) {
+        let boxes = selectedBoxes
+        if boxes.isEmpty {
+            self.corner = radius
+        } else {
+            try? document.setCorner(ids: boxes, radius)
         }
     }
 

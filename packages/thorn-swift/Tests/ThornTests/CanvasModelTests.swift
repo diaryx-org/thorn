@@ -658,6 +658,17 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(doc.weight(id: id), .thin)
         XCTAssertEqual(model.weight, .bold, "the pen is untouched")
         XCTAssertTrue(doc.source.contains("data-weight=\"thin\""))
+
+        // And a corner, on the box alone.
+        XCTAssertEqual(model.selectedBoxes, [id])
+        model.setCorner(CanvasModel.roundCorner)
+        XCTAssertEqual(doc.corner(id: id), 8)
+        XCTAssertEqual(model.selectionCorner, .some(8))
+        XCTAssertTrue(doc.source.contains("rx=\"8\""))
+        model.select([])
+        model.setCorner(4)
+        XCTAssertEqual(model.corner, 4)
+        XCTAssertEqual(doc.pen.corner, 4)
     }
 
     func testAColourIsTheNextShapesOrTheSelectionsAndFollowsTheAppearance() throws {

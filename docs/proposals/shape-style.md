@@ -2,7 +2,7 @@
 title: How a shape says what it looks like
 description: Dashes, a palette, a weight, a box's background and which ends of an arrow have a head — as words on the shape the drawing's <style> resolves, in the shape data-arrow already has
 author: adammharris
-status: accepted
+status: implemented
 created: 2026-09-21
 updated: 2026-09-21
 part_of: '[Proposals](proposals.md)'
@@ -11,9 +11,8 @@ part_of: '[Proposals](proposals.md)'
 
 ## Status
 
-**Accepted 2026-09-21.** Built one word at a time, each its own commit,
-in the order under *The order of work*; this section names them as they
-land.
+**Implemented 2026-09-21**, one word per commit in the order under *The
+order of work*, all on the day it was accepted:
 
 - `data-arrow` from the editor: commit 1663707.
 - `data-dash`: commit 57cc325. One thing the argument below did not say:
@@ -31,7 +30,11 @@ land.
   `line[data-arrow="end"]`. The editor in dark mode applies the file's own
   `@media` rules, hoisted (`Drawing::dark_rules`), rather than a light ink
   of its own, so a hue's dark variant is the stylesheet's to say.
-- `data-weight`: the commit that closes this line, as the table says.
+- `data-weight`: commit 2e3aae9, as the table says.
+- `rx`: the commit that closes this line, and the proposal with it. One
+  thing beyond the table: a resize now keeps a box's `rx`, as it keeps
+  `stroke-width`, where before it scaled it; a rounded box resized is the
+  same box larger.
 
 ## The question
 

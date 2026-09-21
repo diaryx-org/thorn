@@ -88,7 +88,11 @@ under a scale with no `font-size` of its own. Written, it is `translate(x
 y)` when that is all it is, `matrix(a b c d e f)` otherwise, each number
 in the profile's format, and none at all for the identity. `stroke-width`
 is never touched: a shape scaled by a resize keeps its stroke, as it does
-in every drawing app.
+in every drawing app, and so does a `<rect>`'s `rx`: a box resized is the
+same box with round corners, not a scaled one. `rx` is how a box says its
+corners are round — SVG's own attribute, no `data-` word needed — and the
+editor writes it in the number format (`Drawing::set_corner`, and the `Pen`),
+taking any `ry` off with it, since one radius says it.
 
 A `<text>`'s extent is its face's to say, and the face is the host's — the
 one it draws with, or the box and the glyphs disagree. The core asks the

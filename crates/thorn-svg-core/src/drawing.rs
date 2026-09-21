@@ -158,7 +158,7 @@ pub struct Note {
 /// here so an added shape is born with them in the one splice that makes
 /// it, rather than restyled in a second step. Never in the file itself;
 /// `Default` is no words at all.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Pen {
     /// `data-dash` on a stroked shape.
     pub dash: Option<Dash>,
@@ -168,6 +168,8 @@ pub struct Pen {
     pub fill: Option<Hue>,
     /// `data-weight` on a stroked shape.
     pub weight: Option<Weight>,
+    /// `rx` on a `<rect>`: a corner's radius, in user units.
+    pub corner: Option<f64>,
 }
 
 impl Pen {
@@ -195,6 +197,11 @@ impl Pen {
         if stroked && let Some(weight) = self.weight {
             out.push(("data-weight", weight.value().to_string()));
         }
+        if tag == "rect"
+            && let Some(corner) = self.corner
+        {
+            out.push(("rx", number::fmt(corner)));
+        }
         out
     }
 
@@ -215,6 +222,9 @@ enum Word {
     Color,
     Fill,
     Weight,
+    /// `rx`: not a `data-` word but SVG's own attribute, and a shape says
+    /// it the same way.
+    Corner,
 }
 
 impl Word {
@@ -224,6 +234,7 @@ impl Word {
             Self::Color => "data-color",
             Self::Fill => "data-fill",
             Self::Weight => "data-weight",
+            Self::Corner => "rx",
         }
     }
 
@@ -233,6 +244,7 @@ impl Word {
             Self::Color => "set_color",
             Self::Fill => "set_fill",
             Self::Weight => "set_weight",
+            Self::Corner => "set_corner",
         }
     }
 
@@ -241,6 +253,7 @@ impl Word {
             Self::Dash | Self::Weight => shape.is_stroked(),
             Self::Color => shape.takes_color(),
             Self::Fill => shape.is_closed(),
+            Self::Corner => shape.kind == ShapeKind::Rect,
         }
     }
 }
@@ -1664,6 +1677,36 @@ impl Drawing {
         self.takes(id, Word::Weight)
     }
 
+    /// Round a box's corners — `rx`, SVG's own, in user units, in the
+    /// profile's number format — or, with `None`, square them, `rx` and
+    /// any `ry` taken off. On a group it is the boxes inside — a note's
+    /// frame. A resize keeps the radius, as it keeps a stroke's width.
+    /// One undo step; `Unsupported` for what is not a `<rect>`.
+    pub fn set_corner(&mut self, id: &str, radius: Option<f64>) -> Result<(), Error> {
+        let mut steps = 0;
+        let value = radius.map(number::fmt);
+        self.set_word_one(id, Word::Corner, value.as_deref(), &mut steps)
+    }
+
+    /// `set_corner` over a selection, as one undo step, what is not a box
+    /// left as it is.
+    pub fn set_corner_all(&mut self, ids: &[&str], radius: Option<f64>) -> Result<(), Error> {
+        let value = radius.map(number::fmt);
+        self.set_word_all(ids, Word::Corner, value.as_deref())
+    }
+
+    /// A box's corner radius — a group's, what its boxes agree on. `None`
+    /// for square corners, and for boxes that differ.
+    pub fn corner(&self, id: &str) -> Option<f64> {
+        self.agreed(id, Word::Corner).and_then(|v| v.parse().ok())
+    }
+
+    /// Whether `set_corner` on this shape would land anywhere: a box, or
+    /// a group with one inside.
+    pub fn takes_corner(&self, id: &str) -> bool {
+        self.takes(id, Word::Corner)
+    }
+
     /// The rules the drawing keeps for a darker page — the body of its
     /// `@media (prefers-color-scheme: dark)` blocks — for an editor that
     /// draws it in dark mode to apply itself, since resvg reads no
@@ -1763,7 +1806,12 @@ impl Drawing {
                 continue;
             }
             let attrs = shape.attrs.clone();
-            let updates = [(word.name(), value.map(str::to_string))];
+            let mut updates = vec![(word.name(), value.map(str::to_string))];
+            if word == Word::Corner && shape.attr("ry").is_some() {
+                // One radius says it; a `ry` the file spelled would keep
+                // the old corner in one direction.
+                updates.push(("ry", None));
+            }
             self.write_attrs(node, &attrs, &updates)?;
             self.fold(steps)?;
             written = true;
@@ -3646,6 +3694,54 @@ mod tests {
     }
 
     #[test]
+    fn a_corner_is_rounded_and_squared_and_a_resize_keeps_it() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        d.set_corner("s1", Some(4.0)).unwrap();
+        assert_eq!(d.corner("s1"), Some(4.0));
+        assert!(
+            d.source().contains("data-id=\"s1\" rx=\"4\"/>"),
+            "{}",
+            d.source()
+        );
+        assert_eq!(d.check(), []);
+        d.resize(
+            "s1",
+            Bounds {
+                x: 10.0,
+                y: 10.0,
+                width: 40.0,
+                height: 60.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(d.corner("s1"), Some(4.0), "kept, as a stroke's width is");
+        d.set_corner("s1", None).unwrap();
+        assert_eq!(d.corner("s1"), None);
+        assert!(!d.source().contains("rx="));
+        assert!(matches!(
+            d.set_corner("s2", Some(4.0)),
+            Err(Error::Unsupported {
+                gesture: "set_corner",
+                ..
+            })
+        ));
+        // A spelled `ry` goes with the `rx` it qualified.
+        let mut d =
+            Drawing::open(&WIRED.replace("data-id=\"s1\"", "rx=\"1\" ry=\"2\" data-id=\"s1\""))
+                .unwrap();
+        d.set_corner("s1", Some(3.0)).unwrap();
+        assert!(
+            d.source().contains(
+                "<rect x=\"10\" y=\"10\" width=\"20\" height=\"20\" rx=\"3\" data-id=\"s1\"/>"
+            ),
+            "{}",
+            d.source()
+        );
+        d.undo().unwrap();
+        assert!(d.source().contains("rx=\"1\" ry=\"2\""), "one step");
+    }
+
+    #[test]
     fn the_pen_writes_its_words_into_a_shape_as_it_is_added() {
         let mut d = Drawing::fresh();
         assert_eq!(d.pen(), Pen::default());
@@ -3654,6 +3750,7 @@ mod tests {
             hue: Some(Hue::Blue),
             fill: Some(Hue::Yellow),
             weight: Some(Weight::Bold),
+            corner: Some(8.0),
         });
         let r = d
             .add_rect(Rect {
@@ -3684,6 +3781,8 @@ mod tests {
             assert_eq!(d.shape(id).unwrap().weight(), Some(Weight::Bold), "{id}");
         }
         assert_eq!(d.shape(&t).unwrap().attr("data-weight"), None);
+        assert_eq!(d.shape(&r).unwrap().attr("rx"), Some("8"));
+        assert_eq!(d.shape(&l).unwrap().attr("rx"), None);
         for id in [&t, &i, &n] {
             assert_eq!(d.shape(id).unwrap().attr("data-dash"), None, "{id}");
         }
