@@ -4,6 +4,7 @@ title: thorn
 contents:
 - '[The Diaryx drawing profile](/docs/profile.md)'
 - '[Tasks](/docs/tasks/tasks.md)'
+- '[Proposals](/docs/proposals/proposals.md)'
 - '[Changelog](/docs/CHANGELOG.md)'
 - '[thorn on diaryx.org](/www/index.md)'
 - '[Audiences](/vocab/audiences.md)'

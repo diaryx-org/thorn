@@ -23,14 +23,17 @@ fields:
     values: closed
     vocabulary: '[Audiences](/vocab/audiences.md)'
     reify: true
-  # The org's `tasks` preset — only the Tasks half: this repository keeps
-  # its proposals in the org (the argument for its existence is there), and a
-  # clause under an index that does not exist is a `prov check` finding.
+  # The org's `tasks` preset. The argument for this repository's existence
+  # is the org's proposal; a proposal about its code is its own.
   status:
     - under: '[[Tasks]]'
       values: closed
       vocabulary: '[Task statuses](/vocab/task-statuses.yaml)'
       default: open
+    - under: '[[Proposals]]'
+      values: closed
+      vocabulary: '[Proposal statuses](/vocab/proposal-statuses.yaml)'
+      default: draft
   created: { type: date }
   updated: { type: date }
 views:
@@ -40,6 +43,11 @@ views:
     under: '[[Tasks]]'
     where:
       not: { equals: { status: [done, dropped] } }
+  proposals:
+    label: Proposals
+    group: status
+    under: '[[Proposals]]'
+    where: { has: status }
   work:
     label: All work
     group: status
