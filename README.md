@@ -85,6 +85,7 @@ history:
 | group, ungroup | `edit_range` around the members / over the `<g>`, `move_after` to bring a stray member up, folded into one undo step | done; a group's `transform` is baked into its members' attributes on ungroup |
 | select, hit-test, handles | — (pure geometry) | done, through `transform` chains; a `<text>`'s box is measured by the host's layout (`measure::Usvg` in the binding — resvg's, so it is the box drawn) |
 | bind an arrow | `set_node_attrs` on the connector, folded into the move that made it follow | done: `data-from` / `data-to` on a connector; a bound end sits on its shape's edge and follows it; dropping an endpoint handle on a shape binds it |
+| which ends have a head | `set_node_attrs` on the connector | done: `set_heads` writes `data-arrow` — `end`, `start`, `both` — or takes it off; over a selection it is one undo step, the shapes that are not connectors left alone; the editor's options strip offers it for the selected connectors, or for the arrow tool's next arrow (`docs/proposals/shape-style.md` is the rest of the strip) |
 | bend a line or an arrow | `edit_range` over the element: a `<line>` rewritten as a `<path>` with a `Q`, and back | done: the round handle at a connector's midpoint drags the curve through the point, as Excalidraw's does; a bound end re-settles to leave its shape along the tangent; dragged back onto the chord it is a `<line>` again (`docs/profile.md`, *A connector*) |
 | freehand ink | — | reserved in the profile |
 

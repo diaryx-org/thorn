@@ -689,6 +689,18 @@ public protocol DrawingProtocol : AnyObject {
     func resize(id: String, to: Bounds) throws 
     
     /**
+     * Say which ends of a connector have a head, or with `None` none — a
+     * plain line. One undo step; `Unsupported` for what is not a connector.
+     */
+    func setHeads(id: String, heads: Heads?) throws 
+    
+    /**
+     * `set_heads` over a selection as one undo step, what is not a
+     * connector left as it is.
+     */
+    func setHeadsAll(ids: [String], heads: Heads?) throws 
+    
+    /**
      * Replace a `<text>`'s characters; plain text, written escaped.
      */
     func setText(id: String, text: String) throws 
@@ -1199,6 +1211,30 @@ open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConver
     uniffi_thorn_svg_ffi_fn_method_drawing_resize(self.uniffiClonePointer(),
         FfiConverterString.lower(id),
         FfiConverterTypeBounds.lower(to),$0
+    )
+}
+}
+    
+    /**
+     * Say which ends of a connector have a head, or with `None` none — a
+     * plain line. One undo step; `Unsupported` for what is not a connector.
+     */
+open func setHeads(id: String, heads: Heads?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(self.uniffiClonePointer(),
+        FfiConverterString.lower(id),
+        FfiConverterOptionTypeHeads.lower(heads),$0
+    )
+}
+}
+    
+    /**
+     * `set_heads` over a selection as one undo step, what is not a
+     * connector left as it is.
+     */
+open func setHeadsAll(ids: [String], heads: Heads?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(self.uniffiClonePointer(),
+        FfiConverterSequenceString.lower(ids),
+        FfiConverterOptionTypeHeads.lower(heads),$0
     )
 }
 }
@@ -3268,6 +3304,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 64941) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads() != 28688) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads_all() != 61916) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {

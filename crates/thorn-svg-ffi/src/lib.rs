@@ -698,6 +698,23 @@ impl Drawing {
         Ok(self.lock().bind(&id, end.into(), target.as_deref())?)
     }
 
+    /// Say which ends of a connector have a head, or with `None` none — a
+    /// plain line. One undo step; `Unsupported` for what is not a connector.
+    pub fn set_heads(&self, id: String, heads: Option<Heads>) -> Result<(), DrawingError> {
+        Ok(self.lock().set_heads(&id, heads.map(Into::into))?)
+    }
+
+    /// `set_heads` over a selection as one undo step, what is not a
+    /// connector left as it is.
+    pub fn set_heads_all(
+        &self,
+        ids: Vec<String>,
+        heads: Option<Heads>,
+    ) -> Result<(), DrawingError> {
+        let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+        Ok(self.lock().set_heads_all(&ids, heads.map(Into::into))?)
+    }
+
     /// Drop an end of a connector at a point: it goes there, bound to the
     /// topmost shape within `tolerance` — any but the arrow — or unbound.
     /// Returns what it was bound to. One undo step.

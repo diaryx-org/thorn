@@ -177,6 +177,18 @@ public final class DrawingDocument {
     /// Which ends of a shape have a head; `nil` for one that is not an arrow.
     public func heads(id: String) -> Heads? { inner.heads(id: id) }
 
+    /// Say which ends of a connector have a head, or with `nil` none — a
+    /// plain line. One undo step.
+    public func setHeads(id: String, _ heads: Heads?) throws {
+        try changed { try inner.setHeads(id: id, heads: heads) }
+    }
+
+    /// `setHeads` over a selection as one undo step; what is not a
+    /// connector is left as it is.
+    public func setHeads(ids: [String], _ heads: Heads?) throws {
+        try changed { try inner.setHeadsAll(ids: ids, heads: heads) }
+    }
+
     /// Add a freehand stroke along `points`, `width` wide, as a monoline:
     /// the outline is the file's, the centreline and width beside it.
     @discardableResult

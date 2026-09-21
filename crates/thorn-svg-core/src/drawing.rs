@@ -1344,6 +1344,54 @@ impl Drawing {
         self.settle(&[id], &mut steps)
     }
 
+    /// Say which ends of a connector have a head — `data-arrow`, the
+    /// profile's word for what an arrow is, which the drawing's `<style>`
+    /// draws — or, with `None`, none, which makes it a plain line. A
+    /// `marker-start`/`marker-end` the file spelled itself comes off in
+    /// the same write, since the word now says it. One `set_node_attrs`,
+    /// one undo step; nothing when the shape already says so.
+    /// `Unsupported` for what is not a connector.
+    pub fn set_heads(&mut self, id: &str, heads: Option<Heads>) -> Result<(), Error> {
+        let mut steps = 0;
+        self.set_heads_one(id, heads, &mut steps)
+    }
+
+    /// `set_heads` over a selection, as one undo step: the connectors
+    /// among `ids` take the word, and what is not a connector is left as
+    /// it is rather than refused, so a mixed selection takes what
+    /// applies. `NoSuchShape` for an id that is nothing.
+    pub fn set_heads_all(&mut self, ids: &[&str], heads: Option<Heads>) -> Result<(), Error> {
+        let mut steps = 0;
+        for id in ids {
+            match self.set_heads_one(id, heads, &mut steps) {
+                Err(Error::Unsupported { .. }) => {}
+                other => other?,
+            }
+        }
+        Ok(())
+    }
+
+    fn set_heads_one(
+        &mut self,
+        id: &str,
+        heads: Option<Heads>,
+        steps: &mut usize,
+    ) -> Result<(), Error> {
+        let (shape, _) = self.arrow(id, "set_heads")?;
+        let mut updates: Vec<Update> = vec![("data-arrow", heads.map(|h| h.value().to_string()))];
+        for spelled in ["marker-start", "marker-end"] {
+            if shape.attr(spelled).is_some() {
+                updates.push((spelled, None));
+            }
+        }
+        if shape.attr("data-arrow").map(str::trim) == heads.map(Heads::value) && updates.len() == 1
+        {
+            return Ok(());
+        }
+        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+        self.fold(steps)
+    }
+
     /// Drop an end of a connector at `(x, y)`, in the root's user units:
     /// the end goes there, and is bound to the topmost shape within
     /// `tolerance` of the point — any but the arrow itself — or unbound if
@@ -2946,6 +2994,74 @@ mod tests {
             painted(d.source()),
             vec![Paint::Stroked, Paint::Filled, Paint::Filled]
         );
+    }
+
+    #[test]
+    fn set_heads_writes_the_word_takes_it_off_and_replaces_a_spelled_marker() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        // A plain line takes a head at each end, appended after what it has.
+        d.set_heads("s3", Some(Heads::Both)).unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), Some(Heads::Both));
+        assert!(
+            d.source().contains(
+                "<line x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\" data-id=\"s3\" data-arrow=\"both\"/>"
+            ),
+            "{}",
+            d.source()
+        );
+        // The same word again writes nothing, so undo goes past it.
+        d.set_heads("s3", Some(Heads::Both)).unwrap();
+        // Off again is a line, and one undo step brings the word back.
+        d.set_heads("s3", None).unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), None);
+        assert_eq!(d.source(), WIRED);
+        d.undo().unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), Some(Heads::Both));
+        d.undo().unwrap();
+        assert_eq!(d.source(), WIRED, "the no-op was not a step");
+        // Not a connector: refused.
+        assert!(matches!(
+            d.set_heads("s1", Some(Heads::End)),
+            Err(Error::Unsupported {
+                gesture: "set_heads",
+                ..
+            })
+        ));
+
+        // A file that spells its own marker: the word replaces it.
+        let spelled = WIRED.replace(
+            "data-id=\"s3\"",
+            "marker-end=\"url(#arrow)\" data-id=\"s3\"",
+        );
+        let mut d = Drawing::open(&spelled).unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), Some(Heads::End));
+        d.set_heads("s3", Some(Heads::Start)).unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), Some(Heads::Start));
+        assert!(!d.source().contains("marker-end"), "{}", d.source());
+        // Taking the heads off a spelled arrow takes the marker off too.
+        let mut d = Drawing::open(&spelled).unwrap();
+        d.set_heads("s3", None).unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), None);
+        assert_eq!(d.source(), WIRED);
+    }
+
+    #[test]
+    fn set_heads_all_takes_the_connectors_of_a_selection_in_one_step() {
+        let mut d = Drawing::open(WIRED).unwrap();
+        let s4 = d.add_arrow(0.0, 50.0, 50.0, 50.0, Heads::End).unwrap();
+        // The rect and circle are skipped, both lines take the word, and
+        // one undo step brings both back.
+        d.set_heads_all(&["s1", "s3", "s2", &s4], Some(Heads::Both))
+            .unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), Some(Heads::Both));
+        assert_eq!(d.shape(&s4).unwrap().heads(), Some(Heads::Both));
+        d.undo().unwrap();
+        assert_eq!(d.shape("s3").unwrap().heads(), None);
+        assert_eq!(d.shape(&s4).unwrap().heads(), Some(Heads::End));
+        assert!(matches!(
+            d.set_heads_all(&["s3", "nope"], None),
+            Err(Error::NoSuchShape(_))
+        ));
     }
 
     #[test]

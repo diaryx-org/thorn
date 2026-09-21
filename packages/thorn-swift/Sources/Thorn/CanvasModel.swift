@@ -69,6 +69,17 @@ public final class CanvasModel {
     }
     /// Called when `locked` changes.
     public var onLockChange: ((Bool) -> Void)?
+    /// Which ends of the next arrow have a head — the arrow tool's
+    /// setting, Excalidraw's arrowhead option with nothing selected; `nil`
+    /// draws a plain line. The canvas's, never the file's, until a shape
+    /// is drawn with it.
+    public var heads: Heads? = .end {
+        didSet { if heads != oldValue { onOptionsChange?() } }
+    }
+    /// Called when what an options strip shows may have changed: the
+    /// tool's `heads`, or the document after any edit — an undo can take a
+    /// head off the selected arrow.
+    public var onOptionsChange: (() -> Void)?
     /// How far the picture has been dragged from where it fits, in view
     /// points: the hand tool's doing, and a scroll's.
     public private(set) var pan: CGVector = .zero
@@ -199,6 +210,7 @@ public final class CanvasModel {
             selection = selection.filter { document.shape(id: $0) != nil }
             needsDisplay?()
             onDocumentChange?()
+            onOptionsChange?()
         }
     }
 
@@ -620,7 +632,9 @@ public final class CanvasModel {
             case .note: created = try? document.addNote(in: box)
             case .ellipse: created = try? document.addEllipse(in: box)
             case .line: created = try? document.addLine(from: from, to: to)
-            case .arrow: created = try? document.addArrow(from: from, to: to)
+            case .arrow:
+                created = try? heads.map { try document.addArrow(from: from, to: to, heads: $0) }
+                    ?? document.addLine(from: from, to: to)
             default: return false
             }
             return created != nil
@@ -820,7 +834,34 @@ public final class CanvasModel {
         selection = members
     }
 
-    /// Whether `groupSelection` would do something.
+    // MARK: Options
+
+    /// The connectors among the selection — what an arrowhead choice
+    /// applies to.
+    public var selectedConnectors: [String] {
+        selection.filter { document.connector(id: $0) != nil }
+    }
+
+    /// The heads the selected connectors agree on: `.some(nil)` when every
+    /// one is a plain line, `nil` when there is no connector selected or
+    /// they differ.
+    public var selectionHeads: Heads?? {
+        let all = selectedConnectors.map { document.heads(id: $0) }
+        guard let first = all.first, all.allSatisfy({ $0 == first }) else { return nil }
+        return .some(first)
+    }
+
+    /// Say which ends have a head: of the selected connectors, as one undo
+    /// step, when there are any; otherwise of the next arrow drawn.
+    public func setHeads(_ heads: Heads?) {
+        let connectors = selectedConnectors
+        if connectors.isEmpty {
+            self.heads = heads
+        } else {
+            try? document.setHeads(ids: connectors, heads)
+        }
+    }
+
     public var canGroup: Bool {
         selection.count >= 2 && Set(selection.compactMap { document.shape(id: $0)?.group }).count <= 1
             && selection.allSatisfy { document.shape(id: $0) != nil }

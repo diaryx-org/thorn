@@ -564,6 +564,46 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertTrue(try doc.undo(), "one step")
     }
 
+    func testTheHeadsOptionSetsTheToolsNextArrowOrTheSelectedConnectors() throws {
+        let doc = try DrawingDocument(source: scene)
+        let model = CanvasModel(document: doc)
+        model.draw(in: makeContext(), rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        var changes = 0
+        model.onOptionsChange = { changes += 1 }
+
+        // Nothing selected: the choice is the tool's, and a drawn arrow takes it.
+        model.key("a")
+        model.setHeads(.both)
+        XCTAssertEqual(model.heads, .both)
+        XCTAssertEqual(changes, 1)
+        model.beginPointer(at: CGPoint(x: 100, y: 100))
+        model.pointerDragged(to: CGPoint(x: 200, y: 100))
+        model.pointerUp()
+        let id = try XCTUnwrap(model.selection.first)
+        XCTAssertEqual(doc.heads(id: id), .both)
+
+        // Selected: the choice is the connector's, one step, and the strip is told.
+        XCTAssertEqual(model.selectedConnectors, [id])
+        XCTAssertEqual(model.selectionHeads, .some(.both))
+        let before = changes
+        model.setHeads(nil)
+        XCTAssertNil(doc.heads(id: id), "a plain line now")
+        XCTAssertEqual(model.selectionHeads, .some(nil))
+        XCTAssertEqual(model.heads, .both, "the tool's setting is untouched")
+        XCTAssertGreaterThan(changes, before)
+        XCTAssertTrue(try doc.undo())
+        XCTAssertEqual(doc.heads(id: id), .both, "one step")
+
+        // A box in the selection is skipped; a line with it takes the word.
+        model.select([id, "s1"])
+        XCTAssertEqual(model.selectedConnectors, [id])
+        model.setHeads(.start)
+        XCTAssertEqual(doc.heads(id: id), .start)
+        XCTAssertNil(doc.heads(id: "s1"))
+        model.select(["s1"])
+        XCTAssertNil(model.selectionHeads, "no connector: nothing to say")
+    }
+
     func testALineIsBentByItsMidpointHandleAndStraightenedByDraggingItBack() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)

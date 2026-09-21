@@ -432,6 +432,16 @@ int8_t uniffi_thorn_svg_ffi_fn_method_drawing_reorder(void*_Nonnull ptr, RustBuf
 void uniffi_thorn_svg_ffi_fn_method_drawing_resize(void*_Nonnull ptr, RustBuffer id, RustBuffer to, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(void*_Nonnull ptr, RustBuffer id, RustBuffer heads, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS_ALL
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer heads, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_TEXT
 void uniffi_thorn_svg_ffi_fn_method_drawing_set_text(void*_Nonnull ptr, RustBuffer id, RustBuffer text, RustCallStatus *_Nonnull out_status
@@ -1004,6 +1014,18 @@ uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_reorder(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_RESIZE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_RESIZE
 uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_resize(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_HEADS
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_HEADS
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_HEADS_ALL
+#define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_CHECKSUM_METHOD_DRAWING_SET_HEADS_ALL
+uint16_t uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads_all(void
     
 );
 #endif

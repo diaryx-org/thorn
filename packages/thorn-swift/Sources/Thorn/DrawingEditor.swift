@@ -26,6 +26,10 @@ public struct DrawingCanvas: PlatformViewRepresentable {
 /// lock, then every tool in `Tool.all` (each with its keys in its tooltip);
 /// a menu of the layering and grouping commands; delete; undo and redo;
 /// and the zoom — out, the percentage (which fits the picture again), in.
+/// Under the tools, when there is something for it to say, the options: a
+/// shape's words, for the selection when there is one and for the tool
+/// when there is not — so far which ends of an arrow have a head
+/// (`docs/proposals/shape-style.md` is the rest).
 ///
 /// Where the chrome sits is the width's: on the Mac, and on an iPad where
 /// the whole strip fits — a strip of capsules top-centre and the zoom
@@ -76,11 +80,14 @@ public struct DrawingEditor: View {
     private var strip: some View {
         DrawingCanvas(model: state.model)
             .overlay(alignment: .top) {
-                HStack(spacing: 8) {
-                    ToolCluster { lockTile; hand; select }
-                    ToolCluster { shapes }
-                    ToolCluster { marks }
-                    ToolCluster { layers; delete; undo; redo }
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ToolCluster { lockTile; hand; select }
+                        ToolCluster { shapes }
+                        ToolCluster { marks }
+                        ToolCluster { layers; delete; undo; redo }
+                    }
+                    options
                 }
                 .padding(10)
             }
@@ -96,19 +103,47 @@ public struct DrawingEditor: View {
     private var bar: some View {
         DrawingCanvas(model: state.model)
             .overlay(alignment: .bottom) {
-                HStack(spacing: 8) {
-                    ToolCluster {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 2) { lockTile; hand; select; shapes; marks }
+                VStack(spacing: 8) {
+                    options
+                    HStack(spacing: 8) {
+                        ToolCluster {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 2) { lockTile; hand; select; shapes; marks }
+                            }
                         }
+                        ToolCluster { undo; redo; more }
                     }
-                    ToolCluster { undo; redo; more }
                 }
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             }
     }
     #endif
+
+    // MARK: The options
+
+    /// The words the selection can take, or the tool's when nothing is
+    /// selected; nothing at all when neither has any.
+    @ViewBuilder private var options: some View {
+        let _ = state.revision
+        if !state.model.selectedConnectors.isEmpty || (state.selection.isEmpty && state.tool == .arrow) {
+            ToolCluster { headsTiles }
+        }
+    }
+
+    /// Which ends have a head: none, the end, the start, both. For a
+    /// selection it is what the connectors agree on, and lights nothing
+    /// when they differ.
+    @ViewBuilder private var headsTiles: some View {
+        let current: Heads?? = state.selection.isEmpty ? .some(state.model.heads) : state.model.selectionHeads
+        ForEach(Arrowheads.all, id: \.self) { choice in
+            Button { state.model.setHeads(choice.heads) } label: {
+                Label(choice.name, systemImage: choice.symbol)
+            }
+            .buttonStyle(ToolTile(on: current == .some(choice.heads)))
+            .help(choice.name)
+        }
+    }
 
     // MARK: The tiles
 
@@ -297,14 +332,51 @@ struct ToolCluster<Content: View>: View {
     }
 }
 
+/// The choices for which ends of an arrow have a head, as the options
+/// strip offers them: the values of `data-arrow`, and none.
+enum Arrowheads: Hashable {
+    case none, end, start, both
+
+    static let all: [Arrowheads] = [.none, .end, .start, .both]
+
+    var heads: Heads? {
+        switch self {
+        case .none: nil
+        case .end: .end
+        case .start: .start
+        case .both: .both
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .none: "No arrowhead"
+        case .end: "Arrowhead at the end"
+        case .start: "Arrowhead at the start"
+        case .both: "Arrowheads at both ends"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .none: "minus"
+        case .end: "arrow.right"
+        case .start: "arrow.left"
+        case .both: "arrow.left.and.right"
+        }
+    }
+}
+
 /// The bit of the model SwiftUI watches: the tool, the lock, the
-/// selection and the zoom.
+/// selection, the zoom, and a count that moves whenever the options strip
+/// may have something different to show.
 final class EditorState: ObservableObject {
     let model: CanvasModel
     @Published var tool: Tool
     @Published var locked: Bool
     @Published var selection: [String]
     @Published var zoom: CGFloat
+    @Published var revision = 0
 
     init(model: CanvasModel) {
         self.model = model
@@ -316,6 +388,7 @@ final class EditorState: ObservableObject {
         model.onToolChange = { [weak self] tool in self?.tool = tool }
         model.onLockChange = { [weak self] locked in self?.locked = locked }
         model.onZoomChange = { [weak self] zoom in self?.zoom = zoom }
+        model.onOptionsChange = { [weak self] in self?.revision += 1 }
     }
 
     func setTool(_ tool: Tool) { model.tool = tool }
