@@ -64,7 +64,7 @@ blank line still does ([docs/tasks/delete-leaves-its-line.md](docs/tasks/delete-
 | [`crates/thorn-svg-core`](crates/thorn-svg-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
 | [`crates/thorn-svg-ffi`](crates/thorn-svg-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
 | [`packages/thorn-swift`](packages/thorn-swift) | **The Swift package.** `ThornFFI` is the committed generated binding; `Thorn` is `DrawingDocument` (the gestures with Foundation types at the edges), `CanvasModel` (the canvas with no view in it: tool, selection, the pen — the words the next shape is born with — the drag in flight, the zoom and pan — a pinch's, a scroll's, ⌘+/⌘−/⌘0's — and drawing into a `CGContext` through resvg-swift: the page as a sheet on a desk in the view's light or dark appearance, the file's own dark-page rules applied for it, the picture unclipped, so a shape dragged off the edge is seen taking the page with it, and ⌘0 fits the page as it stands), `DrawingCanvasView` (AppKit / UIKit — on iOS a finger's tolerance and handles, a two-finger pan and a pinch, an iPad trackpad's scroll, every coalesced Pencil sample into the ink, a long-press menu of layers/group/delete/edit, and a field the keyboard pans the picture up for rather than covering) and `DrawingEditor` (SwiftUI, with the toolbar: a strip on the Mac and an iPad, a bar in thumb's reach on a phone). `Toolset.swift` is the toolbar's shape, Excalidraw's: lock, hand, select, rectangle, diamond, ellipse, arrow, line, draw, text, note, eraser, each with its keys (`R` or `2`, `Q` for the lock, Escape for select); the layering and grouping commands are a menu; under the tools, an options strip — the palette and a background, then dash and arrowheads — for the selection, or for the tool when nothing is selected. Every tool has its gesture in the core now. `Package.swift` sits at the repo root because SwiftPM needs it there. |
-| [`apps/thorn-mac`](apps/thorn-mac) | **A window around `DrawingEditor`**, for seeing a change work on the Mac. Its own package, because it force-loads the staticlib with a flag a by-version consumer may not carry. |
+| [`apps/thorn-editor`](apps/thorn-editor) | **Thorn**, the macOS + iOS drawing app (`Thorn.app`, `org.diaryx.thorn`), consuming `packages/thorn-swift`. Opens, edits and saves `.svg` through the document system — Finder's Open With, autosave, Versions, the Files app — with an icon and a marketing version the release bump moves. An xcodegen project; `App/` is the chrome only. |
 | [`apps/thorn-svg`](apps/thorn-svg) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
 
 ## Gestures
@@ -100,8 +100,16 @@ cargo xtask ci          # fmt, clippy, tests, per-crate isolation, binding drift
 cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
 scripts/test-swift.sh   # the Swift package's tests, on a Mac
 cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-arrow.svg
-cargo xtask mac drawing.svg   # build the staticlib, open the Mac app around a drawing
+cargo xtask swift             # build + launch Thorn on macOS, with a copy of a fixture open
+cargo xtask swift drawing.svg # …with a drawing of your own
+cargo xtask swift --ios       # …on its own `iPhone 17 (thorn)` simulator (--device for another)
 ```
+
+`cargo xtask swift` regenerates the UniFFI binding and the Xcode project when
+either is missing (`--regen` forces it, after an FFI change); the project's
+own pre-build script rebuilds the Rust staticlib for whichever destination is
+selected. `xcodegen` and Xcode are needed; a developer team is not, for the
+Mac and the simulator.
 
 ## Linking
 
@@ -111,7 +119,7 @@ of its own — the Diaryx app does — makes `thorn-svg-ffi` a Cargo dependency
 of that crate, so the scaffolding lands in the one archive it already
 force-loads; two Rust staticlibs cannot share an executable. An app with no
 Rust of its own builds `crates/thorn-svg-ffi`'s staticlib and force-loads
-that, as `scripts/test-swift.sh` does.
+that, as `scripts/test-swift.sh` and `apps/thorn-editor/project.yml` do.
 
 ## Where it fits
 

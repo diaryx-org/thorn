@@ -8,8 +8,9 @@
 //! [cargo-xtask]: https://github.com/matklad/cargo-xtask
 
 mod ci;
-mod mac;
+mod swift;
 mod util;
+mod versions;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -31,14 +32,18 @@ enum Task {
     Ci(ci::Args),
     /// (Re)generate the committed UniFFI Swift binding from crates/thorn-svg-ffi.
     Bindings,
-    /// Build the staticlib and open the Mac app (apps/thorn-mac) around a drawing.
-    Mac(mac::Args),
+    /// Build and launch Thorn, the Apple app (apps/thorn-editor), over packages/thorn-swift.
+    Swift(swift::Args),
+    /// Write the workspace version into the files no manifest parser reaches
+    /// (apps/thorn-editor/project.yml). The release bump runs this.
+    SyncVersions,
 }
 
 fn main() -> Result<()> {
     match Cli::parse().task {
         Task::Ci(args) => ci::run_task(args),
         Task::Bindings => util::run(util::cmd("bash").arg("scripts/gen-bindings.sh")),
-        Task::Mac(args) => mac::run_task(args),
+        Task::Swift(args) => swift::run_task(args),
+        Task::SyncVersions => versions::run_task(),
     }
 }

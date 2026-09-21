@@ -17,6 +17,7 @@ contents:
 - '[Freehand ink in the core](add-ink.md)'
 - '[A note gesture in the core](add-note.md)'
 - '[Text on iOS waits on resvg-swift''s font fix](ios-fonts-need-resvg-swift.md)'
+- '[The Mac app runs unsandboxed and unsigned](sandboxed-mac-app.md)'
 part_of: '[thorn](/README.md)'
 ---
 # Tasks

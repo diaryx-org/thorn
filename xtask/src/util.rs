@@ -1,6 +1,6 @@
 //! Shared plumbing for the tasks: where the repo is and how a subprocess is run.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -50,6 +50,43 @@ pub fn run(command: &mut Command) -> Result<()> {
     let status = command.status()?;
     if !status.success() {
         bail!("{command:?} failed with {status}");
+    }
+    Ok(())
+}
+
+/// Run a command whose failure is not ours to report — `simctl boot` on a
+/// device already booted, `pkill` with nothing to kill.
+pub fn run_ignoring_failure(command: &mut Command) {
+    let _ = command.status();
+}
+
+/// Run a command and return what it printed; an error carries its stderr.
+pub fn stdout(command: &mut Command) -> Result<String> {
+    let out = command
+        .output()
+        .with_context(|| format!("could not spawn {command:?}"))?;
+    if !out.status.success() {
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let stderr = stderr.trim_end();
+        let sep = if stderr.is_empty() { "" } else { ": " };
+        bail!("{command:?} failed ({}){sep}{stderr}", out.status);
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// A file under the repo root, as text.
+pub fn read(path: impl AsRef<Path>) -> Result<String> {
+    let full = root().join(path.as_ref());
+    std::fs::read_to_string(&full).with_context(|| format!("could not read {}", full.display()))
+}
+
+/// Fail early, by name, when a tool a task leans on is not installed.
+pub fn require_tool(bin: &str, how_to_get_it: &str) -> Result<()> {
+    let found = std::env::var_os("PATH")
+        .map(|path| std::env::split_paths(&path).any(|dir| dir.join(bin).is_file()))
+        .unwrap_or(false);
+    if !found {
+        bail!("`{bin}` is not on PATH — {how_to_get_it}");
     }
     Ok(())
 }

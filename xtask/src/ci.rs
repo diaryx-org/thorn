@@ -27,6 +27,12 @@ pub const JOBS: &[Job] = &[
         run: fmt,
     },
     Job {
+        id: "versions",
+        name: "Versions",
+        about: "the app's marketing version is the workspace version",
+        run: crate::versions::check,
+    },
+    Job {
         id: "clippy",
         name: "Clippy",
         about: "clippy over every target, warnings denied",

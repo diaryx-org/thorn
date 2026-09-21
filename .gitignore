@@ -12,9 +12,5 @@
 packages/thorn-swift/.build/
 packages/thorn-swift/build/
 
-# The Mac host is its own package (apps/thorn-mac/Package.swift), with
-# its own build dir; `Packages/` is where `swift package edit` puts a
-# dependency being worked on locally, and is never committed.
-apps/thorn-mac/.build/
-apps/thorn-mac/Packages/
-apps/thorn-mac/Package.resolved
+# The app (apps/thorn-editor) is an xcodegen project; what it generates and
+# builds is listed in its own .gitignore.
