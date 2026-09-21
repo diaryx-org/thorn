@@ -298,6 +298,20 @@ pub struct Point {
     pub y: f64,
 }
 
+/// The bytes a new drawing is created with: `thorn_svg_core::profile::TEMPLATE`.
+#[uniffi::export]
+pub fn template() -> String {
+    core::profile::TEMPLATE.to_string()
+}
+
+/// Whether `source` is a drawing of the profile — an `<svg>` whose root
+/// carries `data-diaryx-drawing`. A host's sniff for which surface opens an
+/// `.svg`; not a conformance check, which is [`Drawing::check`].
+#[uniffi::export]
+pub fn is_drawing(source: String) -> bool {
+    core::profile::is_drawing(&source)
+}
+
 /// Where a handle sits on a box.
 #[uniffi::export]
 pub fn handle_position(handle: Handle, bounds: Bounds) -> Point {
@@ -401,6 +415,18 @@ impl Drawing {
         Ok(Arc::new(Self {
             inner: Mutex::new(Inner(inner)),
         }))
+    }
+
+    /// A new, empty drawing — the profile's template opened. What a host's
+    /// `New Drawing` starts from; [`template`] is the same bytes for a host
+    /// that writes the file before it opens it.
+    #[uniffi::constructor]
+    pub fn fresh() -> Arc<Self> {
+        let mut inner = core::Drawing::fresh();
+        inner.set_measure(Box::new(core::measure::Usvg));
+        Arc::new(Self {
+            inner: Mutex::new(Inner(inner)),
+        })
     }
 
     /// The current bytes — what saving writes.

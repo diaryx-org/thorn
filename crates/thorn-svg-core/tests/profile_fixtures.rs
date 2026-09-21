@@ -360,3 +360,18 @@ fn a_diamond_is_a_polygon_and_a_note_is_a_group_resized_as_one() {
     assert_eq!(findings[0].rule, Rule::Role);
     assert_eq!(findings[0].shape.as_deref(), Some("s2"));
 }
+
+/// `fresh.svg` is the template a new drawing is created with — the same bytes
+/// `Drawing::fresh` opens — and it is empty: nothing to select on a new page.
+#[test]
+fn the_fresh_fixture_is_the_template() {
+    let fresh = thorn_svg_core::Drawing::fresh();
+    assert_eq!(fresh.source(), thorn_svg_core::profile::TEMPLATE);
+    assert!(fresh.shapes().is_empty());
+    assert_eq!(fresh.check(), []);
+    assert!(thorn_svg_core::profile::is_drawing(fresh.source()));
+    assert!(!thorn_svg_core::profile::is_drawing(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"/>"
+    ));
+    assert!(!thorn_svg_core::profile::is_drawing("not svg"));
+}

@@ -745,6 +745,18 @@ open class Drawing:
 
     
     /**
+     * A new, empty drawing — the profile's template opened. What a host's
+     * `New Drawing` starts from; [`template`] is the same bytes for a host
+     * that writes the file before it opens it.
+     */
+public static func fresh() -> Drawing {
+    return try!  FfiConverterTypeDrawing.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_constructor_drawing_fresh($0
+    )
+})
+}
+    
+    /**
      * Open an SVG's text. A `<text>`'s bounds are measured by resvg's
      * layout over the system's fonts — the layout the canvas draws with.
      */
@@ -2886,6 +2898,27 @@ public func handlePosition(handle: Handle, bounds: Bounds) -> Point {
     )
 })
 }
+/**
+ * Whether `source` is a drawing of the profile — an `<svg>` whose root
+ * carries `data-diaryx-drawing`. A host's sniff for which surface opens an
+ * `.svg`; not a conformance check, which is [`Drawing::check`].
+ */
+public func isDrawing(source: String) -> Bool {
+    return try!  FfiConverterBool.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_func_is_drawing(
+        FfiConverterString.lower(source),$0
+    )
+})
+}
+/**
+ * The bytes a new drawing is created with: `thorn_svg_core::profile::TEMPLATE`.
+ */
+public func template() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_thorn_svg_ffi_fn_func_template($0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -2909,6 +2942,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_func_handle_position() != 51884) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_func_is_drawing() != 27928) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_func_template() != 15141) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow() != 7662) {
@@ -3011,6 +3050,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 51363) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_fresh() != 15554) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 20304) {

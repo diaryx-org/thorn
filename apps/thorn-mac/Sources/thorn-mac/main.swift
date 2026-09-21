@@ -4,28 +4,9 @@ import AppKit
 import Thorn
 import SwiftUI
 
-let fresh = """
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" width="640" height="400" data-diaryx-drawing="1">
-      <defs>
-        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 z"/>
-        </marker>
-      </defs>
-      <style>
-        rect, ellipse, polygon { fill: none; stroke: #222; stroke-width: 2 }
-        line { stroke: #222; stroke-width: 2 }
-        line[data-arrow="end"], line[data-arrow="both"] { marker-end: url(#arrow) }
-        line[data-arrow="start"], line[data-arrow="both"] { marker-start: url(#arrow) }
-        path[data-ink] { fill: #222; stroke: none }
-        text { font: 16px sans-serif }
-      </style>
-    </svg>
-
-    """
-
 let path = CommandLine.arguments.dropFirst().first
-let source = path.flatMap { try? String(contentsOfFile: $0, encoding: .utf8) } ?? fresh
-let document = try DrawingDocument(source: source)
+let document = try path.map { try DrawingDocument(contentsOf: URL(fileURLWithPath: $0)) }
+    ?? DrawingDocument.fresh()
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!

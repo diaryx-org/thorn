@@ -2,12 +2,22 @@
 title: The style block a new drawing is created with
 description: What <style> the app writes into a fresh drawing so a viewer with no theme still shows a marker as a marker — the app's to settle, held to here
 author: adammharris
-status: open
+status: done
 created: 2026-09-19
-updated: 2026-09-19
+updated: 2026-09-20
 part_of: '[Tasks](tasks.md)'
 ---
 # The style block a new drawing is created with
+
+**Done 2026-09-20**, in the commit that closes this. The template is
+`profile::TEMPLATE` — `tests/fixtures/fresh.svg`, included verbatim — and
+`Drawing::fresh()` opens it; the binding has `Drawing.fresh()`, `template()`
+and `is_drawing()`, the last being how a host tells a drawing from any other
+`.svg`. The fixture test holds it to the profile and to being empty. What it
+carries is what `apps/thorn-mac` started with: `<defs>` with the arrow
+`<marker>`, and a `<style>` that strokes a box, fills an ink stroke, and
+resolves `data-arrow` to the marker. The Diaryx app's `New Drawing` writes
+exactly it.
 
 The profile does not write a `<style>`; a shape with no fill or stroke
 is drawn by SVG's defaults (black fill, no stroke), which is a silhouette

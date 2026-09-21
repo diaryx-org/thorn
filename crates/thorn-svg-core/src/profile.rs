@@ -23,6 +23,28 @@ pub const MARKER: &str = "data-diaryx-drawing";
 /// The attribute every shape carries, by which the editor addresses it.
 pub const ID: &str = "data-id";
 
+/// What a new drawing is created with — the file `New Drawing` writes.
+///
+/// A conforming, empty page with the `<style>` that gives every shape the
+/// editor makes its look with no theme: a stroked box, a filled ink stroke, a
+/// line whose `data-arrow` resolves to the `<marker>` in `<defs>`. The profile
+/// itself writes no `<style>`, so without this a viewer that knows only SVG
+/// would draw a black silhouette where a diagram was meant. Held to the
+/// profile by `tests/fixtures/fresh.svg`, which is exactly this text.
+pub const TEMPLATE: &str = include_str!("../tests/fixtures/fresh.svg");
+
+/// Whether `source` is a drawing of this profile: an `<svg>` whose root
+/// carries the marker. A cheap sniff for a host deciding which surface opens
+/// an `.svg` — a picture of a map goes to the viewer, a drawing to the
+/// editor — and not a conformance check, which is [`check`].
+pub fn is_drawing(source: &str) -> bool {
+    Drawing::open(source).is_ok_and(|d| {
+        d.root_attrs()
+            .iter()
+            .any(|(k, v)| k == MARKER && v.is_some())
+    })
+}
+
 /// One rule of the profile, as `docs/profile.md` numbers them.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]

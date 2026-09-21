@@ -213,6 +213,12 @@ impl Drawing {
         Ok(drawing)
     }
 
+    /// A new, empty drawing: [`profile::TEMPLATE`](crate::profile::TEMPLATE)
+    /// opened. What a host's `New Drawing` starts from.
+    pub fn fresh() -> Self {
+        Self::open(crate::profile::TEMPLATE).expect("the template is a drawing")
+    }
+
     /// Lend the drawing a text layout, so a `<text>`'s bounds are the box
     /// the host draws rather than the nominal one. See [`measure`](crate::measure).
     pub fn set_measure(&mut self, measure: Box<dyn Measure>) {

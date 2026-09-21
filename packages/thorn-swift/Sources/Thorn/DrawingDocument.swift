@@ -34,6 +34,22 @@ public final class DrawingDocument {
         try self.init(source: String(contentsOf: url, encoding: .utf8))
     }
 
+    /// A new, empty drawing: the profile's template opened.
+    public static func fresh() -> DrawingDocument {
+        // The template is a drawing by the core's own test; `try!` would say
+        // the same thing less politely.
+        try! DrawingDocument(source: template)
+    }
+
+    /// The bytes a new drawing is created with — for a host that writes the
+    /// file before it opens it.
+    public static var template: String { ThornFFI.template() }
+
+    /// Whether `source` is a drawing of the profile — an `<svg>` whose root
+    /// carries `data-diaryx-drawing` — as opposed to any other SVG, which a
+    /// viewer shows and this editor would only find fault with.
+    public static func isDrawing(_ source: String) -> Bool { ThornFFI.isDrawing(source: source) }
+
     /// The current bytes — what saving writes.
     public var source: String { inner.source() }
 
