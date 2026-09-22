@@ -683,7 +683,7 @@ impl Drawing {
                 return Err(Error::NoSuchShape(id.to_string()));
             };
             let locator = self.locator(shape.node);
-            self.editor.delete(&locator).map_err(Error::Edit)?;
+            self.editor.delete_smart(&locator).map_err(Error::Edit)?;
             self.reload()?;
             self.fold(&mut steps)?;
         }
@@ -2562,7 +2562,7 @@ mod tests {
         d.delete("s1").unwrap();
         assert_eq!(
             d.source(),
-            "<svg viewBox=\"-12 -12 34 34\" data-diaryx-drawing=\"1\">\n  <!-- keep me -->\n  \n  <g data-id=\"s2\"><circle cx=\"5\" cy=\"5\" r=\"1\" data-id=\"s3\"/></g>\n</svg>\n"
+            "<svg viewBox=\"-12 -12 34 34\" data-diaryx-drawing=\"1\">\n  <!-- keep me -->\n  <g data-id=\"s2\"><circle cx=\"5\" cy=\"5\" r=\"1\" data-id=\"s3\"/></g>\n</svg>\n"
         );
         assert!(d.shape("s1").is_none());
         assert!(matches!(d.delete("s1"), Err(Error::NoSuchShape(_))));

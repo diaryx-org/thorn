@@ -24,7 +24,7 @@ readme = "README.md"
 # against a checkout. 3.8.1 is the first release with `set_node_attrs`,
 # `move_before`/`move_after` and the `svg` dialect — the move, resize and
 # reorder gestures.
-twig-doc = "3.8.1"
+twig-doc = "3.9.2"
 # Rendering for the CLI's `render` and for a test that wants pixels. Same major
 # as leaf-raster and resvg-swift, so a host linking all three gets one copy.
 resvg = "0.46"

@@ -2,7 +2,7 @@
 title: Deleting a shape leaves its indentation line behind
 description: twig's exact delete removes the element's span and nothing else, so a one-per-line file keeps a blank indented line; delete_smart does not tidy XML
 author: adammharris
-status: in-progress
+status: done
 created: 2026-09-19
 updated: 2026-09-22
 part_of: '[Tasks](tasks.md)'
@@ -35,3 +35,7 @@ indented line with its indentation and newline (twig `b03ed3e2`, unreleased).
 `Drawing::delete_all` moves from `delete` to `delete_smart` and the test
 asserts the tidy form; that change passes `cargo xtask ci` against the twig
 checkout and lands with the `twig-doc` pin once twig releases.
+
+**Resolved.** twig 3.9.2 carries the fix; this crate requires
+`twig-doc = "3.9.2"` and `Drawing::delete_all` calls `delete_smart`, in the
+commit that closes this task.
