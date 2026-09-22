@@ -2,9 +2,9 @@
 title: First release
 description: What stands between this checkout and a 0.1.0 the app can pin — the repo, the token, the number
 author: adammharris
-status: open
+status: done
 created: 2026-09-19
-updated: 2026-09-20
+updated: 2026-09-22
 part_of: '[Tasks](tasks.md)'
 ---
 # First release
@@ -26,3 +26,8 @@ What stands between this checkout and a `0.1.0` the Diaryx app can pin:
   acknowledgements, and the branch merges.
 - Then `dx release <spec>` cuts bump, changelog, commit, and tag, and the tag
   push runs `publish.yml`.
+
+**Resolved.** `v0.1.0` is tagged and `thorn-svg`, `thorn-svg-core` and
+`thorn-svg-ffi` are on crates.io (0.1.1 since); the app pins
+`thorn-svg-ffi = "0.1"` and `Thorn` at `exactVersion: 0.1.0`, lists it in
+its acknowledgements, and its `thorn` branch has merged.

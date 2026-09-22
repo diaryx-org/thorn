@@ -2,9 +2,9 @@
 title: Text on iOS waits on resvg-swift's font fix
 description: Every `<text>` is dropped on iOS until thorn-svg-ffi pins the resvg-uniffi that loads /System/Library/Fonts there
 author: adammharris
-status: open
+status: done
 created: 2026-09-21
-updated: 2026-09-21
+updated: 2026-09-22
 part_of: '[Tasks](tasks.md)'
 ---
 # Text on iOS waits on resvg-swift's font fix
@@ -27,3 +27,7 @@ rendering on iOS has the same gap and the same pin to move.
 
 Done when: the pin is at a released resvg-uniffi with the iOS branch, and
 `cargo xtask ci` is green against crates.io with no patch on.
+
+**Resolved.** resvg-uniffi 0.1.3 carries the iOS branch; `thorn-svg-ffi`
+requires `resvg-uniffi = "0.1.3"` from the commit that closes this task,
+and `cargo xtask ci` is green against crates.io with no patch on.
