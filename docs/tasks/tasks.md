@@ -3,10 +3,10 @@ title: Tasks
 description: Deferred work on thorn, one file each — a commitment with a done state
 author: adammharris
 created: 2026-09-19
-updated: 2026-09-21
+updated: 2026-09-22
 contents:
 - '[The wasm binding, for the composer](wasm-binding.md)'
-- '[The Mac app runs unsandboxed and unsigned](sandboxed-mac-app.md)'
+- '[Thorn on the App Store, through Xcode Cloud](sandboxed-mac-app.md)'
 - '[Closed tasks](/docs/tasks/closed/closed.md)'
 part_of: '[thorn](/README.md)'
 ---
