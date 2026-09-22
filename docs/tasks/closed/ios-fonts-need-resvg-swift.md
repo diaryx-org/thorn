@@ -5,7 +5,7 @@ author: adammharris
 status: done
 created: 2026-09-21
 updated: 2026-09-22
-part_of: '[Tasks](tasks.md)'
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
 ---
 # Text on iOS waits on resvg-swift's font fix
 

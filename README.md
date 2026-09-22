@@ -54,7 +54,7 @@ is ours.** twig learns nothing from this repository, ever. Where twig lacks a
 gesture the editor waits rather than re-deriving format knowledge over the
 raw splice — move, resize and reorder waited on twig 3.8.1's
 `set_node_attrs` and `move_before`/`move_after`, and a deleted shape's
-blank line still does ([docs/tasks/delete-leaves-its-line.md](docs/tasks/delete-leaves-its-line.md)).
+blank line still does ([docs/tasks/closed/delete-leaves-its-line.md](/docs/tasks/closed/delete-leaves-its-line.md)).
 
 ## Layout
 
@@ -77,7 +77,7 @@ history:
 | add rect, diamond, ellipse, line, arrow, label, note | `insert_after` / `insert_child` | done: an arrow is a `<line>` with `data-arrow`, its head the drawing's `<style>`; a diamond a `<polygon>`; a note a `<g data-role="note">` of a box and a label wrapped to it, made and resized as one |
 | freehand ink | `insert_after` | done: a monoline stroke, its outline the `<path>`'s `d` and its centreline and width beside it (`ink.rs` is the nib) |
 | re-word a label, wrap it | `edit_range` over the `<text>`'s interior | done: `set_text`, and `set_width` flowing the words into `<tspan>` lines at `data-width` (measured by the host's layout); the canvas opens a field on a double-click or at the click with the label tool, and a label's box handles set the width it wraps to |
-| delete | `delete` | done ([its line stays](docs/tasks/delete-leaves-its-line.md)) |
+| delete | `delete` | done ([its line stays](/docs/tasks/closed/delete-leaves-its-line.md)) |
 | the page follows the shapes | `set_node_attrs` on `<svg>`, folded into the gesture | done: every gesture above ends by fitting `viewBox` (and a plain-number `width`/`height`) around every shape, `PAGE_MARGIN` out, in its own undo step; `Drawing::page` reads it, `Drawing::extent` is what it follows; an empty page keeps its size ([profile rule 2](docs/profile.md#rules)) |
 | undo, redo | `undo` / `redo` | done |
 | move, resize | `set_node_attrs` | done: the attributes for rect, ellipse, circle, line, polyline, polygon, text, image, the `d` for a `<path>`; a `transform` only for a `<g>` or under a rotation |

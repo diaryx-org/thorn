@@ -666,7 +666,7 @@ impl Drawing {
     /// Delete the shape with this `data-id`: one splice, one undo step —
     /// plus, in the same step, the binding taken off any arrow that
     /// pointed at it. The line's indentation is left where it was
-    /// (docs/tasks/delete-leaves-its-line.md).
+    /// (docs/tasks/closed/delete-leaves-its-line.md).
     pub fn delete(&mut self, id: &str) -> Result<(), Error> {
         self.delete_all(&[id])
     }

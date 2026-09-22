@@ -5,7 +5,7 @@ author: adammharris
 status: done
 created: 2026-09-19
 updated: 2026-09-21
-part_of: '[Tasks](tasks.md)'
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
 ---
 # The style block a new drawing is created with
 

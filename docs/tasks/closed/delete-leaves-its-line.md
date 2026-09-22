@@ -5,7 +5,7 @@ author: adammharris
 status: done
 created: 2026-09-19
 updated: 2026-09-22
-part_of: '[Tasks](tasks.md)'
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
 ---
 # Deleting a shape leaves its indentation line behind
 

@@ -5,7 +5,7 @@ author: adammharris
 status: done
 created: 2026-09-19
 updated: 2026-09-20
-part_of: '[Tasks](tasks.md)'
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
 ---
 # The canvas view, on the Mac and on iOS
 
@@ -26,12 +26,12 @@ Foundation types at the edges — and no view. The canvas is:
 
 - **Display** by handing the SVG to resvg-swift's `SVGPicture` and drawing it
   into the view's `CGContext`; the editor draws no SVG itself. resvg-swift
-  is scaffolded and not yet released (its own `docs/tasks/first-release.md`),
+  is scaffolded and not yet released (its own `docs/tasks/closed/first-release.md`),
   so `Package.swift` does not depend on it yet; when it has a version, add
   `.package(url: "https://github.com/diaryx-org/resvg-swift.git", from:
   …)` and the `Thorn` target's dependency on `ResvgCoreGraphics`.
 - **Hit-testing and handles**, which are the core's
-  (`docs/tasks/hit-testing.md`) and reach here through the binding; the view
+  (`docs/tasks/closed/hit-testing.md`) and reach here through the binding; the view
   only draws what the core says is selected and where its handles are.
 - **A toolbar** on each platform: rectangle, ellipse, line, arrow, text,
   select; forward and back; group and ungroup; delete; undo and redo.

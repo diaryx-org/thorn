@@ -5,19 +5,9 @@ author: adammharris
 created: 2026-09-19
 updated: 2026-09-21
 contents:
-- '[First release](first-release.md)'
-- '[Move, resize and reorder wait on twig''s drawing branch](gestures-need-twig.md)'
-- '[Deleting a shape leaves its indentation line behind](delete-leaves-its-line.md)'
-- '[Hit-testing and selection in the core](hit-testing.md)'
-- '[The canvas view, on the Mac and on iOS](swift-canvas.md)'
-- '[The style block a new drawing is created with](style-template.md)'
 - '[The wasm binding, for the composer](wasm-binding.md)'
-- '[A diamond gesture in the core](add-diamond.md)'
-- '[An arrow gesture in the core](add-arrow.md)'
-- '[Freehand ink in the core](add-ink.md)'
-- '[A note gesture in the core](add-note.md)'
-- '[Text on iOS waits on resvg-swift''s font fix](ios-fonts-need-resvg-swift.md)'
 - '[The Mac app runs unsandboxed and unsigned](sandboxed-mac-app.md)'
+- '[Closed tasks](/docs/tasks/closed/closed.md)'
 part_of: '[thorn](/README.md)'
 ---
 # Tasks
