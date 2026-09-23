@@ -64,7 +64,7 @@ targets:
         PRODUCT_MODULE_NAME: ThornApp
         # The workspace version, written here by `cargo xtask sync-versions`
         # as part of a release bump.
-        MARKETING_VERSION: "0.1.1"
+        MARKETING_VERSION: "0.1.2"
         CURRENT_PROJECT_VERSION: "1"
         # App icon, from the Icon Composer source at App/thorn.icon (picked up
         # automatically — it's a normal member of the App/ sources path above).

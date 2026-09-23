@@ -26,6 +26,29 @@ _No commits since the last tag._
 
 <!-- git-cliff:end -->
 
+## v0.1.2 — 2026-09-22
+
+### Added
+
+- **thorn-editor** — the Release build is the App Store's, and Xcode Cloud can build it ([`69cf16a`](https://github.com/diaryx-org/thorn/commit/69cf16ada96730e42dfbc84d1af41191c07bda70))
+
+### Fixed
+
+- **thorn-svg-ffi** — require resvg-uniffi 0.1.3, which loads iOS's system fonts ([`6224d1f`](https://github.com/diaryx-org/thorn/commit/6224d1f20d38e713337af3b4c9350a7cecb41434))
+- **tasks** — open-tasks leaves out dropped tasks and the closed shelf ([`20200f6`](https://github.com/diaryx-org/thorn/commit/20200f60031667634f198e0e7352987d7e7e55b2))
+- **thorn-svg-core** — deleting a shape takes its line with it ([`aec5e9b`](https://github.com/diaryx-org/thorn/commit/aec5e9bd5a77a8a1256e9b914cebdf320b8e59a2))
+
+### Behavioural changes
+
+- thorn-svg-ffi now requires resvg-uniffi >= 0.1.3; on iOS the canvas draws `<text>` where it previously dropped every label.
+
+- deleting a shape that sits alone on its own line of the
+  drawing now removes that whole line. It used to leave the line's
+  indentation behind as a blank line. A shape that shares its line with
+  another element (a member written inline inside its `<g>`) is still
+  removed exactly, and the rest of the line is untouched.
+
+
 ## v0.1.1 — 2026-09-21
 
 ### Breaking
