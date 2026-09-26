@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -281,7 +327,7 @@ private func makeRustCall<T, E: Swift.Error>(
     _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T,
     errorHandler: ((RustBuffer) throws -> E)?
 ) throws -> T {
-    uniffiEnsureInitialized()
+    uniffiEnsureThornSvgFfiInitialized()
     var callStatus = RustCallStatus.init()
     let returnedVal = callback(&callStatus)
     try uniffiCheckCallStatus(callStatus: callStatus, errorHandler: errorHandler)
@@ -352,18 +398,29 @@ private func uniffiTraitInterfaceCallWithError<T, E>(
         callStatus.pointee.errorBuf = FfiConverterString.lower(String(describing: error))
     }
 }
-fileprivate class UniffiHandleMap<T> {
-    private var map: [UInt64: T] = [:]
+// Initial value and increment amount for handles. 
+// These ensure that SWIFT handles always have the lowest bit set
+fileprivate let UNIFFI_HANDLEMAP_INITIAL: UInt64 = 1
+fileprivate let UNIFFI_HANDLEMAP_DELTA: UInt64 = 2
+
+fileprivate final class UniffiHandleMap<T>: @unchecked Sendable {
+    // All mutation happens with this lock held, which is why we implement @unchecked Sendable.
     private let lock = NSLock()
-    private var currentHandle: UInt64 = 1
+    private var map: [UInt64: T] = [:]
+    private var currentHandle: UInt64 = UNIFFI_HANDLEMAP_INITIAL
 
     func insert(obj: T) -> UInt64 {
         lock.withLock {
-            let handle = currentHandle
-            currentHandle += 1
-            map[handle] = obj
-            return handle
+            return doInsert(obj)
         }
+    }
+
+    // Low-level insert function, this assumes `lock` is held.
+    private func doInsert(_ obj: T) -> UInt64 {
+        let handle = currentHandle
+        currentHandle += UNIFFI_HANDLEMAP_DELTA
+        map[handle] = obj
+        return handle
     }
 
      func get(handle: UInt64) throws -> T {
@@ -372,6 +429,15 @@ fileprivate class UniffiHandleMap<T> {
                 throw UniffiInternalError.unexpectedStaleHandle
             }
             return obj
+        }
+    }
+
+     func clone(handle: UInt64) throws -> UInt64 {
+        try lock.withLock {
+            guard let obj = map[handle] else {
+                throw UniffiInternalError.unexpectedStaleHandle
+            }
+            return doInsert(obj)
         }
     }
 
@@ -467,7 +533,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -483,7 +553,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -499,7 +570,7 @@ fileprivate struct FfiConverterString: FfiConverter {
 /**
  * A drawing being edited. See `thorn_svg_core::Drawing`.
  */
-public protocol DrawingProtocol : AnyObject {
+public protocol DrawingProtocol: AnyObject, Sendable {
     
     /**
      * Add an arrow — a line with `data-arrow` saying which ends have a
@@ -877,55 +948,57 @@ public protocol DrawingProtocol : AnyObject {
     func weight(id: String)  -> Weight?
     
 }
-
 /**
  * A drawing being edited. See `thorn_svg_core::Drawing`.
  */
-open class Drawing:
-    DrawingProtocol {
-    fileprivate let pointer: UnsafeMutableRawPointer!
+open class Drawing: DrawingProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
 
-    /// Used to instantiate a [FFIObject] without an actual pointer, for fakes in tests, mostly.
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public struct NoPointer {
+    public struct NoHandle {
         public init() {}
     }
 
     // TODO: We'd like this to be `private` but for Swifty reasons,
     // we can't implement `FfiConverter` without making this `required` and we can't
     // make it `required` without making it `public`.
-    required public init(unsafeFromRawPointer pointer: UnsafeMutableRawPointer) {
-        self.pointer = pointer
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
     }
 
     // This constructor can be used to instantiate a fake object.
-    // - Parameter noPointer: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
     //
     // - Warning:
-    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing [Pointer] the FFI lower functions will crash.
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public init(noPointer: NoPointer) {
-        self.pointer = nil
+    public init(noHandle: NoHandle) {
+        self.handle = 0
     }
 
 #if swift(>=5.8)
     @_documentation(visibility: private)
 #endif
-    public func uniffiClonePointer() -> UnsafeMutableRawPointer {
-        return try! rustCall { uniffi_thorn_svg_ffi_fn_clone_drawing(self.pointer, $0) }
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_thorn_svg_ffi_fn_clone_drawing(self.handle, $0) }
     }
     // No primary constructor declared for this class.
 
     deinit {
-        guard let pointer = pointer else {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
             return
         }
 
-        try! rustCall { uniffi_thorn_svg_ffi_fn_free_drawing(pointer, $0) }
+        try! rustCall { uniffi_thorn_svg_ffi_fn_free_drawing(handle, $0) }
     }
 
     
@@ -934,9 +1007,10 @@ open class Drawing:
      * `New Drawing` starts from; [`template`] is the same bytes for a host
      * that writes the file before it opens it.
      */
-public static func fresh() -> Drawing {
-    return try!  FfiConverterTypeDrawing.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_constructor_drawing_fresh($0
+public static func fresh() -> Drawing  {
+    return try!  FfiConverterTypeDrawing_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_constructor_drawing_fresh(uniffiCallStatus
     )
 })
 }
@@ -945,10 +1019,11 @@ public static func fresh() -> Drawing {
      * Open an SVG's text. A `<text>`'s bounds are measured by resvg's
      * layout over the system's fonts — the layout the canvas draws with.
      */
-public static func `open`(source: String)throws  -> Drawing {
-    return try  FfiConverterTypeDrawing.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
+public static func `open`(source: String)throws  -> Drawing  {
+    return try  FfiConverterTypeDrawing_lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_constructor_drawing_open(
-        FfiConverterString.lower(source),$0
+        FfiConverterString.lower(source),uniffiCallStatus
     )
 })
 }
@@ -959,14 +1034,16 @@ public static func `open`(source: String)throws  -> Drawing {
      * Add an arrow — a line with `data-arrow` saying which ends have a
      * head; returns its `data-id`.
      */
-open func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(self.uniffiClonePointer(),
+open func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(
+            self.uniffiCloneHandle(),
         FfiConverterDouble.lower(x1),
         FfiConverterDouble.lower(y1),
         FfiConverterDouble.lower(x2),
         FfiConverterDouble.lower(y2),
-        FfiConverterTypeHeads.lower(heads),$0
+        FfiConverterTypeHeads_lower(heads),uniffiCallStatus
     )
 })
 }
@@ -975,10 +1052,12 @@ open func addArrow(x1: Double, y1: Double, x2: Double, y2: Double, heads: Heads)
      * Add a diamond filling `bounds` — a polygon through the midpoints of
      * its sides; returns its `data-id`.
      */
-open func addDiamond(bounds: Bounds)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(self.uniffiClonePointer(),
-        FfiConverterTypeBounds.lower(bounds),$0
+open func addDiamond(bounds: Bounds)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBounds_lower(bounds),uniffiCallStatus
     )
 })
 }
@@ -986,10 +1065,12 @@ open func addDiamond(bounds: Bounds)throws  -> String {
     /**
      * Add an ellipse filling `bounds`; returns its `data-id`.
      */
-open func addEllipse(bounds: Bounds)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(self.uniffiClonePointer(),
-        FfiConverterTypeBounds.lower(bounds),$0
+open func addEllipse(bounds: Bounds)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBounds_lower(bounds),uniffiCallStatus
     )
 })
 }
@@ -999,12 +1080,14 @@ open func addEllipse(bounds: Bounds)throws  -> String {
      * `points` at `widths` (one for all, or one per point), with the
      * centreline and widths beside it; returns its `data-id`.
      */
-open func addInk(points: [Point], widths: [Double], nib: Nib)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(self.uniffiClonePointer(),
+open func addInk(points: [Point], widths: [Double], nib: Nib)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceTypePoint.lower(points),
         FfiConverterSequenceDouble.lower(widths),
-        FfiConverterTypeNib.lower(nib),$0
+        FfiConverterTypeNib_lower(nib),uniffiCallStatus
     )
 })
 }
@@ -1012,13 +1095,15 @@ open func addInk(points: [Point], widths: [Double], nib: Nib)throws  -> String {
     /**
      * Add a line; returns its `data-id`.
      */
-open func addLine(x1: Double, y1: Double, x2: Double, y2: Double)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_line(self.uniffiClonePointer(),
+open func addLine(x1: Double, y1: Double, x2: Double, y2: Double)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_line(
+            self.uniffiCloneHandle(),
         FfiConverterDouble.lower(x1),
         FfiConverterDouble.lower(y1),
         FfiConverterDouble.lower(x2),
-        FfiConverterDouble.lower(y2),$0
+        FfiConverterDouble.lower(y2),uniffiCallStatus
     )
 })
 }
@@ -1027,11 +1112,13 @@ open func addLine(x1: Double, y1: Double, x2: Double, y2: Double)throws  -> Stri
      * Add a note filling `bounds` — a group of a box and a label wrapped
      * to it; returns the group's `data-id`.
      */
-open func addNote(bounds: Bounds, text: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_note(self.uniffiClonePointer(),
-        FfiConverterTypeBounds.lower(bounds),
-        FfiConverterString.lower(text),$0
+open func addNote(bounds: Bounds, text: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_note(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeBounds_lower(bounds),
+        FfiConverterString.lower(text),uniffiCallStatus
     )
 })
 }
@@ -1039,10 +1126,12 @@ open func addNote(bounds: Bounds, text: String)throws  -> String {
     /**
      * Add a rectangle as the topmost shape; returns its `data-id`.
      */
-open func addRect(rect: Rect)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_rect(self.uniffiClonePointer(),
-        FfiConverterTypeRect.lower(rect),$0
+open func addRect(rect: Rect)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_rect(
+            self.uniffiCloneHandle(),
+        FfiConverterTypeRect_lower(rect),uniffiCallStatus
     )
 })
 }
@@ -1050,12 +1139,14 @@ open func addRect(rect: Rect)throws  -> String {
     /**
      * Add a label anchored at `(x, y)`; returns its `data-id`.
      */
-open func addText(x: Double, y: Double, text: String)throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_add_text(self.uniffiClonePointer(),
+open func addText(x: Double, y: Double, text: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_add_text(
+            self.uniffiCloneHandle(),
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),
-        FfiConverterString.lower(text),$0
+        FfiConverterString.lower(text),uniffiCallStatus
     )
 })
 }
@@ -1065,12 +1156,14 @@ open func addText(x: Double, y: Double, text: String)throws  -> String {
      * `<line>` becomes a `<path>` — and re-settle its bound ends. One
      * undo step.
      */
-open func bend(id: String, x: Double, y: Double)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_bend(self.uniffiClonePointer(),
+open func bend(id: String, x: Double, y: Double)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_bend(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
         FfiConverterDouble.lower(x),
-        FfiConverterDouble.lower(y),$0
+        FfiConverterDouble.lower(y),uniffiCallStatus
     )
 })
 }
@@ -1079,11 +1172,13 @@ open func bend(id: String, x: Double, y: Double)throws  -> Bool {
      * Bind an end of a connector to a shape, the end put on its edge; or,
      * with no target, unbind it. One undo step.
      */
-open func bind(id: String, end: End, target: String?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_bind(self.uniffiClonePointer(),
+open func bind(id: String, end: End, target: String?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_bind(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterTypeEnd.lower(end),
-        FfiConverterOptionString.lower(target),$0
+        FfiConverterTypeEnd_lower(end),
+        FfiConverterOptionString.lower(target),uniffiCallStatus
     )
 }
 }
@@ -1093,10 +1188,12 @@ open func bind(id: String, end: End, target: String?)throws  {try rustCallWithEr
      * chain; a `<g>`'s is its members'. `None` for an empty group or a
      * shape missing what its kind needs.
      */
-open func bounds(id: String) -> Bounds? {
+open func bounds(id: String) -> Bounds?  {
     return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_bounds(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_bounds(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1104,9 +1201,11 @@ open func bounds(id: String) -> Bounds? {
     /**
      * Hold the drawing to the profile. Empty means it conforms.
      */
-open func check() -> [Finding] {
+open func check() -> [Finding]  {
     return try!  FfiConverterSequenceTypeFinding.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_check(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_check(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1115,10 +1214,12 @@ open func check() -> [Finding] {
      * A shape's hue — a group's, what its members agree on — or `None`
      * for the drawing's ink.
      */
-open func color(id: String) -> Hue? {
+open func color(id: String) -> Hue?  {
     return try!  FfiConverterOptionTypeHue.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_color(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_color(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1128,10 +1229,12 @@ open func color(id: String) -> Hue? {
      * or bent segment — in the root's user units; `None` for what is not
      * one.
      */
-open func connector(id: String) -> Connector? {
+open func connector(id: String) -> Connector?  {
     return try!  FfiConverterOptionTypeConnector.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_connector(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_connector(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1140,10 +1243,12 @@ open func connector(id: String) -> Connector? {
      * A box's corner radius — a group's, what its boxes agree on — or
      * `None` for square corners.
      */
-open func corner(id: String) -> Double? {
+open func corner(id: String) -> Double?  {
     return try!  FfiConverterOptionDouble.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_corner(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_corner(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1153,9 +1258,11 @@ open func corner(id: String) -> Double? {
      * `@media (prefers-color-scheme: dark)` blocks — for a canvas in dark
      * mode to append to what resvg parses. Empty when it has none.
      */
-open func darkRules() -> String {
+open func darkRules() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1164,10 +1271,12 @@ open func darkRules() -> String {
      * How a shape's stroke is broken — a group's, what its stroked
      * members agree on — or `None` for solid.
      */
-open func dash(id: String) -> Dash? {
+open func dash(id: String) -> Dash?  {
     return try!  FfiConverterOptionTypeDash.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_dash(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_dash(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1175,9 +1284,11 @@ open func dash(id: String) -> Dash? {
     /**
      * Delete the shape with this `data-id`.
      */
-open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_delete(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+open func delete(id: String)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_delete(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 }
 }
@@ -1185,9 +1296,11 @@ open func delete(id: String)throws  {try rustCallWithError(FfiConverterTypeDrawi
     /**
      * Delete several shapes as one undo step.
      */
-open func deleteAll(ids: [String])throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_delete_all(self.uniffiClonePointer(),
-        FfiConverterSequenceString.lower(ids),$0
+open func deleteAll(ids: [String])throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_delete_all(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(ids),uniffiCallStatus
     )
 }
 }
@@ -1197,14 +1310,16 @@ open func deleteAll(ids: [String])throws  {try rustCallWithError(FfiConverterTyp
      * topmost shape within `tolerance` — any but the arrow — or unbound.
      * Returns what it was bound to. One undo step.
      */
-open func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double)throws  -> String? {
-    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(self.uniffiClonePointer(),
+open func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double)throws  -> String?  {
+    return try  FfiConverterOptionString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterTypeEnd.lower(end),
+        FfiConverterTypeEnd_lower(end),
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),
-        FfiConverterDouble.lower(tolerance),$0
+        FfiConverterDouble.lower(tolerance),uniffiCallStatus
     )
 })
 }
@@ -1213,11 +1328,13 @@ open func dropEnd(id: String, end: End, x: Double, y: Double, tolerance: Double)
      * Where an end of a connector is, in the root's user units; `None`
      * for what is not one.
      */
-open func endPoint(id: String, end: End) -> Point? {
+open func endPoint(id: String, end: End) -> Point?  {
     return try!  FfiConverterOptionTypePoint.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_end_point(self.uniffiClonePointer(),
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_end_point(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterTypeEnd.lower(end),$0
+        FfiConverterTypeEnd_lower(end),uniffiCallStatus
     )
 })
 }
@@ -1226,9 +1343,11 @@ open func endPoint(id: String, end: End) -> Point? {
      * The box around every shape, in the root's user units — what the
      * page is fitted to. `None` for an empty drawing.
      */
-open func extent() -> Bounds? {
+open func extent() -> Bounds?  {
     return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_extent(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_extent(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1237,10 +1356,12 @@ open func extent() -> Bounds? {
      * A shape's background hue — a group's, what its closed members
      * agree on — or `None` for none.
      */
-open func fill(id: String) -> Hue? {
+open func fill(id: String) -> Hue?  {
     return try!  FfiConverterOptionTypeHue.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_fill(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_fill(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1250,10 +1371,12 @@ open func fill(id: String) -> Hue? {
      * `Helvetica` for a stylesheet's `sans-serif`; with `None`, a new
      * label's. `None` when the label lays out to nothing.
      */
-open func font(id: String?) -> Font? {
+open func font(id: String?) -> Font?  {
     return try!  FfiConverterOptionTypeFont.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_font(self.uniffiClonePointer(),
-        FfiConverterOptionString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_font(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1262,10 +1385,12 @@ open func font(id: String?) -> Font? {
      * The size a label lays out at, in user units — its `font-size`, or
      * what a stylesheet gave it; with `None`, a new label's.
      */
-open func fontSize(id: String?) -> Double {
+open func fontSize(id: String?) -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_font_size(self.uniffiClonePointer(),
-        FfiConverterOptionString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_font_size(
+            self.uniffiCloneHandle(),
+        FfiConverterOptionString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1274,10 +1399,12 @@ open func fontSize(id: String?) -> Double {
      * Wrap sibling shapes in a new `<g>`; returns its `data-id`. One undo
      * step.
      */
-open func group(ids: [String])throws  -> String {
-    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_group(self.uniffiClonePointer(),
-        FfiConverterSequenceString.lower(ids),$0
+open func group(ids: [String])throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_group(
+            self.uniffiCloneHandle(),
+        FfiConverterSequenceString.lower(ids),uniffiCallStatus
     )
 })
 }
@@ -1286,10 +1413,12 @@ open func group(ids: [String])throws  -> String {
      * Which ends of a shape have a head, or `None` for a shape that is
      * not an arrow.
      */
-open func heads(id: String) -> Heads? {
+open func heads(id: String) -> Heads?  {
     return try!  FfiConverterOptionTypeHeads.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_heads(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_heads(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1298,12 +1427,14 @@ open func heads(id: String) -> Heads? {
      * The topmost shape within `tolerance` of the point, in paint order. A
      * member of a group is returned itself; `outermost` names the group.
      */
-open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
+open func hit(x: Double, y: Double, tolerance: Double) -> Shape?  {
     return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_hit(self.uniffiClonePointer(),
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_hit(
+            self.uniffiCloneHandle(),
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),
-        FfiConverterDouble.lower(tolerance),$0
+        FfiConverterDouble.lower(tolerance),uniffiCallStatus
     )
 })
 }
@@ -1311,10 +1442,12 @@ open func hit(x: Double, y: Double, tolerance: Double) -> Shape? {
     /**
      * The shapes directly inside a `<g>`, in paint order.
      */
-open func members(id: String) -> [Shape] {
+open func members(id: String) -> [Shape]  {
     return try!  FfiConverterSequenceTypeShape.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_members(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_members(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1322,11 +1455,13 @@ open func members(id: String) -> [Shape] {
     /**
      * Move several shapes by `(dx, dy)` as one undo step.
      */
-open func moveAll(ids: [String], dx: Double, dy: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_move_all(self.uniffiClonePointer(),
+open func moveAll(ids: [String], dx: Double, dy: Double)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_move_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
         FfiConverterDouble.lower(dx),
-        FfiConverterDouble.lower(dy),$0
+        FfiConverterDouble.lower(dy),uniffiCallStatus
     )
 }
 }
@@ -1334,11 +1469,13 @@ open func moveAll(ids: [String], dx: Double, dy: Double)throws  {try rustCallWit
     /**
      * Move a shape by `(dx, dy)`.
      */
-open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_move_by(self.uniffiClonePointer(),
+open func moveBy(id: String, dx: Double, dy: Double)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_move_by(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
         FfiConverterDouble.lower(dx),
-        FfiConverterDouble.lower(dy),$0
+        FfiConverterDouble.lower(dy),uniffiCallStatus
     )
 }
 }
@@ -1346,10 +1483,12 @@ open func moveBy(id: String, dx: Double, dy: Double)throws  {try rustCallWithErr
     /**
      * A note's box and label, when `id` is a note.
      */
-open func note(id: String) -> Note? {
+open func note(id: String) -> Note?  {
     return try!  FfiConverterOptionTypeNote.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_note(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_note(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1357,10 +1496,12 @@ open func note(id: String) -> Note? {
     /**
      * The outermost group a shape is in, or the shape itself.
      */
-open func outermost(id: String) -> Shape? {
+open func outermost(id: String) -> Shape?  {
     return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_outermost(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_outermost(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1372,9 +1513,11 @@ open func outermost(id: String) -> Shape? {
      * drawing keeps the page it has. `None` when there is no `viewBox`,
      * or it is not four numbers.
      */
-open func page() -> Bounds? {
+open func page() -> Bounds?  {
     return try!  FfiConverterOptionTypeBounds.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_page(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_page(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1382,9 +1525,11 @@ open func page() -> Bounds? {
     /**
      * The words the next shape is added with.
      */
-open func pen() -> Pen {
-    return try!  FfiConverterTypePen.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_pen(self.uniffiClonePointer(),$0
+open func pen() -> Pen  {
+    return try!  FfiConverterTypePen_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_pen(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1392,9 +1537,11 @@ open func pen() -> Pen {
     /**
      * Redo the last undone gesture; `false` when there was nothing to redo.
      */
-open func redo()throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_redo(self.uniffiClonePointer(),$0
+open func redo()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_redo(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1403,11 +1550,13 @@ open func redo()throws  -> Bool {
      * Change a shape's place in paint order; `false` when it was already
      * there.
      */
-open func reorder(id: String, order: Order)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_reorder(self.uniffiClonePointer(),
+open func reorder(id: String, order: Order)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_reorder(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterTypeOrder.lower(order),$0
+        FfiConverterTypeOrder_lower(order),uniffiCallStatus
     )
 })
 }
@@ -1415,10 +1564,12 @@ open func reorder(id: String, order: Order)throws  -> Bool {
     /**
      * Fit a shape to `to`.
      */
-open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_resize(self.uniffiClonePointer(),
+open func resize(id: String, to: Bounds)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_resize(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterTypeBounds.lower(to),$0
+        FfiConverterTypeBounds_lower(to),uniffiCallStatus
     )
 }
 }
@@ -1428,10 +1579,12 @@ open func resize(id: String, to: Bounds)throws  {try rustCallWithError(FfiConver
      * palette, or with `None` the drawing's ink. One undo step;
      * `Unsupported` for what takes no colour.
      */
-open func setColor(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_color(self.uniffiClonePointer(),
+open func setColor(id: String, hue: Hue?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_color(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionTypeHue.lower(hue),$0
+        FfiConverterOptionTypeHue.lower(hue),uniffiCallStatus
     )
 }
 }
@@ -1440,10 +1593,12 @@ open func setColor(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConve
      * `set_color` over a selection as one undo step, what takes no colour
      * left as it is.
      */
-open func setColorAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(self.uniffiClonePointer(),
+open func setColorAll(ids: [String], hue: Hue?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionTypeHue.lower(hue),$0
+        FfiConverterOptionTypeHue.lower(hue),uniffiCallStatus
     )
 }
 }
@@ -1452,10 +1607,12 @@ open func setColorAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(Ff
      * Round a box's corners to `radius`, or with `None` square them. One
      * undo step; `Unsupported` for what is not a box.
      */
-open func setCorner(id: String, radius: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner(self.uniffiClonePointer(),
+open func setCorner(id: String, radius: Double?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionDouble.lower(radius),$0
+        FfiConverterOptionDouble.lower(radius),uniffiCallStatus
     )
 }
 }
@@ -1464,10 +1621,12 @@ open func setCorner(id: String, radius: Double?)throws  {try rustCallWithError(F
      * `set_corner` over a selection as one undo step, what is not a box
      * left as it is.
      */
-open func setCornerAll(ids: [String], radius: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner_all(self.uniffiClonePointer(),
+open func setCornerAll(ids: [String], radius: Double?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_corner_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionDouble.lower(radius),$0
+        FfiConverterOptionDouble.lower(radius),uniffiCallStatus
     )
 }
 }
@@ -1476,10 +1635,12 @@ open func setCornerAll(ids: [String], radius: Double?)throws  {try rustCallWithE
      * Say how a stroked shape's stroke is broken, or with `None` solid.
      * One undo step; `Unsupported` for what is not stroked.
      */
-open func setDash(id: String, dash: Dash?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(self.uniffiClonePointer(),
+open func setDash(id: String, dash: Dash?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionTypeDash.lower(dash),$0
+        FfiConverterOptionTypeDash.lower(dash),uniffiCallStatus
     )
 }
 }
@@ -1488,10 +1649,12 @@ open func setDash(id: String, dash: Dash?)throws  {try rustCallWithError(FfiConv
      * `set_dash` over a selection as one undo step, what is not stroked
      * left as it is.
      */
-open func setDashAll(ids: [String], dash: Dash?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(self.uniffiClonePointer(),
+open func setDashAll(ids: [String], dash: Dash?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionTypeDash.lower(dash),$0
+        FfiConverterOptionTypeDash.lower(dash),uniffiCallStatus
     )
 }
 }
@@ -1500,10 +1663,12 @@ open func setDashAll(ids: [String], dash: Dash?)throws  {try rustCallWithError(F
      * Give a closed shape a background, or with `None` none. One undo
      * step; `Unsupported` for what is not closed.
      */
-open func setFill(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(self.uniffiClonePointer(),
+open func setFill(id: String, hue: Hue?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionTypeHue.lower(hue),$0
+        FfiConverterOptionTypeHue.lower(hue),uniffiCallStatus
     )
 }
 }
@@ -1512,10 +1677,12 @@ open func setFill(id: String, hue: Hue?)throws  {try rustCallWithError(FfiConver
      * `set_fill` over a selection as one undo step, what is not closed
      * left as it is.
      */
-open func setFillAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(self.uniffiClonePointer(),
+open func setFillAll(ids: [String], hue: Hue?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionTypeHue.lower(hue),$0
+        FfiConverterOptionTypeHue.lower(hue),uniffiCallStatus
     )
 }
 }
@@ -1524,10 +1691,12 @@ open func setFillAll(ids: [String], hue: Hue?)throws  {try rustCallWithError(Ffi
      * Say which ends of a connector have a head, or with `None` none — a
      * plain line. One undo step; `Unsupported` for what is not a connector.
      */
-open func setHeads(id: String, heads: Heads?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(self.uniffiClonePointer(),
+open func setHeads(id: String, heads: Heads?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionTypeHeads.lower(heads),$0
+        FfiConverterOptionTypeHeads.lower(heads),uniffiCallStatus
     )
 }
 }
@@ -1536,10 +1705,12 @@ open func setHeads(id: String, heads: Heads?)throws  {try rustCallWithError(FfiC
      * `set_heads` over a selection as one undo step, what is not a
      * connector left as it is.
      */
-open func setHeadsAll(ids: [String], heads: Heads?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(self.uniffiClonePointer(),
+open func setHeadsAll(ids: [String], heads: Heads?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionTypeHeads.lower(heads),$0
+        FfiConverterOptionTypeHeads.lower(heads),uniffiCallStatus
     )
 }
 }
@@ -1547,9 +1718,11 @@ open func setHeadsAll(ids: [String], heads: Heads?)throws  {try rustCallWithErro
     /**
      * Set the words the next shape is added with; not an edit.
      */
-open func setPen(pen: Pen) {try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_pen(self.uniffiClonePointer(),
-        FfiConverterTypePen.lower(pen),$0
+open func setPen(pen: Pen)  {try! rustCall() {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_pen(
+            self.uniffiCloneHandle(),
+        FfiConverterTypePen_lower(pen),uniffiCallStatus
     )
 }
 }
@@ -1557,10 +1730,12 @@ open func setPen(pen: Pen) {try! rustCall() {
     /**
      * Replace a `<text>`'s characters; plain text, written escaped.
      */
-open func setText(id: String, text: String)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_text(self.uniffiClonePointer(),
+open func setText(id: String, text: String)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_text(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterString.lower(text),$0
+        FfiConverterString.lower(text),uniffiCallStatus
     )
 }
 }
@@ -1570,10 +1745,12 @@ open func setText(id: String, text: String)throws  {try rustCallWithError(FfiCon
      * template's width. One undo step; `Unsupported` for what is not
      * stroked.
      */
-open func setWeight(id: String, weight: Weight?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight(self.uniffiClonePointer(),
+open func setWeight(id: String, weight: Weight?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionTypeWeight.lower(weight),$0
+        FfiConverterOptionTypeWeight.lower(weight),uniffiCallStatus
     )
 }
 }
@@ -1582,10 +1759,12 @@ open func setWeight(id: String, weight: Weight?)throws  {try rustCallWithError(F
      * `set_weight` over a selection as one undo step, what is not stroked
      * left as it is.
      */
-open func setWeightAll(ids: [String], weight: Weight?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight_all(self.uniffiClonePointer(),
+open func setWeightAll(ids: [String], weight: Weight?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_weight_all(
+            self.uniffiCloneHandle(),
         FfiConverterSequenceString.lower(ids),
-        FfiConverterOptionTypeWeight.lower(weight),$0
+        FfiConverterOptionTypeWeight.lower(weight),uniffiCallStatus
     )
 }
 }
@@ -1594,10 +1773,12 @@ open func setWeightAll(ids: [String], weight: Weight?)throws  {try rustCallWithE
      * Wrap a label to `width` user units, its words flowed into `<tspan>`
      * lines; or, with `None`, put them back on one line. One undo step.
      */
-open func setWidth(id: String, width: Double?)throws  {try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_set_width(self.uniffiClonePointer(),
+open func setWidth(id: String, width: Double?)throws   {try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_set_width(
+            self.uniffiCloneHandle(),
         FfiConverterString.lower(id),
-        FfiConverterOptionDouble.lower(width),$0
+        FfiConverterOptionDouble.lower(width),uniffiCallStatus
     )
 }
 }
@@ -1605,9 +1786,11 @@ open func setWidth(id: String, width: Double?)throws  {try rustCallWithError(Ffi
     /**
      * The shapes, in paint order.
      */
-open func shapes() -> [Shape] {
+open func shapes() -> [Shape]  {
     return try!  FfiConverterSequenceTypeShape.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_shapes(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_shapes(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1615,9 +1798,11 @@ open func shapes() -> [Shape] {
     /**
      * The current bytes — what saving writes.
      */
-open func source() -> String {
+open func source() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_source(self.uniffiClonePointer(),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_source(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1626,10 +1811,12 @@ open func source() -> String {
      * Straighten a bent connector: a `<line>` again. One undo step;
      * `false` when it was a `<line>` already, and nothing was written.
      */
-open func straighten(id: String)throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_straighten(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+open func straighten(id: String)throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_straighten(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1638,10 +1825,12 @@ open func straighten(id: String)throws  -> Bool {
      * Whether a colour means anything on a shape: anything but an image,
      * or a group of only images.
      */
-open func takesColor(id: String) -> Bool {
+open func takesColor(id: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1650,10 +1839,12 @@ open func takesColor(id: String) -> Bool {
      * Whether a corner radius means anything on a shape: a box, or a
      * group with one inside.
      */
-open func takesCorner(id: String) -> Bool {
+open func takesCorner(id: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_takes_corner(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_corner(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1662,10 +1853,12 @@ open func takesCorner(id: String) -> Bool {
      * Whether a dash means anything on a shape: a stroked one, or a group
      * with one inside.
      */
-open func takesDash(id: String) -> Bool {
+open func takesDash(id: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1674,10 +1867,12 @@ open func takesDash(id: String) -> Bool {
      * Whether a fill means anything on a shape: a closed one, or a group
      * with one inside.
      */
-open func takesFill(id: String) -> Bool {
+open func takesFill(id: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1685,10 +1880,12 @@ open func takesFill(id: String) -> Bool {
     /**
      * Whether a weight means anything on a shape: as `takes_dash`.
      */
-open func takesWeight(id: String) -> Bool {
+open func takesWeight(id: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_takes_weight(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_takes_weight(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1696,9 +1893,11 @@ open func takesWeight(id: String) -> Bool {
     /**
      * Undo the last gesture; `false` when there was nothing to undo.
      */
-open func undo()throws  -> Bool {
-    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_undo(self.uniffiClonePointer(),$0
+open func undo()throws  -> Bool  {
+    return try  FfiConverterBool.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_undo(
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 })
 }
@@ -1707,10 +1906,12 @@ open func undo()throws  -> Bool {
      * Replace a `<g>` with its members, its transform pushed down onto
      * them; returns their ids. One undo step.
      */
-open func ungroup(id: String)throws  -> [String] {
-    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDrawingError.lift) {
-    uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+open func ungroup(id: String)throws  -> [String]  {
+    return try  FfiConverterSequenceString.lift(try rustCallWithError(FfiConverterTypeDrawingError_lift) {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
@@ -1719,73 +1920,68 @@ open func ungroup(id: String)throws  -> [String] {
      * How heavy a shape's stroke is — a group's, what its stroked members
      * agree on — or `None` for the template's width.
      */
-open func weight(id: String) -> Weight? {
+open func weight(id: String) -> Weight?  {
     return try!  FfiConverterOptionTypeWeight.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_method_drawing_weight(self.uniffiClonePointer(),
-        FfiConverterString.lower(id),$0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_weight(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
     )
 })
 }
     
 
+    
 }
+
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
 public struct FfiConverterTypeDrawing: FfiConverter {
-
-    typealias FfiType = UnsafeMutableRawPointer
+    typealias FfiType = UInt64
     typealias SwiftType = Drawing
 
-    public static func lift(_ pointer: UnsafeMutableRawPointer) throws -> Drawing {
-        return Drawing(unsafeFromRawPointer: pointer)
+    public static func lift(_ handle: UInt64) throws -> Drawing {
+        return Drawing(unsafeFromHandle: handle)
     }
 
-    public static func lower(_ value: Drawing) -> UnsafeMutableRawPointer {
-        return value.uniffiClonePointer()
+    public static func lower(_ value: Drawing) -> UInt64 {
+        return value.uniffiCloneHandle()
     }
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Drawing {
-        let v: UInt64 = try readInt(&buf)
-        // The Rust code won't compile if a pointer won't fit in a UInt64.
-        // We have to go via `UInt` because that's the thing that's the size of a pointer.
-        let ptr = UnsafeMutableRawPointer(bitPattern: UInt(truncatingIfNeeded: v))
-        if (ptr == nil) {
-            throw UniffiInternalError.unexpectedNullPointer
-        }
-        return try lift(ptr!)
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
     }
 
     public static func write(_ value: Drawing, into buf: inout [UInt8]) {
-        // This fiddling is because `Int` is the thing that's the same size as a pointer.
-        // The Rust code won't compile if a pointer won't fit in a `UInt64`.
-        writeInt(&buf, UInt64(bitPattern: Int64(Int(bitPattern: lower(value)))))
+        writeInt(&buf, lower(value))
     }
 }
 
 
-
-
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeDrawing_lift(_ pointer: UnsafeMutableRawPointer) throws -> Drawing {
-    return try FfiConverterTypeDrawing.lift(pointer)
+public func FfiConverterTypeDrawing_lift(_ handle: UInt64) throws -> Drawing {
+    return try FfiConverterTypeDrawing.lift(handle)
 }
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
-public func FfiConverterTypeDrawing_lower(_ value: Drawing) -> UnsafeMutableRawPointer {
+public func FfiConverterTypeDrawing_lower(_ value: Drawing) -> UInt64 {
     return FfiConverterTypeDrawing.lower(value)
 }
+
+
 
 
 /**
  * One attribute of a shape; a bare attribute has no value.
  */
-public struct Attribute {
+public struct Attribute: Equatable, Hashable {
     public var name: String
     public var value: String?
 
@@ -1795,27 +1991,15 @@ public struct Attribute {
         self.name = name
         self.value = value
     }
+
+    
+
+    
 }
 
-
-
-extension Attribute: Equatable, Hashable {
-    public static func ==(lhs: Attribute, rhs: Attribute) -> Bool {
-        if lhs.name != rhs.name {
-            return false
-        }
-        if lhs.value != rhs.value {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
-        hasher.combine(value)
-    }
-}
-
+#if compiler(>=6)
+extension Attribute: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1854,7 +2038,7 @@ public func FfiConverterTypeAttribute_lower(_ value: Attribute) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::Bounds`.
  */
-public struct Bounds {
+public struct Bounds: Equatable, Hashable {
     public var x: Double
     public var y: Double
     public var width: Double
@@ -1868,35 +2052,15 @@ public struct Bounds {
         self.width = width
         self.height = height
     }
+
+    
+
+    
 }
 
-
-
-extension Bounds: Equatable, Hashable {
-    public static func ==(lhs: Bounds, rhs: Bounds) -> Bool {
-        if lhs.x != rhs.x {
-            return false
-        }
-        if lhs.y != rhs.y {
-            return false
-        }
-        if lhs.width != rhs.width {
-            return false
-        }
-        if lhs.height != rhs.height {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(x)
-        hasher.combine(y)
-        hasher.combine(width)
-        hasher.combine(height)
-    }
-}
-
+#if compiler(>=6)
+extension Bounds: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -1941,7 +2105,7 @@ public func FfiConverterTypeBounds_lower(_ value: Bounds) -> RustBuffer {
  * control point when bent. `midpoint` is where the bend handle sits —
  * on the stroke, half-way along.
  */
-public struct Connector {
+public struct Connector: Equatable, Hashable {
     public var from: Point
     public var to: Point
     public var control: Point?
@@ -1955,35 +2119,15 @@ public struct Connector {
         self.control = control
         self.midpoint = midpoint
     }
+
+    
+
+    
 }
 
-
-
-extension Connector: Equatable, Hashable {
-    public static func ==(lhs: Connector, rhs: Connector) -> Bool {
-        if lhs.from != rhs.from {
-            return false
-        }
-        if lhs.to != rhs.to {
-            return false
-        }
-        if lhs.control != rhs.control {
-            return false
-        }
-        if lhs.midpoint != rhs.midpoint {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(from)
-        hasher.combine(to)
-        hasher.combine(control)
-        hasher.combine(midpoint)
-    }
-}
-
+#if compiler(>=6)
+extension Connector: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2026,7 +2170,7 @@ public func FfiConverterTypeConnector_lower(_ value: Connector) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::Finding`, with the rule as its one-line text.
  */
-public struct Finding {
+public struct Finding: Equatable, Hashable {
     public var rule: String
     public var shape: String?
     public var message: String
@@ -2038,31 +2182,15 @@ public struct Finding {
         self.shape = shape
         self.message = message
     }
+
+    
+
+    
 }
 
-
-
-extension Finding: Equatable, Hashable {
-    public static func ==(lhs: Finding, rhs: Finding) -> Bool {
-        if lhs.rule != rhs.rule {
-            return false
-        }
-        if lhs.shape != rhs.shape {
-            return false
-        }
-        if lhs.message != rhs.message {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(rule)
-        hasher.combine(shape)
-        hasher.combine(message)
-    }
-}
-
+#if compiler(>=6)
+extension Finding: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2103,7 +2231,7 @@ public func FfiConverterTypeFinding_lower(_ value: Finding) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::measure::Font`: the face a label lays out in.
  */
-public struct Font {
+public struct Font: Equatable, Hashable {
     public var size: Double
     public var family: String
     public var postScriptName: String
@@ -2115,31 +2243,15 @@ public struct Font {
         self.family = family
         self.postScriptName = postScriptName
     }
+
+    
+
+    
 }
 
-
-
-extension Font: Equatable, Hashable {
-    public static func ==(lhs: Font, rhs: Font) -> Bool {
-        if lhs.size != rhs.size {
-            return false
-        }
-        if lhs.family != rhs.family {
-            return false
-        }
-        if lhs.postScriptName != rhs.postScriptName {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(size)
-        hasher.combine(family)
-        hasher.combine(postScriptName)
-    }
-}
-
+#if compiler(>=6)
+extension Font: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2180,7 +2292,7 @@ public func FfiConverterTypeFont_lower(_ value: Font) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::Note`: a note's box and label, by `data-id`.
  */
-public struct Note {
+public struct Note: Equatable, Hashable {
     public var frame: String
     public var label: String
 
@@ -2190,27 +2302,15 @@ public struct Note {
         self.frame = frame
         self.label = label
     }
+
+    
+
+    
 }
 
-
-
-extension Note: Equatable, Hashable {
-    public static func ==(lhs: Note, rhs: Note) -> Bool {
-        if lhs.frame != rhs.frame {
-            return false
-        }
-        if lhs.label != rhs.label {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(frame)
-        hasher.combine(label)
-    }
-}
-
+#if compiler(>=6)
+extension Note: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2249,7 +2349,7 @@ public func FfiConverterTypeNote_lower(_ value: Note) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::Pen`: the words the next shape is added with.
  */
-public struct Pen {
+public struct Pen: Equatable, Hashable {
     public var dash: Dash?
     public var hue: Hue?
     public var fill: Hue?
@@ -2271,39 +2371,15 @@ public struct Pen {
         self.weight = weight
         self.corner = corner
     }
+
+    
+
+    
 }
 
-
-
-extension Pen: Equatable, Hashable {
-    public static func ==(lhs: Pen, rhs: Pen) -> Bool {
-        if lhs.dash != rhs.dash {
-            return false
-        }
-        if lhs.hue != rhs.hue {
-            return false
-        }
-        if lhs.fill != rhs.fill {
-            return false
-        }
-        if lhs.weight != rhs.weight {
-            return false
-        }
-        if lhs.corner != rhs.corner {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(dash)
-        hasher.combine(hue)
-        hasher.combine(fill)
-        hasher.combine(weight)
-        hasher.combine(corner)
-    }
-}
-
+#if compiler(>=6)
+extension Pen: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2348,7 +2424,7 @@ public func FfiConverterTypePen_lower(_ value: Pen) -> RustBuffer {
 /**
  * A point in user units.
  */
-public struct Point {
+public struct Point: Equatable, Hashable {
     public var x: Double
     public var y: Double
 
@@ -2358,27 +2434,15 @@ public struct Point {
         self.x = x
         self.y = y
     }
+
+    
+
+    
 }
 
-
-
-extension Point: Equatable, Hashable {
-    public static func ==(lhs: Point, rhs: Point) -> Bool {
-        if lhs.x != rhs.x {
-            return false
-        }
-        if lhs.y != rhs.y {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(x)
-        hasher.combine(y)
-    }
-}
-
+#if compiler(>=6)
+extension Point: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2417,7 +2481,7 @@ public func FfiConverterTypePoint_lower(_ value: Point) -> RustBuffer {
 /**
  * Mirrors `thorn_svg_core::Rect`.
  */
-public struct Rect {
+public struct Rect: Equatable, Hashable {
     public var x: Double
     public var y: Double
     public var width: Double
@@ -2431,35 +2495,15 @@ public struct Rect {
         self.width = width
         self.height = height
     }
+
+    
+
+    
 }
 
-
-
-extension Rect: Equatable, Hashable {
-    public static func ==(lhs: Rect, rhs: Rect) -> Bool {
-        if lhs.x != rhs.x {
-            return false
-        }
-        if lhs.y != rhs.y {
-            return false
-        }
-        if lhs.width != rhs.width {
-            return false
-        }
-        if lhs.height != rhs.height {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(x)
-        hasher.combine(y)
-        hasher.combine(width)
-        hasher.combine(height)
-    }
-}
-
+#if compiler(>=6)
+extension Rect: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2503,7 +2547,7 @@ public func FfiConverterTypeRect_lower(_ value: Rect) -> RustBuffer {
  * Mirrors `thorn_svg_core::Shape`, minus the node id, which is not stable
  * across edits and has no meaning to a host.
  */
-public struct Shape {
+public struct Shape: Equatable, Hashable {
     public var kind: ShapeKind
     public var id: String?
     public var group: String?
@@ -2527,43 +2571,15 @@ public struct Shape {
         self.attrs = attrs
         self.text = text
     }
+
+    
+
+    
 }
 
-
-
-extension Shape: Equatable, Hashable {
-    public static func ==(lhs: Shape, rhs: Shape) -> Bool {
-        if lhs.kind != rhs.kind {
-            return false
-        }
-        if lhs.id != rhs.id {
-            return false
-        }
-        if lhs.group != rhs.group {
-            return false
-        }
-        if lhs.depth != rhs.depth {
-            return false
-        }
-        if lhs.attrs != rhs.attrs {
-            return false
-        }
-        if lhs.text != rhs.text {
-            return false
-        }
-        return true
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(kind)
-        hasher.combine(id)
-        hasher.combine(group)
-        hasher.combine(depth)
-        hasher.combine(attrs)
-        hasher.combine(text)
-    }
-}
-
+#if compiler(>=6)
+extension Shape: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2606,18 +2622,25 @@ public func FfiConverterTypeShape_lower(_ value: Shape) -> RustBuffer {
     return FfiConverterTypeShape.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 /**
  * Mirrors `thorn_svg_core::Dash`: how a stroke is broken.
  */
 
-public enum Dash {
+public enum Dash: Equatable, Hashable {
     
     case dashed
     case dotted
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Dash: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2669,15 +2692,11 @@ public func FfiConverterTypeDash_lower(_ value: Dash) -> RustBuffer {
 
 
 
-extension Dash: Equatable, Hashable {}
-
-
-
-
 /**
  * Why an open or a gesture refused; mirrors `thorn_svg_core::Error`.
  */
-public enum DrawingError {
+public 
+enum DrawingError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -2691,8 +2710,21 @@ public enum DrawingError {
     case NotSiblings
     case Edit(message: String
     )
+
+    
+
+    
+
+    
+    public var errorDescription: String? {
+        String(reflecting: self)
+    }
+    
 }
 
+#if compiler(>=6)
+extension DrawingError: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2767,21 +2799,26 @@ public struct FfiConverterTypeDrawingError: FfiConverterRustBuffer {
 }
 
 
-extension DrawingError: Equatable, Hashable {}
-
-extension DrawingError: Foundation.LocalizedError {
-    public var errorDescription: String? {
-        String(reflecting: self)
-    }
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDrawingError_lift(_ buf: RustBuffer) throws -> DrawingError {
+    return try FfiConverterTypeDrawingError.lift(buf)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeDrawingError_lower(_ value: DrawingError) -> RustBuffer {
+    return FfiConverterTypeDrawingError.lower(value)
+}
+
+
 /**
  * Mirrors `thorn_svg_core::End`: an end of a `<line>` arrow.
  */
 
-public enum End {
+public enum End: Equatable, Hashable {
     
     /**
      * `(x1, y1)`, bound by `data-from`.
@@ -2791,8 +2828,16 @@ public enum End {
      * `(x2, y2)`, bound by `data-to`.
      */
     case to
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension End: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2844,17 +2889,11 @@ public func FfiConverterTypeEnd_lower(_ value: End) -> RustBuffer {
 
 
 
-extension End: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Handle`.
  */
 
-public enum Handle {
+public enum Handle: Equatable, Hashable {
     
     case topLeft
     case top
@@ -2864,8 +2903,16 @@ public enum Handle {
     case bottom
     case bottomLeft
     case left
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Handle: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -2953,23 +3000,25 @@ public func FfiConverterTypeHandle_lower(_ value: Handle) -> RustBuffer {
 
 
 
-extension Handle: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Heads`: which ends of an arrow have a head.
  */
 
-public enum Heads {
+public enum Heads: Equatable, Hashable {
     
     case end
     case start
     case both
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Heads: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3027,17 +3076,11 @@ public func FfiConverterTypeHeads_lower(_ value: Heads) -> RustBuffer {
 
 
 
-extension Heads: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Hue`: a colour of the palette, by name.
  */
 
-public enum Hue {
+public enum Hue: Equatable, Hashable {
     
     case red
     case orange
@@ -3047,8 +3090,16 @@ public enum Hue {
     case violet
     case pink
     case grey
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Hue: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3136,22 +3187,24 @@ public func FfiConverterTypeHue_lower(_ value: Hue) -> RustBuffer {
 
 
 
-extension Hue: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Nib`: the rule an ink stroke's outline is
  * drawn by.
  */
 
-public enum Nib {
+public enum Nib: Equatable, Hashable {
     
     case monoline
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Nib: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3197,24 +3250,26 @@ public func FfiConverterTypeNib_lower(_ value: Nib) -> RustBuffer {
 
 
 
-extension Nib: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Order`.
  */
 
-public enum Order {
+public enum Order: Equatable, Hashable {
     
     case forward
     case backward
     case toFront
     case toBack
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Order: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3278,17 +3333,11 @@ public func FfiConverterTypeOrder_lower(_ value: Order) -> RustBuffer {
 
 
 
-extension Order: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::ShapeKind`.
  */
 
-public enum ShapeKind {
+public enum ShapeKind: Equatable, Hashable {
     
     case rect
     case ellipse
@@ -3300,8 +3349,16 @@ public enum ShapeKind {
     case text
     case group
     case image
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension ShapeKind: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3401,22 +3458,24 @@ public func FfiConverterTypeShapeKind_lower(_ value: ShapeKind) -> RustBuffer {
 
 
 
-extension ShapeKind: Equatable, Hashable {}
-
-
-
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
 /**
  * Mirrors `thorn_svg_core::Weight`: how heavy a stroke is.
  */
 
-public enum Weight {
+public enum Weight: Equatable, Hashable {
     
     case thin
     case bold
+
+
+
+
+
 }
 
+#if compiler(>=6)
+extension Weight: Sendable {}
+#endif
 
 #if swift(>=5.8)
 @_documentation(visibility: private)
@@ -3465,11 +3524,6 @@ public func FfiConverterTypeWeight_lift(_ buf: RustBuffer) throws -> Weight {
 public func FfiConverterTypeWeight_lower(_ value: Weight) -> RustBuffer {
     return FfiConverterTypeWeight.lower(value)
 }
-
-
-
-extension Weight: Equatable, Hashable {}
-
 
 
 #if swift(>=5.8)
@@ -3961,37 +4015,40 @@ fileprivate struct FfiConverterSequenceTypeHue: FfiConverterRustBuffer {
 /**
  * The handle of `bounds` within `tolerance` of the point, if any.
  */
-public func handleAt(bounds: Bounds, x: Double, y: Double, tolerance: Double) -> Handle? {
+public func handleAt(bounds: Bounds, x: Double, y: Double, tolerance: Double) -> Handle?  {
     return try!  FfiConverterOptionTypeHandle.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_func_handle_at(
-        FfiConverterTypeBounds.lower(bounds),
+        FfiConverterTypeBounds_lower(bounds),
         FfiConverterDouble.lower(x),
         FfiConverterDouble.lower(y),
-        FfiConverterDouble.lower(tolerance),$0
+        FfiConverterDouble.lower(tolerance),uniffiCallStatus
     )
 })
 }
 /**
  * `bounds` after `handle` is dragged by `(dx, dy)`.
  */
-public func handleDrag(handle: Handle, bounds: Bounds, dx: Double, dy: Double) -> Bounds {
-    return try!  FfiConverterTypeBounds.lift(try! rustCall() {
+public func handleDrag(handle: Handle, bounds: Bounds, dx: Double, dy: Double) -> Bounds  {
+    return try!  FfiConverterTypeBounds_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_func_handle_drag(
-        FfiConverterTypeHandle.lower(handle),
-        FfiConverterTypeBounds.lower(bounds),
+        FfiConverterTypeHandle_lower(handle),
+        FfiConverterTypeBounds_lower(bounds),
         FfiConverterDouble.lower(dx),
-        FfiConverterDouble.lower(dy),$0
+        FfiConverterDouble.lower(dy),uniffiCallStatus
     )
 })
 }
 /**
  * Where a handle sits on a box.
  */
-public func handlePosition(handle: Handle, bounds: Bounds) -> Point {
-    return try!  FfiConverterTypePoint.lift(try! rustCall() {
+public func handlePosition(handle: Handle, bounds: Bounds) -> Point  {
+    return try!  FfiConverterTypePoint_lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_func_handle_position(
-        FfiConverterTypeHandle.lower(handle),
-        FfiConverterTypeBounds.lower(bounds),$0
+        FfiConverterTypeHandle_lower(handle),
+        FfiConverterTypeBounds_lower(bounds),uniffiCallStatus
     )
 })
 }
@@ -4000,21 +4057,23 @@ public func handlePosition(handle: Handle, bounds: Bounds) -> Point {
  * the tint a `data-fill` is — on a light page and a dark one, as CSS
  * hex; what a palette swatch shows.
  */
-public func hueHex(hue: Hue, dark: Bool, tint: Bool) -> String {
+public func hueHex(hue: Hue, dark: Bool, tint: Bool) -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_func_hue_hex(
-        FfiConverterTypeHue.lower(hue),
+        FfiConverterTypeHue_lower(hue),
         FfiConverterBool.lower(dark),
-        FfiConverterBool.lower(tint),$0
+        FfiConverterBool.lower(tint),uniffiCallStatus
     )
 })
 }
 /**
  * Every hue, in the order a palette shows them.
  */
-public func hues() -> [Hue] {
+public func hues() -> [Hue]  {
     return try!  FfiConverterSequenceTypeHue.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_func_hues($0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_func_hues(uniffiCallStatus
     )
 })
 }
@@ -4023,10 +4082,11 @@ public func hues() -> [Hue] {
  * carries `data-diaryx-drawing`. A host's sniff for which surface opens an
  * `.svg`; not a conformance check, which is [`Drawing::check`].
  */
-public func isDrawing(source: String) -> Bool {
+public func isDrawing(source: String) -> Bool  {
     return try!  FfiConverterBool.lift(try! rustCall() {
+        uniffiCallStatus in
     uniffi_thorn_svg_ffi_fn_func_is_drawing(
-        FfiConverterString.lower(source),$0
+        FfiConverterString.lower(source),uniffiCallStatus
     )
 })
 }
@@ -4034,18 +4094,20 @@ public func isDrawing(source: String) -> Bool {
  * The margin the page keeps around the shapes, in user units:
  * `thorn_svg_core::PAGE_MARGIN`.
  */
-public func pageMargin() -> Double {
+public func pageMargin() -> Double  {
     return try!  FfiConverterDouble.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_func_page_margin($0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_func_page_margin(uniffiCallStatus
     )
 })
 }
 /**
  * The bytes a new drawing is created with: `thorn_svg_core::profile::TEMPLATE`.
  */
-public func template() -> String {
+public func template() -> String  {
     return try!  FfiConverterString.lift(try! rustCall() {
-    uniffi_thorn_svg_ffi_fn_func_template($0
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_func_template(uniffiCallStatus
     )
 })
 }
@@ -4057,241 +4119,243 @@ private enum InitializationResult {
 }
 // Use a global variable to perform the versioning checks. Swift ensures that
 // the code inside is only computed once.
-private var initializationResult: InitializationResult = {
+private let initializationResult: InitializationResult = {
     // Get the bindings contract version from our ComponentInterface
-    let bindings_contract_version = 26
+    let bindings_contract_version = 30
     // Get the scaffolding contract version by calling the into the dylib
     let scaffolding_contract_version = ffi_thorn_svg_ffi_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_handle_at() != 7069) {
+    if (uniffi_thorn_svg_ffi_checksum_func_handle_at() != 11956) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_handle_drag() != 52834) {
+    if (uniffi_thorn_svg_ffi_checksum_func_handle_drag() != 31878) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_handle_position() != 51884) {
+    if (uniffi_thorn_svg_ffi_checksum_func_handle_position() != 41562) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_hue_hex() != 33511) {
+    if (uniffi_thorn_svg_ffi_checksum_func_hue_hex() != 16876) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_hues() != 21350) {
+    if (uniffi_thorn_svg_ffi_checksum_func_hues() != 6147) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_is_drawing() != 27928) {
+    if (uniffi_thorn_svg_ffi_checksum_func_is_drawing() != 8229) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_page_margin() != 58968) {
+    if (uniffi_thorn_svg_ffi_checksum_func_page_margin() != 20550) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_func_template() != 15141) {
+    if (uniffi_thorn_svg_ffi_checksum_func_template() != 47478) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow() != 7662) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_arrow() != 30862) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_diamond() != 5103) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_diamond() != 4733) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse() != 11165) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ellipse() != 54391) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ink() != 35713) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_ink() != 57819) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_line() != 10609) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_line() != 64679) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_note() != 2159) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_note() != 27957) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_rect() != 12832) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_rect() != 12590) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 58303) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_add_text() != 23926) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bend() != 17026) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bend() != 19522) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 20832) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bind() != 5139) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 7686) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_bounds() != 1939) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_check() != 12937) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_check() != 21002) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_color() != 24385) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_color() != 4018) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 14022) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_connector() != 35542) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_corner() != 56824) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_corner() != 21674) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dark_rules() != 56993) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dark_rules() != 5246) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dash() != 17019) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_dash() != 26583) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 53757) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete() != 64290) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete_all() != 13572) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_delete_all() != 52803) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end() != 45703) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_drop_end() != 44003) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 13342) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_end_point() != 39511) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_extent() != 23471) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_extent() != 56476) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_fill() != 15855) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_fill() != 36861) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 674) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font() != 34710) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font_size() != 35813) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_font_size() != 48680) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 8832) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_group() != 155) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_heads() != 59389) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_heads() != 32681) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 61470) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_hit() != 54352) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_members() != 17237) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_members() != 2125) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_all() != 2740) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_all() != 36918) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_by() != 4199) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_move_by() != 15214) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_note() != 6387) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_note() != 9550) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_outermost() != 20228) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_outermost() != 58581) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_page() != 28014) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_page() != 2421) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_pen() != 55165) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_pen() != 42959) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_redo() != 64887) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_redo() != 32969) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_reorder() != 50346) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_reorder() != 42563) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 64941) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_resize() != 14173) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color() != 27) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color() != 39866) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color_all() != 30276) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_color_all() != 60141) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner() != 459) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner() != 48226) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner_all() != 40198) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_corner_all() != 24662) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash() != 19368) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash() != 24806) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash_all() != 7871) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_dash_all() != 30186) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill() != 50466) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill() != 26312) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill_all() != 4086) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_fill_all() != 8445) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads() != 28688) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads() != 83) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads_all() != 61916) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_heads_all() != 40212) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_pen() != 29617) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_pen() != 47406) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 35539) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_text() != 24843) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight() != 25555) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight() != 27644) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight_all() != 8124) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_weight_all() != 37731) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_width() != 1447) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_width() != 49984) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_shapes() != 26790) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_shapes() != 31989) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_source() != 3308) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_source() != 14313) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 9983) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_straighten() != 16076) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_color() != 15959) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_color() != 26192) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_corner() != 62916) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_corner() != 63007) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_dash() != 3408) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_dash() != 3110) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_fill() != 19718) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_fill() != 59461) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_weight() != 29894) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_takes_weight() != 999) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 59527) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_undo() != 702) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 51363) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_ungroup() != 55350) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_method_drawing_weight() != 64778) {
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_weight() != 40701) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_fresh() != 15554) {
+    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_fresh() != 2528) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 20304) {
+    if (uniffi_thorn_svg_ffi_checksum_constructor_drawing_open() != 15017) {
         return InitializationResult.apiChecksumMismatch
     }
 
     return InitializationResult.ok
 }()
 
-private func uniffiEnsureInitialized() {
+// Make the ensure init function public so that other modules which have external type references to
+// our types can call it.
+public func uniffiEnsureThornSvgFfiInitialized() {
     switch initializationResult {
     case .ok:
         break

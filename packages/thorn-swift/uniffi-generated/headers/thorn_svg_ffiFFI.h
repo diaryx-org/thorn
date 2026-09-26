@@ -50,9 +50,9 @@ typedef void (*UniffiRustFutureContinuationCallback)(uint64_t, int8_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_FREE
-typedef void (*UniffiForeignFutureFree)(uint64_t
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK
+typedef void (*UniffiForeignFutureDroppedCallback)(uint64_t
     );
 
 #endif
@@ -62,534 +62,526 @@ typedef void (*UniffiCallbackInterfaceFree)(uint64_t
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE
-typedef struct UniffiForeignFuture {
-    uint64_t handle;
-    UniffiForeignFutureFree _Nonnull free;
-} UniffiForeignFuture;
+#ifndef UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+#define UNIFFI_FFIDEF_CALLBACK_INTERFACE_CLONE
+typedef uint64_t (*UniffiCallbackInterfaceClone)(uint64_t
+    );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U8
-typedef struct UniffiForeignFutureStructU8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_DROPPED_CALLBACK_STRUCT
+typedef struct UniffiForeignFutureDroppedCallbackStruct {
+    uint64_t handle;
+    UniffiForeignFutureDroppedCallback _Nonnull free;
+} UniffiForeignFutureDroppedCallbackStruct;
+
+#endif
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U8
+typedef struct UniffiForeignFutureResultU8 {
     uint8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU8;
+} UniffiForeignFutureResultU8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U8
-typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureStructU8
+typedef void (*UniffiForeignFutureCompleteU8)(uint64_t, UniffiForeignFutureResultU8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I8
-typedef struct UniffiForeignFutureStructI8 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I8
+typedef struct UniffiForeignFutureResultI8 {
     int8_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI8;
+} UniffiForeignFutureResultI8;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I8
-typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureStructI8
+typedef void (*UniffiForeignFutureCompleteI8)(uint64_t, UniffiForeignFutureResultI8
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U16
-typedef struct UniffiForeignFutureStructU16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U16
+typedef struct UniffiForeignFutureResultU16 {
     uint16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU16;
+} UniffiForeignFutureResultU16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U16
-typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureStructU16
+typedef void (*UniffiForeignFutureCompleteU16)(uint64_t, UniffiForeignFutureResultU16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I16
-typedef struct UniffiForeignFutureStructI16 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I16
+typedef struct UniffiForeignFutureResultI16 {
     int16_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI16;
+} UniffiForeignFutureResultI16;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I16
-typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureStructI16
+typedef void (*UniffiForeignFutureCompleteI16)(uint64_t, UniffiForeignFutureResultI16
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U32
-typedef struct UniffiForeignFutureStructU32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U32
+typedef struct UniffiForeignFutureResultU32 {
     uint32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU32;
+} UniffiForeignFutureResultU32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U32
-typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureStructU32
+typedef void (*UniffiForeignFutureCompleteU32)(uint64_t, UniffiForeignFutureResultU32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I32
-typedef struct UniffiForeignFutureStructI32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I32
+typedef struct UniffiForeignFutureResultI32 {
     int32_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI32;
+} UniffiForeignFutureResultI32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I32
-typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureStructI32
+typedef void (*UniffiForeignFutureCompleteI32)(uint64_t, UniffiForeignFutureResultI32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_U64
-typedef struct UniffiForeignFutureStructU64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_U64
+typedef struct UniffiForeignFutureResultU64 {
     uint64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructU64;
+} UniffiForeignFutureResultU64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_U64
-typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureStructU64
+typedef void (*UniffiForeignFutureCompleteU64)(uint64_t, UniffiForeignFutureResultU64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_I64
-typedef struct UniffiForeignFutureStructI64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_I64
+typedef struct UniffiForeignFutureResultI64 {
     int64_t returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructI64;
+} UniffiForeignFutureResultI64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_I64
-typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureStructI64
+typedef void (*UniffiForeignFutureCompleteI64)(uint64_t, UniffiForeignFutureResultI64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F32
-typedef struct UniffiForeignFutureStructF32 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F32
+typedef struct UniffiForeignFutureResultF32 {
     float returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF32;
+} UniffiForeignFutureResultF32;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F32
-typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureStructF32
+typedef void (*UniffiForeignFutureCompleteF32)(uint64_t, UniffiForeignFutureResultF32
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_F64
-typedef struct UniffiForeignFutureStructF64 {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_F64
+typedef struct UniffiForeignFutureResultF64 {
     double returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructF64;
+} UniffiForeignFutureResultF64;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_F64
-typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureStructF64
+typedef void (*UniffiForeignFutureCompleteF64)(uint64_t, UniffiForeignFutureResultF64
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_POINTER
-typedef struct UniffiForeignFutureStructPointer {
-    void*_Nonnull returnValue;
-    RustCallStatus callStatus;
-} UniffiForeignFutureStructPointer;
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_POINTER
-typedef void (*UniffiForeignFutureCompletePointer)(uint64_t, UniffiForeignFutureStructPointer
-    );
-
-#endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_RUST_BUFFER
-typedef struct UniffiForeignFutureStructRustBuffer {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_RUST_BUFFER
+typedef struct UniffiForeignFutureResultRustBuffer {
     RustBuffer returnValue;
     RustCallStatus callStatus;
-} UniffiForeignFutureStructRustBuffer;
+} UniffiForeignFutureResultRustBuffer;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_RUST_BUFFER
-typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureStructRustBuffer
+typedef void (*UniffiForeignFutureCompleteRustBuffer)(uint64_t, UniffiForeignFutureResultRustBuffer
     );
 
 #endif
-#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-#define UNIFFI_FFIDEF_FOREIGN_FUTURE_STRUCT_VOID
-typedef struct UniffiForeignFutureStructVoid {
+#ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+#define UNIFFI_FFIDEF_FOREIGN_FUTURE_RESULT_VOID
+typedef struct UniffiForeignFutureResultVoid {
     RustCallStatus callStatus;
-} UniffiForeignFutureStructVoid;
+} UniffiForeignFutureResultVoid;
 
 #endif
 #ifndef UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FOREIGN_FUTURE_COMPLETE_VOID
-typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStructVoid
+typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureResultVoid
     );
 
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CLONE_DRAWING
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CLONE_DRAWING
-void*_Nonnull uniffi_thorn_svg_ffi_fn_clone_drawing(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_thorn_svg_ffi_fn_clone_drawing(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FREE_DRAWING
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FREE_DRAWING
-void uniffi_thorn_svg_ffi_fn_free_drawing(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_free_drawing(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CONSTRUCTOR_DRAWING_FRESH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CONSTRUCTOR_DRAWING_FRESH
-void*_Nonnull uniffi_thorn_svg_ffi_fn_constructor_drawing_fresh(RustCallStatus *_Nonnull out_status
+uint64_t uniffi_thorn_svg_ffi_fn_constructor_drawing_fresh(RustCallStatus *_Nonnull out_status
     
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CONSTRUCTOR_DRAWING_OPEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_CONSTRUCTOR_DRAWING_OPEN
-void*_Nonnull uniffi_thorn_svg_ffi_fn_constructor_drawing_open(RustBuffer source, RustCallStatus *_Nonnull out_status
+uint64_t uniffi_thorn_svg_ffi_fn_constructor_drawing_open(RustBuffer source, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ARROW
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ARROW
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustBuffer heads, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_arrow(uint64_t ptr, double x1, double y1, double x2, double y2, RustBuffer heads, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_DIAMOND
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_DIAMOND
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_diamond(uint64_t ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_ELLIPSE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(void*_Nonnull ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ellipse(uint64_t ptr, RustBuffer bounds, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_INK
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_INK
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(void*_Nonnull ptr, RustBuffer points, RustBuffer widths, RustBuffer nib, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_ink(uint64_t ptr, RustBuffer points, RustBuffer widths, RustBuffer nib, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_LINE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_LINE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_line(void*_Nonnull ptr, double x1, double y1, double x2, double y2, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_line(uint64_t ptr, double x1, double y1, double x2, double y2, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_NOTE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_NOTE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_note(void*_Nonnull ptr, RustBuffer bounds, RustBuffer text, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_note(uint64_t ptr, RustBuffer bounds, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_RECT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_RECT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_rect(void*_Nonnull ptr, RustBuffer rect, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_rect(uint64_t ptr, RustBuffer rect, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_ADD_TEXT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_text(void*_Nonnull ptr, double x, double y, RustBuffer text, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_add_text(uint64_t ptr, double x, double y, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BEND
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BEND
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_bend(void*_Nonnull ptr, RustBuffer id, double x, double y, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_bend(uint64_t ptr, RustBuffer id, double x, double y, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BIND
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BIND
-void uniffi_thorn_svg_ffi_fn_method_drawing_bind(void*_Nonnull ptr, RustBuffer id, RustBuffer end, RustBuffer target, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_bind(uint64_t ptr, RustBuffer id, RustBuffer end, RustBuffer target, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BOUNDS
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_BOUNDS
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_bounds(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_bounds(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CHECK
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CHECK
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_check(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_check(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_COLOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_COLOR
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_color(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_color(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CONNECTOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CONNECTOR
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_connector(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_connector(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CORNER
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_CORNER
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_corner(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_corner(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DARK_RULES
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DARK_RULES
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_dark_rules(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DASH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DASH
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_dash(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_dash(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DELETE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DELETE
-void uniffi_thorn_svg_ffi_fn_method_drawing_delete(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_delete(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DELETE_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DELETE_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_delete_all(void*_Nonnull ptr, RustBuffer ids, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_delete_all(uint64_t ptr, RustBuffer ids, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DROP_END
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_DROP_END
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(void*_Nonnull ptr, RustBuffer id, RustBuffer end, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_drop_end(uint64_t ptr, RustBuffer id, RustBuffer end, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_END_POINT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_END_POINT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_end_point(void*_Nonnull ptr, RustBuffer id, RustBuffer end, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_end_point(uint64_t ptr, RustBuffer id, RustBuffer end, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_EXTENT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_EXTENT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_extent(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_extent(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FILL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FILL
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_fill(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_fill(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_font(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_font(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT_SIZE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_FONT_SIZE
-double uniffi_thorn_svg_ffi_fn_method_drawing_font_size(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+double uniffi_thorn_svg_ffi_fn_method_drawing_font_size(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_GROUP
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_GROUP
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_group(void*_Nonnull ptr, RustBuffer ids, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_group(uint64_t ptr, RustBuffer ids, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HEADS
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HEADS
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_heads(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_heads(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HIT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_HIT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_hit(void*_Nonnull ptr, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_hit(uint64_t ptr, double x, double y, double tolerance, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MEMBERS
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MEMBERS
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_members(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_members(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_move_all(void*_Nonnull ptr, RustBuffer ids, double dx, double dy, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_move_all(uint64_t ptr, RustBuffer ids, double dx, double dy, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_BY
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_MOVE_BY
-void uniffi_thorn_svg_ffi_fn_method_drawing_move_by(void*_Nonnull ptr, RustBuffer id, double dx, double dy, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_move_by(uint64_t ptr, RustBuffer id, double dx, double dy, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_NOTE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_NOTE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_note(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_note(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_OUTERMOST
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_OUTERMOST
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_outermost(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_outermost(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_PAGE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_PAGE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_page(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_page(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_PEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_PEN
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_pen(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_pen(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_REDO
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_REDO
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_redo(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_redo(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_REORDER
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_REORDER
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_reorder(void*_Nonnull ptr, RustBuffer id, RustBuffer order, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_reorder(uint64_t ptr, RustBuffer id, RustBuffer order, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_RESIZE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_RESIZE
-void uniffi_thorn_svg_ffi_fn_method_drawing_resize(void*_Nonnull ptr, RustBuffer id, RustBuffer to, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_resize(uint64_t ptr, RustBuffer id, RustBuffer to, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_color(void*_Nonnull ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_color(uint64_t ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_COLOR_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_color_all(uint64_t ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_CORNER
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_CORNER
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_corner(void*_Nonnull ptr, RustBuffer id, RustBuffer radius, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_corner(uint64_t ptr, RustBuffer id, RustBuffer radius, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_CORNER_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_CORNER_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_corner_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer radius, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_corner_all(uint64_t ptr, RustBuffer ids, RustBuffer radius, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(void*_Nonnull ptr, RustBuffer id, RustBuffer dash, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash(uint64_t ptr, RustBuffer id, RustBuffer dash, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_DASH_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer dash, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_dash_all(uint64_t ptr, RustBuffer ids, RustBuffer dash, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(void*_Nonnull ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill(uint64_t ptr, RustBuffer id, RustBuffer hue, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_FILL_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_fill_all(uint64_t ptr, RustBuffer ids, RustBuffer hue, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(void*_Nonnull ptr, RustBuffer id, RustBuffer heads, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads(uint64_t ptr, RustBuffer id, RustBuffer heads, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_HEADS_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer heads, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_heads_all(uint64_t ptr, RustBuffer ids, RustBuffer heads, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_PEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_PEN
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_pen(void*_Nonnull ptr, RustBuffer pen, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_pen(uint64_t ptr, RustBuffer pen, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_TEXT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_TEXT
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_text(void*_Nonnull ptr, RustBuffer id, RustBuffer text, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_text(uint64_t ptr, RustBuffer id, RustBuffer text, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WEIGHT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WEIGHT
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_weight(void*_Nonnull ptr, RustBuffer id, RustBuffer weight, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_weight(uint64_t ptr, RustBuffer id, RustBuffer weight, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WEIGHT_ALL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WEIGHT_ALL
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_weight_all(void*_Nonnull ptr, RustBuffer ids, RustBuffer weight, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_weight_all(uint64_t ptr, RustBuffer ids, RustBuffer weight, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WIDTH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SET_WIDTH
-void uniffi_thorn_svg_ffi_fn_method_drawing_set_width(void*_Nonnull ptr, RustBuffer id, RustBuffer width, RustCallStatus *_Nonnull out_status
+void uniffi_thorn_svg_ffi_fn_method_drawing_set_width(uint64_t ptr, RustBuffer id, RustBuffer width, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SHAPES
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SHAPES
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_shapes(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_shapes(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SOURCE
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_SOURCE
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_source(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_source(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_STRAIGHTEN
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_STRAIGHTEN
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_straighten(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_straighten(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_COLOR
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_COLOR
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_color(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_CORNER
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_CORNER
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_corner(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_corner(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_DASH
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_DASH
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_dash(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_FILL
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_FILL
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_fill(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_WEIGHT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_TAKES_WEIGHT
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_weight(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_takes_weight(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNDO
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNDO
-int8_t uniffi_thorn_svg_ffi_fn_method_drawing_undo(void*_Nonnull ptr, RustCallStatus *_Nonnull out_status
+int8_t uniffi_thorn_svg_ffi_fn_method_drawing_undo(uint64_t ptr, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNGROUP
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_UNGROUP
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_ungroup(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_WEIGHT
 #define UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_METHOD_DRAWING_WEIGHT
-RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_weight(void*_Nonnull ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
+RustBuffer uniffi_thorn_svg_ffi_fn_method_drawing_weight(uint64_t ptr, RustBuffer id, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_THORN_SVG_FFI_FN_FUNC_HANDLE_AT
@@ -853,26 +845,6 @@ void ffi_thorn_svg_ffi_rust_future_free_f64(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_COMPLETE_F64
 #define UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_COMPLETE_F64
 double ffi_thorn_svg_ffi_rust_future_complete_f64(uint64_t handle, RustCallStatus *_Nonnull out_status
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_POLL_POINTER
-#define UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_POLL_POINTER
-void ffi_thorn_svg_ffi_rust_future_poll_pointer(uint64_t handle, UniffiRustFutureContinuationCallback _Nonnull callback, uint64_t callback_data
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_CANCEL_POINTER
-#define UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_CANCEL_POINTER
-void ffi_thorn_svg_ffi_rust_future_cancel_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_FREE_POINTER
-#define UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_FREE_POINTER
-void ffi_thorn_svg_ffi_rust_future_free_pointer(uint64_t handle
-);
-#endif
-#ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_COMPLETE_POINTER
-#define UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_COMPLETE_POINTER
-void*_Nonnull ffi_thorn_svg_ffi_rust_future_complete_pointer(uint64_t handle, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_FFI_THORN_SVG_FFI_RUST_FUTURE_POLL_RUST_BUFFER

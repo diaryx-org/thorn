@@ -3,7 +3,7 @@
 //!
 //! ```sh
 //! cargo run -p thorn-svg-ffi --bin uniffi-bindgen -- \
-//!   generate --library <libthorn_svg_ffi.dylib> --language swift --out-dir <dir>
+//!   generate <libthorn_svg_ffi.dylib> --language swift --out-dir <dir>
 //! ```
 fn main() {
     uniffi::uniffi_bindgen_main()
