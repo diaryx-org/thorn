@@ -1,8 +1,8 @@
 ---
-status: open
+status: done
 created: 2026-09-26
 updated: 2026-09-26
-part_of: '[Tasks](/docs/tasks/tasks.md)'
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
 ---
 # UniFFI 0.32 needs a resvg-swift release
 
@@ -23,3 +23,5 @@ with `swift package unedit resvg-swift` after.
 `crates/thorn-svg-ffi/Cargo.toml` and `resvg-swift` in `Package.swift` are
 moved to that version, and `cargo xtask ci` and `scripts/test-swift.sh` pass
 with no patch.
+
+**Done** 2026-09-26: resvg-swift 0.1.4 is the release, and both pins name it.

@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/diaryx-org/resvg-swift.git",
       "state" : {
-        "revision" : "769cdcdae5416b575fad042d381a00f7c5bf5586",
-        "version" : "0.1.2"
+        "revision" : "df505d1e936882f0e51f8cfc9dd5eae04b7d25df",
+        "version" : "0.1.4"
       }
     }
   ],

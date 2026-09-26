@@ -35,7 +35,7 @@ let package = Package(
         .library(name: "Thorn", targets: ["Thorn"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/diaryx-org/resvg-swift.git", from: "0.1.2"),
+        .package(url: "https://github.com/diaryx-org/resvg-swift.git", from: "0.1.4"),
     ],
     targets: [
         // The C ABI as a clang module (`import thorn_svg_ffiFFI`). No library

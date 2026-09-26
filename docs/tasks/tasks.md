@@ -7,7 +7,6 @@ updated: 2026-09-26
 contents:
 - '[The wasm binding, for the composer](wasm-binding.md)'
 - '[Thorn on the App Store, through Xcode Cloud](sandboxed-mac-app.md)'
-- '[UniFFI 0.32 needs a resvg-swift release](uniffi-032-needs-a-resvg-release.md)'
 - '[Closed tasks](/docs/tasks/closed/closed.md)'
 part_of: '[thorn](/README.md)'
 ---
