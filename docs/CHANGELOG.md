@@ -26,6 +26,19 @@ _No commits since the last tag._
 
 <!-- git-cliff:end -->
 
+## v0.1.3 — 2026-09-26
+
+### Breaking
+
+- **deps** — uniffi 0.32 ([`285bfb8`](https://github.com/diaryx-org/thorn/commit/285bfb8da3b0c4316da1601d52c980b2aba19e4d))
+
+### Behavioural changes
+
+- the generated Swift objects are handle-based —
+`init(unsafeFromHandle:)`, `NoHandle`, `uniffiCloneHandle()` replace the
+raw-pointer spellings — and protocols and records conform to `Sendable`.
+
+
 ## v0.1.2 — 2026-09-22
 
 ### Added
