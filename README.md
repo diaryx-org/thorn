@@ -103,13 +103,24 @@ cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-a
 cargo xtask swift             # build + launch Thorn on macOS, with a copy of a fixture open
 cargo xtask swift drawing.svg # …with a drawing of your own
 cargo xtask swift --ios       # …on its own `iPhone 17 (thorn)` simulator (--device for another)
+cargo xtask package           # a signed, notarised Thorn.app in a .dmg, in target/package/
 ```
 
 `cargo xtask swift` regenerates the UniFFI binding and the Xcode project when
 either is missing (`--regen` forces it, after an FFI change); the project's
 own pre-build script rebuilds the Rust staticlib for whichever destination is
 selected. `xcodegen` and Xcode are needed; a developer team is not, for the
-Mac and the simulator.
+Mac and the simulator. `cargo xtask package` needs a Developer ID identity
+in the keychain and notary credentials in the environment; the head of
+[`xtask/src/package.rs`](xtask/src/package.rs) names them, and
+`--no-notarize` does without the second.
+
+A pushed `v*.*.*` tag is a release:
+[`publish.yml`](.github/workflows/publish.yml) uploads the crates to
+crates.io, and [`mac-app.yml`](.github/workflows/mac-app.yml) attaches a
+signed, notarised `Thorn-<version>-aarch64.dmg` to the release and points the
+tap's `thorn-editor` cask at it
+(`brew install --cask diaryx-org/tap/thorn-editor`).
 
 ## Linking
 
