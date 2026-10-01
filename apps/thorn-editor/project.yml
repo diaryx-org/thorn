@@ -24,7 +24,13 @@ packages:
     path: ../..
 
 targets:
-  Thorn:
+  # `ThornApp`, not `Thorn`: the package's editor target is `Thorn`, and Xcode
+  # 26 gives two targets of one name a single intermediates directory —
+  # `Thorn.build/Release/Thorn.build` — and refuses the build with "Multiple
+  # commands produce". Xcode 27 keeps them apart; the GitHub runners and Xcode
+  # Cloud may not have it. The product, the scheme and the module are named
+  # below, so nothing outside this file sees the target's name.
+  ThornApp:
     type: application
     # A single multiplatform target: Xcode builds it for whichever destination
     # is selected (My Mac / an iOS simulator / a device). The package compiles
@@ -60,7 +66,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: org.diaryx.thorn
         PRODUCT_NAME: Thorn
         # The package's editor module is `Thorn` too; the app's module takes
-        # another name so the two do not write one `Thorn.swiftmodule`.
+        # another name so the two do not write one `Thorn.swiftmodule`. Set
+        # here because it would otherwise follow PRODUCT_NAME, not the target.
         PRODUCT_MODULE_NAME: ThornApp
         # The workspace version, written here by `cargo xtask sync-versions`
         # as part of a release bump.
@@ -185,6 +192,6 @@ schemes:
   Thorn:
     build:
       targets:
-        Thorn: all
+        ThornApp: all
     run:
       config: Debug
