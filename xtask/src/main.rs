@@ -8,6 +8,7 @@
 //! [cargo-xtask]: https://github.com/matklad/cargo-xtask
 
 mod ci;
+mod package;
 mod swift;
 mod util;
 mod versions;
@@ -34,6 +35,8 @@ enum Task {
     Bindings,
     /// Build and launch Thorn, the Apple app (apps/thorn-editor), over packages/thorn-swift.
     Swift(swift::Args),
+    /// Build a signed, notarised Thorn.app in a .dmg for other Macs (target/package/).
+    Package(package::Args),
     /// Write the workspace version into the files no manifest parser reaches
     /// (apps/thorn-editor/project.yml). The release bump runs this.
     SyncVersions,
@@ -44,6 +47,7 @@ fn main() -> Result<()> {
         Task::Ci(args) => ci::run_task(args),
         Task::Bindings => util::run(util::cmd("bash").arg("scripts/gen-bindings.sh")),
         Task::Swift(args) => swift::run_task(args),
+        Task::Package(args) => package::run_task(args),
         Task::SyncVersions => versions::run_task(),
     }
 }

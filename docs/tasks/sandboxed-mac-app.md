@@ -4,7 +4,7 @@ description: The app is signed and sandboxed in Release and a post-clone script 
 author: adammharris
 status: in-progress
 created: 2026-09-21
-updated: 2026-09-22
+updated: 2026-09-30
 part_of: '[Tasks](tasks.md)'
 ---
 # Thorn on the App Store, through Xcode Cloud
@@ -15,8 +15,11 @@ and App Store Connect.
 **What.** Thorn is a document app — `DocumentGroup`, a declared document
 type, an icon, a marketing version — distributed through the App Store and
 built by Xcode Cloud, as the Diaryx app is. That settles what the Mac build
-needs: the sandbox, signing with the team's certificates, and nothing of
-Developer ID, notarisation or a `.dmg`.
+needs: the sandbox and signing with the team's certificates. The same
+sandboxed app also ships outside the store, as Leaf does — `cargo xtask
+package` re-signs it for Developer ID, notarises it into a `.dmg`, and
+`mac-app.yml` attaches that to each release and writes the tap's
+`thorn-editor` cask — which is not this task's.
 
 What the repository does now:
 
