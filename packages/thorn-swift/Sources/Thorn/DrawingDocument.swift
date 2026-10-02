@@ -71,8 +71,9 @@ public final class DrawingDocument {
     /// The shapes, in paint order.
     public var shapes: [Shape] { inner.shapes() }
 
-    /// The shape with this `data-id`.
-    public func shape(id: String) -> Shape? { shapes.first { $0.id == id } }
+    /// The shape a key names: its `data-id`, or its place when it has
+    /// none — which goes on naming it after a gesture gives it an id.
+    public func shape(id: String) -> Shape? { inner.shape(id: id) }
 
     /// Hold the drawing to the profile. Empty means it conforms.
     public func check() -> [Finding] { inner.check() }

@@ -88,8 +88,14 @@ pub struct Shape {
     /// The `data-id` the profile requires; `None` is a profile finding, not
     /// an editor error, because the file may have been written by hand.
     pub id: Option<String>,
-    /// The enclosing group's `data-id`, when the shape is inside a `<g>` that
-    /// is itself a shape; `None` for a shape directly under `<svg>`.
+    /// What the editor addresses the shape by: its `data-id`, or, for a
+    /// shape without one, [`KEY_PREFIX`] and its place in the tree — the
+    /// index of each element on the way down from `<svg>`, `@3.0.5`. Every
+    /// gesture takes either; a gesture that changes a shape with no
+    /// `data-id` gives it one, and its key goes on naming it.
+    pub key: String,
+    /// The enclosing group's key, when the shape is inside a `<g>`; `None`
+    /// for a shape directly under `<svg>`.
     pub group: Option<String>,
     /// Nesting depth below `<svg>`: 0 for a direct child.
     pub depth: usize,
@@ -384,11 +390,16 @@ impl Shape {
     }
 }
 
+/// What a shape's key starts with when it has no `data-id`: a key is its
+/// place in the tree. A `data-id` of the same spelling names its own shape
+/// first.
+pub const KEY_PREFIX: &str = "@";
+
 /// Read the shapes out of a node list, in document (paint) order, walking
 /// into groups. `root` is the `<svg>` element.
 pub(crate) fn read(nodes: &[FlatNode], root: NodeId) -> Vec<Shape> {
     let mut shapes = Vec::new();
-    walk(nodes, root, 0, None, &mut shapes);
+    walk(nodes, root, 0, None, KEY_PREFIX, &mut shapes);
     shapes
 }
 
@@ -399,6 +410,7 @@ fn walk(
     parent: NodeId,
     depth: usize,
     group: Option<&str>,
+    path: &str,
     out: &mut Vec<Shape>,
 ) {
     let by_id = |id: NodeId| nodes.iter().find(|n| n.id == id);
@@ -406,19 +418,33 @@ fn walk(
         return;
     };
     let mut next = parent_node.first_child;
+    let mut index = 0;
     while let Some(id) = next {
         let Some(node) = by_id(id) else { break };
         next = node.next_sibling;
         if node.kind != Kind::Container {
             continue;
         }
+        // Every element counts toward a place, shape or not, so a key is
+        // the same whatever the editor makes of the elements around it.
+        let place = if depth == 0 {
+            format!("{path}{index}")
+        } else {
+            format!("{path}.{index}")
+        };
+        index += 1;
         let Some(kind) = node.name.as_deref().and_then(ShapeKind::from_tag) else {
             continue;
         };
+        let data_id = attr_of(node, "data-id");
         let shape = Shape {
             node: node.id,
             kind,
-            id: attr_of(node, "data-id"),
+            key: data_id
+                .clone()
+                .filter(|id| !id.is_empty())
+                .unwrap_or_else(|| place.clone()),
+            id: data_id,
             group: group.map(str::to_string),
             depth,
             attrs: node.attrs.clone(),
@@ -426,10 +452,10 @@ fn walk(
                 .then(|| characters(nodes, id))
                 .filter(|t| !t.is_empty()),
         };
-        let own_id = shape.id.clone();
+        let key = shape.key.clone();
         out.push(shape);
         if kind == ShapeKind::Group {
-            walk(nodes, id, depth + 1, own_id.as_deref(), out);
+            walk(nodes, id, depth + 1, Some(&key), &place, out);
         }
     }
 }

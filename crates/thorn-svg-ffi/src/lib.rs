@@ -313,6 +313,10 @@ pub struct Attribute {
 pub struct Shape {
     pub kind: ShapeKind,
     pub id: Option<String>,
+    /// What every gesture takes for the shape: its `data-id`, or its place
+    /// when it has none — the first gesture to change it gives it one, and
+    /// the key goes on naming it.
+    pub key: String,
     pub group: Option<String>,
     pub depth: u32,
     pub attrs: Vec<Attribute>,
@@ -325,6 +329,7 @@ impl From<&core::Shape> for Shape {
         Self {
             kind: s.kind.into(),
             id: s.id.clone(),
+            key: s.key.clone(),
             group: s.group.clone(),
             depth: s.depth as u32,
             attrs: s
@@ -615,6 +620,11 @@ impl Drawing {
     /// The shapes, in paint order.
     pub fn shapes(&self) -> Vec<Shape> {
         self.lock().shapes().iter().map(Shape::from).collect()
+    }
+
+    /// The shape a key names — after a gesture has given it an id too.
+    pub fn shape(&self, id: String) -> Option<Shape> {
+        self.lock().shape(&id).map(Shape::from)
     }
 
     /// Hold the drawing to the profile. Empty means it conforms.

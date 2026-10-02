@@ -71,6 +71,18 @@ final class DrawingDocumentTests: XCTestCase {
         XCTAssertEqual(path.bounds(id: "p"), CGRect(x: 0, y: 0, width: 8, height: 8))
     }
 
+    func testAShapeWrittenByHandIsKeyedByItsPlaceUntilAGestureGivesItAnId() throws {
+        let doc = try DrawingDocument(source: "<svg viewBox=\"0 0 99 99\">\n  <rect x=\"1\" y=\"1\" width=\"10\" height=\"10\"/>\n</svg>\n")
+        let hit = try XCTUnwrap(doc.hit(CGPoint(x: 5, y: 5), tolerance: 0))
+        XCTAssertNil(hit.id)
+        XCTAssertEqual(hit.key, "@0")
+        try doc.move(id: hit.key, by: CGVector(dx: 5, dy: 0))
+        XCTAssertTrue(doc.source.contains("<rect x=\"6\" y=\"1\" width=\"10\" height=\"10\" data-id=\"s1\"/>"))
+        XCTAssertEqual(doc.shape(id: hit.key)?.id, "s1", "the key a selection holds still names it")
+        XCTAssertTrue(try doc.undo())
+        XCTAssertFalse(try doc.undo(), "the id and the move are one step")
+    }
+
     func testALabelIsMeasuredByTheFontItIsDrawnWith() throws {
         let doc = try DrawingDocument(source: empty)
         let t = try doc.addText("Hello", at: CGPoint(x: 10, y: 50))

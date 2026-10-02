@@ -886,6 +886,11 @@ public protocol DrawingProtocol: AnyObject, Sendable {
     func setWidth(id: String, width: Double?) throws 
     
     /**
+     * The shape a key names — after a gesture has given it an id too.
+     */
+    func shape(id: String)  -> Shape?
+    
+    /**
      * The shapes, in paint order.
      */
     func shapes()  -> [Shape]
@@ -1784,6 +1789,19 @@ open func setWidth(id: String, width: Double?)throws   {try rustCallWithError(Ff
 }
     
     /**
+     * The shape a key names — after a gesture has given it an id too.
+     */
+open func shape(id: String) -> Shape?  {
+    return try!  FfiConverterOptionTypeShape.lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_thorn_svg_ffi_fn_method_drawing_shape(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(id),uniffiCallStatus
+    )
+})
+}
+    
+    /**
      * The shapes, in paint order.
      */
 open func shapes() -> [Shape]  {
@@ -2550,6 +2568,12 @@ public func FfiConverterTypeRect_lower(_ value: Rect) -> RustBuffer {
 public struct Shape: Equatable, Hashable {
     public var kind: ShapeKind
     public var id: String?
+    /**
+     * What every gesture takes for the shape: its `data-id`, or its place
+     * when it has none — the first gesture to change it gives it one, and
+     * the key goes on naming it.
+     */
+    public var key: String
     public var group: String?
     public var depth: UInt32
     public var attrs: [Attribute]
@@ -2560,12 +2584,18 @@ public struct Shape: Equatable, Hashable {
 
     // Default memberwise initializers are never public by default, so we
     // declare one manually.
-    public init(kind: ShapeKind, id: String?, group: String?, depth: UInt32, attrs: [Attribute], 
+    public init(kind: ShapeKind, id: String?, 
+        /**
+         * What every gesture takes for the shape: its `data-id`, or its place
+         * when it has none — the first gesture to change it gives it one, and
+         * the key goes on naming it.
+         */key: String, group: String?, depth: UInt32, attrs: [Attribute], 
         /**
          * A `<text>`'s characters, whitespace collapsed; `None` otherwise.
          */text: String?) {
         self.kind = kind
         self.id = id
+        self.key = key
         self.group = group
         self.depth = depth
         self.attrs = attrs
@@ -2590,6 +2620,7 @@ public struct FfiConverterTypeShape: FfiConverterRustBuffer {
             try Shape(
                 kind: FfiConverterTypeShapeKind.read(from: &buf), 
                 id: FfiConverterOptionString.read(from: &buf), 
+                key: FfiConverterString.read(from: &buf), 
                 group: FfiConverterOptionString.read(from: &buf), 
                 depth: FfiConverterUInt32.read(from: &buf), 
                 attrs: FfiConverterSequenceTypeAttribute.read(from: &buf), 
@@ -2600,6 +2631,7 @@ public struct FfiConverterTypeShape: FfiConverterRustBuffer {
     public static func write(_ value: Shape, into buf: inout [UInt8]) {
         FfiConverterTypeShapeKind.write(value.kind, into: &buf)
         FfiConverterOptionString.write(value.id, into: &buf)
+        FfiConverterString.write(value.key, into: &buf)
         FfiConverterOptionString.write(value.group, into: &buf)
         FfiConverterUInt32.write(value.depth, into: &buf)
         FfiConverterSequenceTypeAttribute.write(value.attrs, into: &buf)
@@ -4308,6 +4340,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_set_width() != 49984) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_thorn_svg_ffi_checksum_method_drawing_shape() != 62696) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_thorn_svg_ffi_checksum_method_drawing_shapes() != 31989) {

@@ -483,6 +483,7 @@ mod tests {
             node: NodeId(0),
             kind,
             id: Some("s".into()),
+            key: "s".into(),
             group: None,
             depth: 0,
             attrs: attrs

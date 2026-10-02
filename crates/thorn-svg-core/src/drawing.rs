@@ -375,6 +375,10 @@ pub struct Drawing {
     measure: Option<Box<dyn Measure>>,
     /// What the measurer said, by the document it was asked about.
     measured: RefCell<HashMap<String, Option<Bounds>>>,
+    /// The `data-id` each key a gesture was handed went to, when the
+    /// gesture minted it: a key a host holds goes on naming its shape
+    /// after the shape is given an id and its place in the tree moves.
+    aliases: HashMap<String, String>,
 }
 
 impl std::fmt::Debug for Drawing {
@@ -402,6 +406,7 @@ impl Drawing {
             source: String::new(),
             measure: None,
             measured: RefCell::new(HashMap::new()),
+            aliases: HashMap::new(),
         };
         drawing.reload()?;
         Ok(drawing)
@@ -441,9 +446,14 @@ impl Drawing {
         &self.shapes
     }
 
-    /// The shape with this `data-id`.
+    /// The shape a key names: the one with this `data-id`; the one a
+    /// gesture gave an id to when it was handed this key; or, for a shape
+    /// without a `data-id`, the one at this place (see [`Shape::key`]).
     pub fn shape(&self, id: &str) -> Option<&Shape> {
-        self.shapes.iter().find(|s| s.id.as_deref() == Some(id))
+        let by_id = |id: &str| self.shapes.iter().find(|s| s.id.as_deref() == Some(id));
+        by_id(id)
+            .or_else(|| self.aliases.get(id).and_then(|minted| by_id(minted)))
+            .or_else(|| self.shapes.iter().find(|s| s.key == id))
     }
 
     /// The `<svg>` element's attributes, in source order.
@@ -680,21 +690,20 @@ impl Drawing {
         let frame = members
             .iter()
             .find(|m| m.kind == ShapeKind::Rect)?
-            .id
-            .clone()?;
+            .key
+            .clone();
         let label = members
             .iter()
             .find(|m| m.kind == ShapeKind::Text)?
-            .id
-            .clone()?;
+            .key
+            .clone();
         Some(Note { frame, label })
     }
 
     /// A note resized as one: its box to `to`, its label moved to the
     /// box's corner and wrapped to its inner width, one undo step.
-    fn resize_note(&mut self, note: Note, to: Bounds) -> Result<(), Error> {
-        self.resize(&note.frame, to)?;
-        let mut steps = 1;
+    fn resize_note(&mut self, note: Note, to: Bounds, steps: &mut usize) -> Result<(), Error> {
+        self.resize_touched(&note.frame, to, steps)?;
         let frame = self.shape(&note.frame).expect("just resized");
         // The label sits in the box's own coordinates, being its sibling.
         let (x, y, width) = (
@@ -709,13 +718,9 @@ impl Drawing {
             ("y", Some(number::fmt(y + NOTE_PAD + size))),
         ];
         self.write_attrs(label.node, &label.attrs.clone(), &updates)?;
-        self.fold(&mut steps)?;
-        self.rewrap(
-            &note.label,
-            Some((width - 2.0 * NOTE_PAD).max(1.0)),
-            &mut steps,
-        )?;
-        self.follow_page(&mut steps)
+        self.fold(steps)?;
+        self.rewrap(&note.label, Some((width - 2.0 * NOTE_PAD).max(1.0)), steps)?;
+        self.follow_page(steps)
     }
 
     /// Write one element — `attrs`, then the minted `data-id`, then
@@ -924,6 +929,7 @@ impl Drawing {
                     node: self.root,
                     kind: ShapeKind::Text,
                     id: None,
+                    key: String::new(),
                     group: None,
                     depth: 0,
                     attrs: Vec::new(),
@@ -1061,7 +1067,7 @@ impl Drawing {
 
     fn members_of<'a>(&'a self, group: &'a Shape) -> impl Iterator<Item = &'a Shape> + 'a {
         self.shapes.iter().filter(move |s| {
-            group.kind == ShapeKind::Group && s.group == group.id && group.id.is_some()
+            group.kind == ShapeKind::Group && s.group.as_deref() == Some(group.key.as_str())
         })
     }
 
@@ -1086,9 +1092,7 @@ impl Drawing {
     /// `<g>` gets a `translate` composed onto its `transform`. An arrow
     /// bound to the shape follows, in the same step.
     pub fn move_by(&mut self, id: &str, dx: f64, dy: f64) -> Result<(), Error> {
-        let mut steps = 0;
-        self.shift(id, dx, dy, &mut steps)?;
-        self.settle(&[id], &mut steps)
+        self.move_all(&[id], dx, dy)
     }
 
     /// One shape moved, arrows not yet settled.
@@ -1137,11 +1141,13 @@ impl Drawing {
     /// multi-selection's drag. The ids should not include both a group and
     /// one of its members, which would move the member twice.
     pub fn move_all(&mut self, ids: &[&str], dx: f64, dy: f64) -> Result<(), Error> {
-        let mut steps = 0;
-        for id in ids {
-            self.shift(id, dx, dy, &mut steps)?;
-        }
-        self.settle(ids, &mut steps)
+        self.touching(ids, |d, ids, steps| {
+            for id in ids {
+                d.shift(id, dx, dy, steps)?;
+            }
+            let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+            d.settle(&ids, steps)
+        })
     }
 
     /// Fit a shape to `to`, in the root's user units: one `set_node_attrs`,
@@ -1152,6 +1158,26 @@ impl Drawing {
     /// A shape under a rotation or a skew has no box to fit and is
     /// `Unsupported`. An arrow bound to the shape follows, in the same step.
     pub fn resize(&mut self, id: &str, to: Bounds) -> Result<(), Error> {
+        // A note's box and label are written too, and take an id with it.
+        let mut keys = vec![id];
+        let note = self.note(id);
+        if let Some(note) = &note {
+            keys.extend([note.frame.as_str(), note.label.as_str()]);
+        }
+        self.touching(&keys, |d, ids, steps| match note {
+            Some(_) => d.resize_note(
+                Note {
+                    frame: ids[1].clone(),
+                    label: ids[2].clone(),
+                },
+                to,
+                steps,
+            ),
+            None => d.resize_touched(&ids[0], to, steps),
+        })
+    }
+
+    fn resize_touched(&mut self, id: &str, to: Bounds, steps: &mut usize) -> Result<(), Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
@@ -1159,18 +1185,15 @@ impl Drawing {
             gesture: "resize",
             kind: shape.kind,
         };
-        if let Some(note) = self.note(id) {
-            return self.resize_note(note, to);
-        }
         if shape.kind == ShapeKind::Text {
             // A label goes where its box's corner went, and a box of a
             // different width wraps it to that width.
             let from = self.bounds_of(shape).ok_or_else(unsupported)?;
-            self.move_by(id, to.x - from.x, to.y - from.y)?;
+            self.shift(id, to.x - from.x, to.y - from.y, steps)?;
+            self.settle(&[id], steps)?;
             if (to.width - from.width).abs() > 1e-9 {
-                let mut steps = 1;
-                self.rewrap(id, Some(to.width), &mut steps)?;
-                self.follow_page(&mut steps)?;
+                self.rewrap(id, Some(to.width), steps)?;
+                self.follow_page(steps)?;
             }
             return Ok(());
         }
@@ -1201,8 +1224,8 @@ impl Drawing {
             }
         };
         self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
-        let mut steps = 1;
-        self.settle(&[id], &mut steps)
+        self.fold(steps)?;
+        self.settle(&[id], steps)
     }
 
     /// Replace a `<text>`'s characters: one `edit_range` over its interior,
@@ -1214,10 +1237,14 @@ impl Drawing {
     /// interior, the label measures afresh. `Unsupported` for what is not
     /// a `<text>`.
     pub fn set_text(&mut self, id: &str, text: &str) -> Result<(), Error> {
-        let shape = self.label(id, "set text")?;
-        let markup = self.flowed(shape, text);
-        self.write_interior(shape.node, &markup)?;
-        self.follow_page(&mut 1)
+        self.label(id, "set text")?;
+        self.touching(&[id], |d, ids, steps| {
+            let shape = d.shape(&ids[0]).expect("a label checked above");
+            let markup = d.flowed(shape, text);
+            d.write_interior(shape.node, &markup)?;
+            d.fold(steps)?;
+            d.follow_page(steps)
+        })
     }
 
     /// Wrap a label to `width` user units — `data-width` written and its
@@ -1225,9 +1252,10 @@ impl Drawing {
     /// wrapping off and put the words back on one line. One undo step.
     pub fn set_width(&mut self, id: &str, width: Option<f64>) -> Result<(), Error> {
         self.label(id, "set width")?;
-        let mut steps = 0;
-        self.rewrap(id, width, &mut steps)?;
-        self.follow_page(&mut steps)
+        self.touching(&[id], |d, ids, steps| {
+            d.rewrap(&ids[0], width, steps)?;
+            d.follow_page(steps)
+        })
     }
 
     fn rewrap(&mut self, id: &str, width: Option<f64>, steps: &mut usize) -> Result<(), Error> {
@@ -1287,6 +1315,22 @@ impl Drawing {
     /// The `<g>` is written on its own lines around them, the members
     /// indented one level in.
     pub fn group(&mut self, ids: &[&str]) -> Result<String, Error> {
+        for id in ids {
+            let shape = self
+                .shape(id)
+                .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
+            if shape.group != self.shape(ids[0]).and_then(|s| s.group.clone()) {
+                return Err(Error::NotSiblings);
+            }
+        }
+        // The members move, and a key is a place: each takes an id first.
+        self.touching(ids, |d, ids, steps| {
+            let ids: Vec<&str> = ids.iter().map(String::as_str).collect();
+            d.group_touched(&ids, steps)
+        })
+    }
+
+    fn group_touched(&mut self, ids: &[&str], steps: &mut usize) -> Result<String, Error> {
         let mut members = Vec::new();
         for id in ids {
             let shape = self
@@ -1302,7 +1346,6 @@ impl Drawing {
         members.dedup();
         let ordered: Vec<String> = members.into_iter().map(|(_, id)| id).collect();
         let group_id = self.mint_id();
-        let mut steps = 0;
 
         // Bring each member up behind the one before it, when something
         // else sits between them.
@@ -1318,7 +1361,7 @@ impl Drawing {
                 self.editor
                     .move_after(&locator, &anchor)
                     .map_err(Error::Edit)?;
-                self.fold(&mut steps)?;
+                self.fold(steps)?;
                 self.reload()?;
             }
         }
@@ -1337,7 +1380,7 @@ impl Drawing {
         self.editor
             .edit_range(start, end, &markup)
             .map_err(Error::Edit)?;
-        self.fold(&mut steps)?;
+        self.fold(steps)?;
         self.reload()?;
         Ok(group_id)
     }
@@ -1358,13 +1401,20 @@ impl Drawing {
                 kind: group.kind,
             });
         }
+        // The members move up a level, and a key is a place: each takes an
+        // id first. The group's own key stays good, an attribute moving
+        // no element.
+        let members: Vec<String> = self.members(id).iter().map(|m| m.key.clone()).collect();
+        let members: Vec<&str> = members.iter().map(String::as_str).collect();
+        self.touching(&members, |d, ids, steps| {
+            d.ungroup_touched(id, steps)?;
+            Ok(ids.to_vec())
+        })
+    }
+
+    fn ungroup_touched(&mut self, id: &str, steps: &mut usize) -> Result<(), Error> {
+        let group = self.shape(id).expect("a group checked above");
         let transform = geometry::own_transform(group);
-        let ids: Vec<String> = self
-            .members(id)
-            .iter()
-            .filter_map(|m| m.id.clone())
-            .collect();
-        let mut steps = 0;
 
         if !transform.is_identity() {
             let count = self.members(id).len();
@@ -1374,10 +1424,8 @@ impl Drawing {
                 let updates = geometry::baked(&member, &total)
                     .unwrap_or_else(|| vec![("transform", total.fmt())]);
                 self.write_attrs(member.node, &member.attrs, &updates)?;
-                self.fold(&mut steps)?;
-                if let Some(id) = member.id.as_deref() {
-                    self.reflow_if_wrapped(id, &mut steps)?;
-                }
+                self.fold(steps)?;
+                self.reflow_if_wrapped(&member.key, steps)?;
             }
         }
 
@@ -1401,11 +1449,10 @@ impl Drawing {
         self.editor
             .edit_range(span.start, span.end, &body)
             .map_err(Error::Edit)?;
-        self.fold(&mut steps)?;
+        self.fold(steps)?;
         self.reload()?;
         // An arrow bound to the group itself has nothing to point at now.
-        self.unbind_dangling(&mut steps)?;
-        Ok(ids)
+        self.unbind_dangling(steps)
     }
 
     // ----- arrows ----------------------------------------------------------
@@ -1444,6 +1491,18 @@ impl Drawing {
     /// last application must know there is none to undo. `Unsupported`
     /// for what is not a connector.
     pub fn bend(&mut self, id: &str, through: Option<(f64, f64)>) -> Result<bool, Error> {
+        self.arrow(id, "bend")?;
+        self.touching(&[id], |d, ids, steps| {
+            d.bend_touched(&ids[0], through, steps)
+        })
+    }
+
+    fn bend_touched(
+        &mut self,
+        id: &str,
+        through: Option<(f64, f64)>,
+        steps: &mut usize,
+    ) -> Result<bool, Error> {
         let (shape, c) = self.arrow(id, "bend")?;
         let shape = shape.clone();
         let unsupported = || Error::Unsupported {
@@ -1476,7 +1535,6 @@ impl Drawing {
             }
             None => c.straight(),
         };
-        let mut steps = 0;
         match (shape.kind, bent.is_bent()) {
             (ShapeKind::Path, true) => {
                 self.write_attrs(shape.node, &shape.attrs, &[("d", Some(bent.d()))])?;
@@ -1505,11 +1563,11 @@ impl Drawing {
                 self.retag(shape.node, "path", &attrs)?;
             }
         }
-        self.fold(&mut steps)?;
+        self.fold(steps)?;
         if bent.is_bent() {
-            self.style_paths(&mut steps)?;
+            self.style_paths(steps)?;
         }
-        self.settle(&[id], &mut steps)?;
+        self.settle(&[id], steps)?;
         Ok(true)
     }
 
@@ -1670,14 +1728,19 @@ impl Drawing {
     pub fn bind(&mut self, id: &str, end: End, target: Option<&str>) -> Result<(), Error> {
         let (shape, _) = self.arrow(id, "bind")?;
         if let Some(target) = target
-            && (target == id || self.shape(target).is_none())
+            && (target == id || self.shape(target).is_none_or(|t| t.node == shape.node))
         {
             return Err(Error::NoSuchShape(target.to_string()));
         }
-        let updates = [(end.binding(), target.map(str::to_string))];
-        self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
-        let mut steps = 1;
-        self.settle(&[id], &mut steps)
+        // A binding names its target by `data-id`, so the target takes one.
+        let keys: Vec<&str> = std::iter::once(id).chain(target).collect();
+        self.touching(&keys, |d, ids, steps| {
+            let shape = d.shape(&ids[0]).expect("an arrow checked above");
+            let updates = [(end.binding(), ids.get(1).cloned())];
+            d.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
+            d.fold(steps)?;
+            d.settle(&[&ids[0]], steps)
+        })
     }
 
     /// Say how a stroked shape's stroke is broken — `data-dash`, which the
@@ -1688,8 +1751,7 @@ impl Drawing {
     /// nothing when the shape already says so. `Unsupported` for what is
     /// not stroked — ink, a label, an image, a group with no stroke in it.
     pub fn set_dash(&mut self, id: &str, dash: Option<Dash>) -> Result<(), Error> {
-        let mut steps = 0;
-        self.set_word_one(id, Word::Dash, dash.map(Dash::value), &mut steps)
+        self.set_word(id, Word::Dash, dash.map(Dash::value))
     }
 
     /// `set_dash` over a selection, as one undo step: the stroked shapes
@@ -1714,8 +1776,7 @@ impl Drawing {
     /// One undo step. `Unsupported` for an image, or a group of nothing
     /// colourable.
     pub fn set_color(&mut self, id: &str, hue: Option<Hue>) -> Result<(), Error> {
-        let mut steps = 0;
-        self.set_word_one(id, Word::Color, hue.map(Hue::value), &mut steps)
+        self.set_word(id, Word::Color, hue.map(Hue::value))
     }
 
     /// `set_color` over a selection, as one undo step, what cannot take a
@@ -1735,8 +1796,7 @@ impl Drawing {
     /// is the closed members' — a note's frame. One undo step.
     /// `Unsupported` for what is not closed.
     pub fn set_fill(&mut self, id: &str, hue: Option<Hue>) -> Result<(), Error> {
-        let mut steps = 0;
-        self.set_word_one(id, Word::Fill, hue.map(Hue::value), &mut steps)
+        self.set_word(id, Word::Fill, hue.map(Hue::value))
     }
 
     /// `set_fill` over a selection, as one undo step, what is not closed
@@ -1757,8 +1817,7 @@ impl Drawing {
     /// gains the template's rules when it has none. One undo step;
     /// `Unsupported` for what is not stroked.
     pub fn set_weight(&mut self, id: &str, weight: Option<Weight>) -> Result<(), Error> {
-        let mut steps = 0;
-        self.set_word_one(id, Word::Weight, weight.map(Weight::value), &mut steps)
+        self.set_word(id, Word::Weight, weight.map(Weight::value))
     }
 
     /// `set_weight` over a selection, as one undo step, what is not
@@ -1786,9 +1845,8 @@ impl Drawing {
     /// frame. A resize keeps the radius, as it keeps a stroke's width.
     /// One undo step; `Unsupported` for what is not a `<rect>`.
     pub fn set_corner(&mut self, id: &str, radius: Option<f64>) -> Result<(), Error> {
-        let mut steps = 0;
         let value = radius.map(number::fmt);
-        self.set_word_one(id, Word::Corner, value.as_deref(), &mut steps)
+        self.set_word(id, Word::Corner, value.as_deref())
     }
 
     /// `set_corner` over a selection, as one undo step, what is not a box
@@ -1853,15 +1911,28 @@ impl Drawing {
             .is_some_and(|s| !self.word_targets(s, word).is_empty())
     }
 
+    fn set_word(&mut self, id: &str, word: Word, value: Option<&str>) -> Result<(), Error> {
+        self.touching(&[id], |d, ids, steps| {
+            d.set_word_one(&ids[0], word, value, steps)
+        })
+    }
+
     fn set_word_all(&mut self, ids: &[&str], word: Word, value: Option<&str>) -> Result<(), Error> {
-        let mut steps = 0;
+        let mut takers = Vec::new();
         for id in ids {
-            match self.set_word_one(id, word, value, &mut steps) {
-                Err(Error::Unsupported { .. }) => {}
-                other => other?,
+            if self.shape(id).is_none() {
+                return Err(Error::NoSuchShape(id.to_string()));
+            }
+            if self.takes(id, word) {
+                takers.push(*id);
             }
         }
-        Ok(())
+        self.touching(&takers, |d, ids, steps| {
+            for id in ids {
+                d.set_word_one(id, word, value, steps)?;
+            }
+            Ok(())
+        })
     }
 
     /// The shapes a word on `id` lands on: the shape itself when the word
@@ -1909,12 +1980,13 @@ impl Drawing {
                 // The look in the shape's own `style`, where a word would
                 // draw as nothing; a word it carried goes, since the
                 // declaration now says it.
-                if shape.attr("style") == Some(style.as_str()) && shape.attr(word.name()).is_none()
-                {
+                // No `style` and an empty one say the same.
+                if shape.attr("style").unwrap_or("") == style && shape.attr(word.name()).is_none() {
                     continue;
                 }
                 let attrs = shape.attrs.clone();
-                let mut updates: Vec<Update> = vec![("style", Some(style))];
+                let style = (!style.is_empty()).then_some(style);
+                let mut updates: Vec<Update> = vec![("style", style)];
                 if shape.attr(word.name()).is_some() {
                     updates.push((word.name(), None));
                 }
@@ -2012,8 +2084,10 @@ impl Drawing {
     /// one undo step; nothing when the shape already says so.
     /// `Unsupported` for what is not a connector.
     pub fn set_heads(&mut self, id: &str, heads: Option<Heads>) -> Result<(), Error> {
-        let mut steps = 0;
-        self.set_heads_one(id, heads, &mut steps)
+        self.arrow(id, "set_heads")?;
+        self.touching(&[id], |d, ids, steps| {
+            d.set_heads_one(&ids[0], heads, steps)
+        })
     }
 
     /// `set_heads` over a selection, as one undo step: the connectors
@@ -2021,14 +2095,20 @@ impl Drawing {
     /// it is rather than refused, so a mixed selection takes what
     /// applies. `NoSuchShape` for an id that is nothing.
     pub fn set_heads_all(&mut self, ids: &[&str], heads: Option<Heads>) -> Result<(), Error> {
-        let mut steps = 0;
+        let mut arrows = Vec::new();
         for id in ids {
-            match self.set_heads_one(id, heads, &mut steps) {
+            match self.arrow(id, "set_heads") {
+                Ok(_) => arrows.push(*id),
                 Err(Error::Unsupported { .. }) => {}
-                other => other?,
+                Err(e) => return Err(e),
             }
         }
-        Ok(())
+        self.touching(&arrows, |d, ids, steps| {
+            for id in ids {
+                d.set_heads_one(id, heads, steps)?;
+            }
+            Ok(())
+        })
     }
 
     fn set_heads_one(
@@ -2065,14 +2145,30 @@ impl Drawing {
         y: f64,
         tolerance: f64,
     ) -> Result<Option<String>, Error> {
+        let (arrow, _) = self.arrow(id, "drop end")?;
+        let node = arrow.node;
+        let target = self
+            .hit_where(x, y, tolerance, |s| s.node != node)
+            .map(|s| s.key.clone());
+        let keys: Vec<&str> = std::iter::once(id).chain(target.as_deref()).collect();
+        self.touching(&keys, |d, ids, steps| {
+            d.drop_end_touched(&ids[0], ids.get(1).cloned(), end, (x, y), steps)
+        })
+    }
+
+    fn drop_end_touched(
+        &mut self,
+        id: &str,
+        target: Option<String>,
+        end: End,
+        (x, y): (f64, f64),
+        steps: &mut usize,
+    ) -> Result<Option<String>, Error> {
         let (shape, mut c) = self.arrow(id, "drop end")?;
         let unsupported = || Error::Unsupported {
             gesture: "drop end",
             kind: shape.kind,
         };
-        let target = self
-            .hit_where(x, y, tolerance, |s| s.id.as_deref() != Some(id))
-            .and_then(|s| s.id.clone());
         let (lx, ly) = self
             .ctm(shape)
             .inverse()
@@ -2082,8 +2178,8 @@ impl Drawing {
         let mut updates = Self::connector_updates(shape, &c);
         updates.push((end.binding(), target.clone()));
         self.write_attrs(shape.node, &shape.attrs.clone(), &updates)?;
-        let mut steps = 1;
-        self.settle(&[id], &mut steps)?;
+        self.fold(steps)?;
+        self.settle(&[id], steps)?;
         Ok(target)
     }
 
@@ -2311,6 +2407,17 @@ impl Drawing {
     /// siblings kept. `Ok(false)` when it is already there, and nothing was
     /// written.
     pub fn reorder(&mut self, id: &str, order: Order) -> Result<bool, Error> {
+        self.touching(&[id], |d, ids, steps| {
+            d.reorder_touched(&ids[0], order, steps)
+        })
+    }
+
+    fn reorder_touched(
+        &mut self,
+        id: &str,
+        order: Order,
+        steps: &mut usize,
+    ) -> Result<bool, Error> {
         let shape = self
             .shape(id)
             .ok_or_else(|| Error::NoSuchShape(id.to_string()))?;
@@ -2337,6 +2444,7 @@ impl Drawing {
                 .move_before(&locator, &anchor)
                 .map_err(Error::Edit)?;
         }
+        self.fold(steps)?;
         self.reload()?;
         Ok(true)
     }
@@ -2517,6 +2625,52 @@ impl Drawing {
         self.fold(steps)
     }
 
+    /// Run a gesture over the shapes `keys` name, each handed to it by its
+    /// `data-id`: a shape without one is given one first, in the
+    /// gesture's undo step, and the key it was named by goes on naming
+    /// it. A gesture that fails, or writes nothing past the ids, is undone
+    /// with them — the ids are for what a gesture changes.
+    fn touching<T>(
+        &mut self,
+        keys: &[&str],
+        gesture: impl FnOnce(&mut Self, &[String], &mut usize) -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let mut steps = 0;
+        let mut ids = Vec::with_capacity(keys.len());
+        let mut minted = Vec::new();
+        for key in keys {
+            let shape = self
+                .shape(key)
+                .ok_or_else(|| Error::NoSuchShape(key.to_string()))?;
+            if let Some(id) = shape.id.clone().filter(|id| !id.is_empty()) {
+                ids.push(id);
+                continue;
+            }
+            let (node, attrs) = (shape.node, shape.attrs.clone());
+            let id = self.mint_id();
+            self.write_attrs(node, &attrs, &[("data-id", Some(id.clone()))])?;
+            self.fold(&mut steps)?;
+            minted.push((
+                key.to_string(),
+                self.aliases.insert(key.to_string(), id.clone()),
+            ));
+            ids.push(id);
+        }
+        let named = steps;
+        let result = gesture(self, &ids, &mut steps);
+        if named > 0 && (result.is_err() || steps == named) {
+            self.editor.undo().map_err(Error::Edit)?;
+            self.reload()?;
+            for (key, before) in minted.into_iter().rev() {
+                match before {
+                    Some(id) => self.aliases.insert(key, id),
+                    None => self.aliases.remove(&key),
+                };
+            }
+        }
+        result
+    }
+
     /// Count one twig operation of a gesture; from the second on, fold it
     /// into the undo step before it, so the gesture undoes as one.
     fn fold(&mut self, steps: &mut usize) -> Result<(), Error> {
@@ -2595,10 +2749,13 @@ impl Drawing {
     /// The id `n` after the next free one, for a gesture that mints
     /// several in one splice.
     fn mint_id_after(&self, n: u64) -> String {
+        // An id a key still names, though an undo took it off its shape,
+        // is not minted again for another.
         let taken = self
             .shapes
             .iter()
             .filter_map(|s| s.id.as_deref())
+            .chain(self.aliases.values().map(String::as_str))
             .filter_map(|id| id.strip_prefix('s'))
             .filter_map(|n| n.parse::<u64>().ok())
             .max()
@@ -4488,5 +4645,108 @@ mod tests {
         assert_eq!(d.shape("m").unwrap().attr("data-dash"), Some("dashed"));
         assert_eq!(style_of(&d, "m"), "");
         assert_eq!(d.dash("l"), Some(Dash::Dashed));
+    }
+
+    /// A file written by hand: a `<title>` that is no shape, a box and a
+    /// group with no `data-id`, and one shape that has one.
+    const BY_HAND: &str = "<svg viewBox=\"0 0 100 100\">\n  <title>t</title>\n  <rect x=\"10\" y=\"10\" width=\"20\" height=\"10\"/>\n  <g><circle cx=\"50\" cy=\"50\" r=\"5\"/><rect x=\"60\" y=\"60\" width=\"5\" height=\"5\" data-id=\"s4\"/></g>\n</svg>\n";
+
+    fn keys(d: &Drawing) -> Vec<String> {
+        d.shapes().iter().map(|s| s.key.clone()).collect()
+    }
+
+    #[test]
+    fn a_shape_without_an_id_is_keyed_by_its_place() {
+        let d = Drawing::open(BY_HAND).unwrap();
+        assert_eq!(keys(&d), ["@1", "@2", "@2.0", "s4"]);
+        assert_eq!(d.shape("@2.0").unwrap().kind, ShapeKind::Circle);
+        assert_eq!(d.shape("s4").unwrap().group.as_deref(), Some("@2"));
+        assert_eq!(d.members("@2").len(), 2);
+    }
+
+    #[test]
+    fn a_gesture_gives_what_it_changes_an_id_in_its_own_step() {
+        let mut d = Drawing::open(BY_HAND).unwrap();
+        d.move_by("@1", 5.0, 0.0).unwrap();
+        assert!(
+            d.source()
+                .contains("<rect x=\"15\" y=\"10\" width=\"20\" height=\"10\" data-id=\"s5\"/>")
+        );
+        assert_eq!(d.shape("@1").unwrap().id.as_deref(), Some("s5"));
+        assert_eq!(keys(&d), ["s5", "@2", "@2.0", "s4"]);
+
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), BY_HAND);
+        assert!(!d.undo().unwrap());
+        // Its place names it still.
+        assert_eq!(d.shape("@1").unwrap().kind, ShapeKind::Rect);
+    }
+
+    #[test]
+    fn a_key_names_its_shape_after_the_gesture_moves_it() {
+        let mut d = Drawing::open(BY_HAND).unwrap();
+        let group = d.group(&["@1", "@2"]).unwrap();
+        assert_eq!(group, "s7");
+        assert_eq!(d.shape("@1").unwrap().id.as_deref(), Some("s5"));
+        assert_eq!(d.shape("@2").unwrap().id.as_deref(), Some("s6"));
+        assert_eq!(d.shape("s5").unwrap().group.as_deref(), Some("s7"));
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), BY_HAND);
+        assert!(!d.undo().unwrap());
+
+        let members = d.ungroup("@2").unwrap();
+        // The old keys still name s5 and s6, so the circle takes s7.
+        assert_eq!(members, ["s7", "s4"]);
+        assert_eq!(d.shape("@2.0").unwrap().kind, ShapeKind::Circle);
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), BY_HAND);
+    }
+
+    #[test]
+    fn an_id_an_undo_took_back_is_not_minted_for_another_shape() {
+        let mut d = Drawing::open(BY_HAND).unwrap();
+        d.move_by("@1", 5.0, 0.0).unwrap();
+        d.undo().unwrap();
+        d.move_by("@2.0", 5.0, 0.0).unwrap();
+        assert_eq!(d.shape("@2.0").unwrap().id.as_deref(), Some("s6"));
+        assert_eq!(d.shape("@1").unwrap().kind, ShapeKind::Rect);
+        assert!(d.redo().is_ok());
+    }
+
+    #[test]
+    fn a_gesture_that_writes_nothing_mints_nothing() {
+        let mut d = Drawing::open(BY_HAND).unwrap();
+        assert!(!d.reorder("@1", Order::ToBack).unwrap());
+        d.set_dash("@1", None).unwrap();
+        assert_eq!(d.source(), BY_HAND);
+        assert!(!d.undo().unwrap());
+
+        let turned = BY_HAND.replace("<rect x=\"10\"", "<rect transform=\"rotate(30)\" x=\"10\"");
+        let mut d = Drawing::open(&turned).unwrap();
+        let to = Bounds {
+            x: 0.0,
+            y: 0.0,
+            width: 5.0,
+            height: 5.0,
+        };
+        assert!(matches!(d.resize("@1", to), Err(Error::Unsupported { .. })));
+        assert_eq!(d.source(), turned);
+        assert!(!d.undo().unwrap());
+    }
+
+    #[test]
+    fn binding_to_a_shape_without_an_id_gives_it_one() {
+        let src = "<svg viewBox=\"0 0 100 100\">\n  <rect x=\"50\" y=\"0\" width=\"20\" height=\"20\"/>\n  <line x1=\"0\" y1=\"10\" x2=\"40\" y2=\"10\" data-id=\"s1\"/>\n</svg>\n";
+        let mut d = Drawing::open(src).unwrap();
+        d.bind("s1", End::To, Some("@0")).unwrap();
+        assert_eq!(d.shape("@0").unwrap().id.as_deref(), Some("s2"));
+        assert_eq!(d.shape("s1").unwrap().attr("data-to"), Some("s2"));
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), src);
+
+        let target = d.drop_end("s1", End::To, 55.0, 10.0, 0.0).unwrap();
+        assert_eq!(target.as_deref(), Some("s3"));
+        assert_eq!(d.shape("@0").unwrap().id.as_deref(), Some("s3"));
+        assert_eq!(d.shape("s1").unwrap().attr("data-to"), Some("s3"));
     }
 }

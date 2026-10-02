@@ -531,8 +531,8 @@ public final class CanvasModel {
             } else if let id = resizable, let b = selectionBounds(id),
                let h = Handle.at(p, on: b, tolerance: userTolerance) {
                 drag = .resize(id: id, handle: h, start: b, delta: .zero)
-            } else if let hit = document.hit(p, tolerance: userTolerance), let hitId = hit.id,
-                      let id = document.outermost(id: hitId)?.id {
+            } else if let hit = document.hit(p, tolerance: userTolerance),
+                      let id = document.outermost(id: hit.key)?.key {
                 if extending {
                     if let at = selection.firstIndex(of: id) { selection.remove(at: at) } else { selection.append(id) }
                 } else {
@@ -575,8 +575,8 @@ public final class CanvasModel {
     /// what it will delete.
     private func erase(at p: CGPoint) {
         guard case .erase(var ids) = drag,
-              let hit = document.hit(p, tolerance: userTolerance), let hitId = hit.id,
-              let id = document.outermost(id: hitId)?.id, !ids.contains(id) else { return }
+              let hit = document.hit(p, tolerance: userTolerance),
+              let id = document.outermost(id: hit.key)?.key, !ids.contains(id) else { return }
         ids.append(id)
         drag = .erase(ids: ids)
     }
@@ -769,8 +769,8 @@ public final class CanvasModel {
     /// The outermost shape under a view point, within the tolerance, or
     /// `nil` over nothing: what a long press asks before it offers a menu.
     public func shape(at viewPoint: CGPoint) -> String? {
-        guard let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance), let id = hit.id else { return nil }
-        return document.outermost(id: id)?.id
+        guard let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance) else { return nil }
+        return document.outermost(id: hit.key)?.key
     }
 
     /// Whether `editSelectedText` would open a field: one note or one
@@ -789,12 +789,11 @@ public final class CanvasModel {
 
     /// A double-click at a view point: on a label, opens it for editing.
     public func doubleClick(at viewPoint: CGPoint) {
-        guard tool == .select, let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance),
-              let hitId = hit.id else { return }
-        if let outer = document.outermost(id: hitId)?.id, document.note(id: outer) != nil {
+        guard tool == .select, let hit = document.hit(userPoint(viewPoint), tolerance: userTolerance) else { return }
+        if let outer = document.outermost(id: hit.key)?.key, document.note(id: outer) != nil {
             editNote(id: outer)
         } else if hit.kind == .text {
-            editText(id: hitId)
+            editText(id: hit.key)
         }
     }
 
@@ -835,7 +834,7 @@ public final class CanvasModel {
         if let id = edit.id {
             if trimmed.isEmpty {
                 // A note with nothing in it goes, box and all.
-                let outer = document.outermost(id: id)?.id
+                let outer = document.outermost(id: id)?.key
                 let victim = outer.flatMap { document.note(id: $0) != nil ? $0 : nil } ?? id
                 try? document.delete(id: victim)
             } else if trimmed != edit.text { try? document.setText(id: id, trimmed) }

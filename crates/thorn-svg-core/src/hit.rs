@@ -214,6 +214,7 @@ mod tests {
             node: NodeId(0),
             kind,
             id: None,
+            key: "@0".into(),
             group: None,
             depth: 0,
             attrs: attrs
