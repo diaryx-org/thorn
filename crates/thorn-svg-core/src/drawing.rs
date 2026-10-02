@@ -39,6 +39,7 @@ use std::fmt::Write as _;
 use twig::{Editor, FlatNode, Format, Kind, NodeId};
 
 use crate::connector::{Connector, End};
+use crate::css;
 use crate::geometry::{self, Bounds, Update};
 use crate::ink::{self, Nib};
 use crate::measure::{Font, Measure};
@@ -248,6 +249,20 @@ impl Word {
         }
     }
 
+    /// The properties of a shape's own `style` that outrank the word's
+    /// rules: what the word sets, and for a colour, what the shape is
+    /// painted with.
+    fn governs(self, shape: &Shape) -> &'static [&'static str] {
+        match self {
+            Self::Dash => &["stroke-dasharray"],
+            Self::Weight => &["stroke-width"],
+            Self::Fill => &["fill"],
+            Self::Color if shape.is_closed() => &["stroke", "color"],
+            Self::Color => &["stroke", "fill", "color"],
+            Self::Corner => &[],
+        }
+    }
+
     fn applies(self, shape: &Shape) -> bool {
         match self {
             Self::Dash | Self::Weight => shape.is_stroked(),
@@ -255,6 +270,94 @@ impl Word {
             Self::Fill => shape.is_closed(),
             Self::Corner => shape.kind == ShapeKind::Rect,
         }
+    }
+}
+
+/// The declarations that draw `word` at `value` on `shape`, whose `style`
+/// is `style`: the template's light-page values for each, `None` to take
+/// a declaration out. A colour lands on what the shape is painted with —
+/// its stroke, and its fill where the fill is not a background — or its
+/// stroke when it is painted with neither.
+fn inline_look(
+    shape: &Shape,
+    word: Word,
+    value: Option<&str>,
+    style: &str,
+) -> Vec<(&'static str, Option<&'static str>)> {
+    match word {
+        Word::Dash => match value.and_then(Dash::from_value) {
+            Some(Dash::Dashed) => vec![("stroke-dasharray", Some("8 6"))],
+            Some(Dash::Dotted) => vec![
+                ("stroke-dasharray", Some("1 5")),
+                ("stroke-linecap", Some("round")),
+            ],
+            None => vec![("stroke-dasharray", None)],
+        },
+        Word::Weight => {
+            let width = match value.and_then(Weight::from_value) {
+                Some(Weight::Thin) => "1",
+                Some(Weight::Bold) => "4",
+                None => "2",
+            };
+            vec![("stroke-width", Some(width))]
+        }
+        Word::Fill => {
+            let tint = value
+                .and_then(Hue::from_value)
+                .map_or("none", |h| h.tint(false));
+            vec![("fill", Some(tint))]
+        }
+        Word::Color => {
+            let ink = value
+                .and_then(Hue::from_value)
+                .map_or("currentColor", |h| h.stroke(false));
+            let painted = |property: &str, default: &str| {
+                css::declaration(style, property)
+                    .or_else(|| shape.attr(property).map(str::to_string))
+                    .unwrap_or_else(|| default.to_string())
+                    .trim()
+                    != "none"
+            };
+            let mut out = Vec::new();
+            if painted("stroke", "none") {
+                out.push(("stroke", Some(ink)));
+            }
+            if !shape.is_closed() && painted("fill", "black") {
+                out.push(("fill", Some(ink)));
+            }
+            if out.is_empty() {
+                out.push(("stroke", Some(ink)));
+            }
+            out
+        }
+        Word::Corner => Vec::new(),
+    }
+}
+
+/// The word value a shape's `style` says, where [`inline_look`] wrote it:
+/// the dash, the weight, the hue of its stroke or its fill.
+fn inline_word(shape: &Shape, word: Word) -> Option<&'static str> {
+    let style = shape.attr("style")?;
+    let declared = |p: &str| css::declaration(style, p).map(|v| v.to_ascii_lowercase());
+    let hue_by = |v: Option<String>, of: fn(Hue) -> &'static str| {
+        let v = v?;
+        Hue::ALL.into_iter().find(|&h| of(h) == v).map(Hue::value)
+    };
+    match word {
+        Word::Dash => match declared("stroke-dasharray")?.as_str() {
+            "8 6" => Some(Dash::Dashed.value()),
+            "1 5" => Some(Dash::Dotted.value()),
+            _ => None,
+        },
+        Word::Weight => match declared("stroke-width")?.as_str() {
+            "1" => Some(Weight::Thin.value()),
+            "4" => Some(Weight::Bold.value()),
+            _ => None,
+        },
+        Word::Fill => hue_by(declared("fill"), |h| h.tint(false)),
+        Word::Color => hue_by(declared("stroke"), |h| h.stroke(false))
+            .or_else(|| hue_by(declared("fill"), |h| h.stroke(false))),
+        Word::Corner => None,
     }
 }
 
@@ -1802,6 +1905,23 @@ impl Drawing {
                 .iter()
                 .find(|s| s.node == node)
                 .expect("a target is a shape");
+            if let Some(style) = self.inline_style(shape, word, value) {
+                // The look in the shape's own `style`, where a word would
+                // draw as nothing; a word it carried goes, since the
+                // declaration now says it.
+                if shape.attr("style") == Some(style.as_str()) && shape.attr(word.name()).is_none()
+                {
+                    continue;
+                }
+                let attrs = shape.attrs.clone();
+                let mut updates: Vec<Update> = vec![("style", Some(style))];
+                if shape.attr(word.name()).is_some() {
+                    updates.push((word.name(), None));
+                }
+                self.write_attrs(node, &attrs, &updates)?;
+                self.fold(steps)?;
+                continue;
+            }
             if shape.attr(word.name()).map(str::trim) == value {
                 continue;
             }
@@ -1822,18 +1942,59 @@ impl Drawing {
         Ok(())
     }
 
+    /// A shape's `style` with `word`'s look written into it — or `None`
+    /// when the word is the way to say it. The look goes into the
+    /// declarations where a word would draw as nothing: the shape's own
+    /// `style` declares a property the word's rules set, which outranks
+    /// any rule, or no `<style>` in the drawing can carry the rules. The
+    /// values are the template's light-page ones, since a declaration has
+    /// no dark page to say another for. `None` too for a `style` that is
+    /// not CSS, which is left to the word.
+    fn inline_style(&self, shape: &Shape, word: Word, value: Option<&str>) -> Option<String> {
+        if word == Word::Corner {
+            return None;
+        }
+        let style = shape.attr("style").unwrap_or("");
+        let declares = word
+            .governs(shape)
+            .iter()
+            .any(|p| css::declaration(style, p).is_some());
+        if !declares && self.has_stylesheet() {
+            return None;
+        }
+        let mut out = style.to_string();
+        for (property, v) in inline_look(shape, word, value, style) {
+            out = css::with_declaration(&out, property, v).ok()?;
+        }
+        Some(out)
+    }
+
+    /// Whether the drawing has a top-level `<style>`, which a word's rules
+    /// can be brought into.
+    fn has_stylesheet(&self) -> bool {
+        let mut next = self.node(self.root).first_child;
+        while let Some(id) = next {
+            let node = self.node(id);
+            if node.name.as_deref() == Some("style") {
+                return true;
+            }
+            next = node.next_sibling;
+        }
+        false
+    }
+
     /// The value of a word the shapes it lands on agree on; `None` when
-    /// they differ, or none carries it.
+    /// they differ, or none carries it. A shape whose look is in its
+    /// `style` says it there, read back as the word that wrote it.
     fn agreed(&self, id: &str, word: Word) -> Option<&str> {
         let shape = self.shape(id)?;
         let mut agreed: Option<&str> = None;
         for node in self.word_targets(shape, word) {
-            let value = self
-                .shapes
-                .iter()
-                .find(|s| s.node == node)
-                .and_then(|s| s.attr(word.name()))
-                .map(str::trim);
+            let value = self.shapes.iter().find(|s| s.node == node).and_then(|s| {
+                s.attr(word.name())
+                    .map(str::trim)
+                    .or_else(|| inline_word(s, word))
+            });
             match (agreed, value) {
                 (None, Some(v)) if agreed.is_none() => agreed = Some(v),
                 (Some(a), Some(v)) if a == v => {}
@@ -4241,5 +4402,91 @@ mod tests {
         let mut d = Drawing::open("<svg viewBox=\"0 0 9 9\">\n  <g data-id=\"s2\"><circle cx=\"5\" cy=\"5\" r=\"1\" data-id=\"s3\"/></g>\n</svg>\n").unwrap();
         d.delete("s2").unwrap();
         assert!(d.shapes().is_empty());
+    }
+
+    /// What Inkscape writes: no `<style>`, every shape styled inline.
+    const INKSCAPE: &str = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <path d=\"M10 10 L90 10\" style=\"fill:none;stroke:#000000;stroke-width:0.36px;stroke-linecap:butt\" data-id=\"line\"/>\n  <path d=\"M10 20 L90 20 L50 60 Z\" style=\"fill:#000000;stroke:none\" data-id=\"glyph\"/>\n  <rect x=\"10\" y=\"70\" width=\"20\" height=\"20\" style=\"fill:#ffffff;stroke:#000000\" data-id=\"box\"/>\n  <rect x=\"40\" y=\"70\" width=\"20\" height=\"20\" data-id=\"bare\"/>\n</svg>\n";
+
+    fn style_of(d: &Drawing, id: &str) -> String {
+        d.shape(id).unwrap().attr("style").unwrap_or("").to_string()
+    }
+
+    #[test]
+    fn a_shape_styled_inline_takes_its_look_in_its_style() {
+        let mut d = Drawing::open(INKSCAPE).unwrap();
+        d.set_color("line", Some(Hue::Red)).unwrap();
+        assert_eq!(
+            style_of(&d, "line"),
+            "fill:none;stroke:#c62828;stroke-width:0.36px;stroke-linecap:butt"
+        );
+        assert_eq!(d.shape("line").unwrap().attr("data-color"), None);
+        assert_eq!(d.color("line"), Some(Hue::Red));
+
+        // A filled outline is coloured by its fill; its absent stroke stays so.
+        d.set_color("glyph", Some(Hue::Blue)).unwrap();
+        assert_eq!(
+            style_of(&d, "glyph"),
+            format!("fill:{};stroke:none", Hue::Blue.stroke(false))
+        );
+
+        // A box's fill is its background: the colour is its stroke's.
+        d.set_color("box", Some(Hue::Green)).unwrap();
+        assert_eq!(
+            style_of(&d, "box"),
+            format!("fill:#ffffff;stroke:{}", Hue::Green.stroke(false))
+        );
+        d.set_fill("box", Some(Hue::Yellow)).unwrap();
+        assert_eq!(d.fill("box"), Some(Hue::Yellow));
+        d.set_fill("box", None).unwrap();
+        assert!(style_of(&d, "box").starts_with("fill:none;"));
+
+        d.set_dash("line", Some(Dash::Dotted)).unwrap();
+        assert_eq!(
+            style_of(&d, "line"),
+            "fill:none;stroke:#c62828;stroke-width:0.36px;stroke-linecap:round; stroke-dasharray: 1 5"
+        );
+        assert_eq!(d.dash("line"), Some(Dash::Dotted));
+        d.set_dash("line", None).unwrap();
+        assert_eq!(d.dash("line"), None);
+        d.set_weight("line", Some(Weight::Bold)).unwrap();
+        assert_eq!(d.weight("line"), Some(Weight::Bold));
+
+        // A shape with no `style`, in a drawing with no `<style>` to draw a
+        // word by, is given one.
+        d.set_weight("bare", Some(Weight::Thin)).unwrap();
+        assert_eq!(style_of(&d, "bare"), "stroke-width: 1");
+        assert_eq!(d.shape("bare").unwrap().attr("data-weight"), None);
+
+        d.set_color("line", None).unwrap();
+        assert!(style_of(&d, "line").contains("stroke:currentColor"));
+        assert_eq!(d.color("line"), None);
+    }
+
+    #[test]
+    fn an_inline_look_is_one_step_and_undoes_to_the_same_bytes() {
+        let mut d = Drawing::open(INKSCAPE).unwrap();
+        d.set_color_all(&["line", "glyph", "box"], Some(Hue::Violet))
+            .unwrap();
+        assert!(d.undo().unwrap());
+        assert_eq!(d.source(), INKSCAPE);
+        assert!(!d.undo().unwrap());
+    }
+
+    #[test]
+    fn a_declaration_outranks_a_word_so_the_declaration_is_what_changes() {
+        // The template's `<style>` draws `data-dash`, but this line says
+        // its own dash, which no rule can override.
+        let src = crate::profile::TEMPLATE.replace(
+            "</svg>",
+            "  <line x1=\"0\" y1=\"0\" x2=\"10\" y2=\"0\" style=\"stroke-dasharray: 2 2\" data-id=\"l\"/>\n  <line x1=\"0\" y1=\"9\" x2=\"10\" y2=\"9\" data-id=\"m\"/>\n</svg>",
+        );
+        let mut d = Drawing::open(&src).unwrap();
+        d.set_dash_all(&["l", "m"], Some(Dash::Dashed)).unwrap();
+        assert_eq!(style_of(&d, "l"), "stroke-dasharray: 8 6");
+        assert_eq!(d.shape("l").unwrap().attr("data-dash"), None);
+        // The other, with nothing of its own to outrank the rule, takes the word.
+        assert_eq!(d.shape("m").unwrap().attr("data-dash"), Some("dashed"));
+        assert_eq!(style_of(&d, "m"), "");
+        assert_eq!(d.dash("l"), Some(Dash::Dashed));
     }
 }

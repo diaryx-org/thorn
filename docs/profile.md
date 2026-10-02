@@ -204,6 +204,31 @@ by `data-color` is the stylesheet's to say in each, and an editor in dark
 mode applies the file's own `@media (prefers-color-scheme: dark)` rules
 (`Drawing::dark_rules`) rather than a colour of its own.
 
+## A shape that says its own look
+
+A word is how the editor says a look wherever a stylesheet can draw it.
+Where none can, the editor writes the look into the shape's own `style`
+instead, through the declarations a word's rule would have set, and
+leaves the word off — taking it off, if the shape had one. That is two
+cases. The shape's `style` declares a property the word's rule sets
+(`stroke-dasharray` for a dash, `stroke-width` for a weight, `fill` for
+a background, `stroke`, `fill` or `color` for a colour), and an inline
+declaration outranks every rule. Or no top-level `<style>` in the drawing
+can carry the word's rules, as in a file Inkscape wrote, where a word
+would draw as nothing.
+
+The values are the template's light-page ones — `stroke:#c62828` for
+red, `stroke-dasharray: 8 6` for dashed, `stroke-width: 4` for bold —
+since a declaration has no dark page to say another for. A colour lands
+on what the shape is painted with: its stroke, and its fill where the
+fill is not a background (an outline, a label), or its stroke when it is
+painted with neither; the drawing's ink is `currentColor`, no background
+is `fill: none`, solid is the dash declaration taken out, the template's
+weight is `stroke-width: 2`. The declaration is edited in place, every
+other byte of the `style` kept (`thorn_svg_core::css`), in the gesture's
+undo step; and the editor reads such a shape's look back as the word that
+wrote it.
+
 ## Held to by
 
 - `thorn check <file>` — exits 1 on any finding.
