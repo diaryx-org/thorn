@@ -37,6 +37,11 @@ usvg = "0.46"
 # parser, so the extent the editor computes is over the segments resvg
 # draws; kurbo comes with it and nothing else.
 svgtypes = "0.16"
+# The editor under a `<style>` and a `style` attribute: `css.rs` is CSS as a
+# fig language, and fig's splice engine makes every edit to it, keeping the
+# bytes it is not asked to change. 5.1 is the first release whose flow
+# members can be joined by `;` (fig's docs/proposals/separated-entries.md).
+fig = "5.1"
 anyhow = "1"
 thiserror = "2"
 # Internal crates.
