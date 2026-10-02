@@ -26,6 +26,40 @@ _No commits since the last tag._
 
 <!-- git-cliff:end -->
 
+## v0.1.4 — 2026-10-01
+
+### Added
+
+- **xtask** — package a signed, notarised Thorn.app in a .dmg ([`14e5854`](https://github.com/diaryx-org/thorn/commit/14e58541b405a3269ceb6678411523c7f7c98253))
+- **core** — CSS as a fig language, for a `<style>` and a style attribute ([`b8ab075`](https://github.com/diaryx-org/thorn/commit/b8ab075eb54cb470852052d52f62ebb2d5b5fa92))
+- **core** — write a look into a shape's own style where a word would draw nothing ([`b9f77e0`](https://github.com/diaryx-org/thorn/commit/b9f77e0218800f7773f674cd1f16b60600f03203))
+- **core** — give a shape a data-id the first time a gesture changes it ([`9c89589`](https://github.com/diaryx-org/thorn/commit/9c89589245a4a7f0865c224b0ae62a0f9e7e5798))
+- **thorn-swift** — draw a file with no dark rules on a light sheet in dark mode ([`440522c`](https://github.com/diaryx-org/thorn/commit/440522cacf7d234ceca6f6d2590123595247ab6d))
+
+### Fixed
+
+- **thorn-editor** — name the app target ThornApp ([`2ab5bfa`](https://github.com/diaryx-org/thorn/commit/2ab5bfa7cc87798a925ca732d879185f1f53747b))
+
+### Changed
+
+- **core** — read the drawing's stylesheet through css.rs ([`56eda68`](https://github.com/diaryx-org/thorn/commit/56eda6802a87ac821c950c3555f27927e5aad6ee))
+
+### Behavioural changes
+
+- on a shape whose `style` declares the property, or in
+  a drawing with no top-level `<style>`, the colour, background, dash and
+  weight gestures now write `style` declarations and no `data-` word.
+  They used to write the word, which drew as nothing there.
+
+- a gesture on a shape with no data-id now writes one onto it.
+
+- ungroup returns every member, a member that had no data-id given one.
+
+- taking a look off a shape with no style attribute no longer writes style="".
+
+- in dark mode, a drawing with no dark rules is shown on a white sheet.
+
+
 ## v0.1.3 — 2026-09-26
 
 ### Breaking
