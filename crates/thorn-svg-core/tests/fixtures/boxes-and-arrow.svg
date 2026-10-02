@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" data-diaryx-drawing="1">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160" color="#222" data-diaryx-drawing="1">
   <!-- Two boxes and an arrow between them: the diagram every editor is asked for first. -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -6,9 +6,11 @@
     </marker>
   </defs>
   <style>
-    rect, ellipse { fill: none; stroke: #222; stroke-width: 2 }
-    line { stroke: #222; stroke-width: 2 }
-    text { font: 14px sans-serif; text-anchor: middle }
+    @media (prefers-color-scheme: dark) { svg { color: #e6e6e6 } }
+    rect, ellipse { fill: none; stroke: currentColor; stroke-width: 2 }
+    line { stroke: currentColor; stroke-width: 2 }
+    marker path { fill: currentColor; stroke: none }
+    text { font: 14px sans-serif; text-anchor: middle; fill: currentColor }
   </style>
   <rect x="20" y="40" width="100" height="60" rx="6" data-id="s1"/>
   <text x="70" y="75" data-id="s2">twig</text>
