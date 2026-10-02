@@ -33,6 +33,11 @@ public final class DrawingDocument {
     /// `@media` blocks; empty when it has none.
     public var darkRules: String { inner.darkRules() }
 
+    /// Whether the file says how it looks on a dark page — it keeps rules
+    /// for one. One that does not is dark ink meant for a light page, and
+    /// a canvas shows it on one whatever its own appearance.
+    public private(set) var hasDarkRules = false
+
     /// Called after every gesture; a view redraws here.
     public var onChange: (() -> Void)?
 
@@ -431,14 +436,13 @@ public final class DrawingDocument {
 
     private func reparse() {
         var text = source
+        let rules = darkRules
+        hasDarkRules = !rules.isEmpty
         // Last, so each wins over the file's own rule at the same
         // specificity, as a later rule does; a `<style>` is a style
         // wherever it sits.
-        if dark, let end = text.range(of: "</svg>", options: .backwards) {
-            let rules = darkRules
-            if !rules.isEmpty {
-                text.replaceSubrange(end, with: "<style>\(rules)</style></svg>")
-            }
+        if dark, hasDarkRules, let end = text.range(of: "</svg>", options: .backwards) {
+            text.replaceSubrange(end, with: "<style>\(rules)</style></svg>")
         }
         picture = try? SVGPicture(data: Data(text.utf8))
     }

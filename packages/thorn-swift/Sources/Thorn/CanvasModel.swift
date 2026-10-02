@@ -233,6 +233,12 @@ public final class CanvasModel {
             }
         }
     }
+    /// What the page is drawn on: the appearance's sheet, but a light one
+    /// for a file that keeps no rules for a dark page, whose ink is meant
+    /// for a light one and would be lost on a dark sheet.
+    var paper: CGColor {
+        document.hasDarkRules ? appearance.sheet : Appearance.light.sheet
+    }
     public var appearance: Appearance = .light {
         didSet {
             guard appearance != oldValue else { return }
@@ -350,10 +356,11 @@ public final class CanvasModel {
 
         // The desk, and the page on it: a sheet where the page is, which
         // follows the shapes, so a shape dragged off its edge is watched
-        // taking the sheet with it. Both in the appearance's greys.
+        // taking the sheet with it. Both in the appearance's greys, but
+        // see `paper`.
         context.setFillColor(appearance.desk)
         context.fill(rect)
-        context.setFillColor(appearance.sheet)
+        context.setFillColor(paper)
         context.fill(viewRect(document.page ?? CGRect(origin: .zero, size: picture.size)))
         // The picture, unclipped: resvg lays the `viewBox` out in the
         // picture's own size (`width`/`height`, or the `viewBox`'s when
@@ -388,16 +395,16 @@ public final class CanvasModel {
                 context.strokePath()
                 for (end, p) in [(End.from, c.from), (.to, c.to)] {
                     let bound = document.binding(id: id, end) != nil
-                    context.setFillColor(bound ? accent : appearance.sheet)
+                    context.setFillColor(bound ? accent : paper)
                     handleBox(at: viewPoint(p.cgPoint), in: context)
                 }
-                context.setFillColor(appearance.sheet)
+                context.setFillColor(paper)
                 handleDot(at: viewPoint(c.midpoint.cgPoint), in: context)
                 continue
             }
             context.stroke(r)
             guard resizable == id else { continue }
-            context.setFillColor(appearance.sheet)
+            context.setFillColor(paper)
             for h in Handle.all {
                 handleBox(at: h.position(on: r), in: context)
             }

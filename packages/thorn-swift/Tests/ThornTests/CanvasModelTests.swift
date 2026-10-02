@@ -94,6 +94,22 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertFalse(try doc.undo())
     }
 
+    /// A file that keeps no rules for a dark page is dark ink meant for a
+    /// light one: in dark mode its sheet stays light, the desk around it
+    /// dark.
+    func testAFileWithNoDarkRulesIsDrawnOnALightSheetInDarkMode() throws {
+        let doc = try DrawingDocument(source: scene)
+        XCTAssertFalse(doc.hasDarkRules)
+        let model = CanvasModel(document: doc)
+        model.setZoom(1, about: .zero)
+        model.appearance = .dark
+        let context = makeContext()
+        model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
+        let blank = model.viewPoint(CGPoint(x: 100, y: 20))
+        XCTAssertEqual(pixel(context, Int(blank.x), Int(blank.y)).0, 255, "a light sheet")
+        XCTAssertTrue(DrawingDocument.fresh().hasDarkRules, "the template keeps them")
+    }
+
     func testShiftClickSelectsSeveralAndGroupsThem() throws {
         let doc = try DrawingDocument(source: scene)
         let model = CanvasModel(document: doc)
