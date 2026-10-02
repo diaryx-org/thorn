@@ -657,7 +657,10 @@ final class CanvasModelTests: XCTestCase {
         model.setWeight(.thin)
         XCTAssertEqual(doc.weight(id: id), .thin)
         XCTAssertEqual(model.weight, .bold, "the pen is untouched")
-        XCTAssertTrue(doc.source.contains("data-weight=\"thin\""))
+        // The scene has no <style> to carry the word's rules: the look goes
+        // into the shape's own.
+        XCTAssertTrue(doc.source.contains("stroke-width: 1\"/>"), doc.source)
+        XCTAssertFalse(doc.source.contains("data-weight"), doc.source)
 
         // And a corner, on the box alone.
         XCTAssertEqual(model.selectedBoxes, [id])
