@@ -1,4 +1,4 @@
-//! The drawing's `<style>`, read just far enough to know what it strokes.
+//! The drawing's `<style>`, read through [`crate::css`].
 //!
 //! A bent connector is a `<path>`, and how it looks is the drawing's own
 //! stylesheet's to say. A drawing made before the template styled `path`
@@ -10,84 +10,23 @@
 //! path is an outline. A stylesheet that already has a rule for a bare
 //! `path` is left alone: its author has said what a path is.
 //!
-//! This is not a CSS parser. It walks top-level `selector { declarations }`
-//! blocks, skips comments and any `@`-rule block whole, and never reads
-//! inside a declaration beyond asking whether a property is named.
+//! Every rule, selector and declaration is the parser's; what is spliced
+//! here is spliced where it says, since fig's editor inserts a member only
+//! after the last, and these edits put a declaration first and a rule
+//! between two. A stylesheet that is not CSS is left as it is.
 
-use std::ops::Range;
-
+use crate::css::{self, Body, Rule};
 use crate::shape::Hue;
 
-/// A top-level rule: where its selector list and its declarations are in
-/// the stylesheet text.
-#[derive(Debug, PartialEq)]
-struct Rule {
-    selectors: Range<usize>,
-    declarations: Range<usize>,
-}
-
-/// The top-level rules of `css`, in order. An `@media` (or any at-rule)
-/// block is skipped whole, comments are skipped, and text that never
-/// closes is dropped.
+/// The top-level rules of `css` that hold declarations — what a type
+/// selector can be widened in and a word's rules sit beside. Nothing for
+/// a stylesheet that does not parse.
 fn rules(css: &str) -> Vec<Rule> {
-    let bytes = css.as_bytes();
-    let mut rules = Vec::new();
-    let mut i = 0;
-    let mut prelude_start = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'/' if bytes.get(i + 1) == Some(&b'*') => {
-                // A comment before a selector list is not part of it.
-                let leading = css[prelude_start..i].trim().is_empty();
-                i = css[i + 2..]
-                    .find("*/")
-                    .map(|n| i + 2 + n + 2)
-                    .unwrap_or(bytes.len());
-                if leading {
-                    prelude_start = i;
-                }
-            }
-            b'{' => {
-                let prelude = prelude_start..i;
-                if css[prelude.clone()].trim_start().starts_with('@') {
-                    // An at-rule's block may nest; skip to its close.
-                    let mut depth = 0usize;
-                    let mut j = i;
-                    while j < bytes.len() {
-                        match bytes[j] {
-                            b'{' => depth += 1,
-                            b'}' => {
-                                depth -= 1;
-                                if depth == 0 {
-                                    break;
-                                }
-                            }
-                            _ => {}
-                        }
-                        j += 1;
-                    }
-                    i = j + 1;
-                } else {
-                    let Some(close) = css[i..].find('}') else {
-                        break;
-                    };
-                    rules.push(Rule {
-                        selectors: prelude,
-                        declarations: i + 1..i + close,
-                    });
-                    i += close + 1;
-                }
-                prelude_start = i;
-            }
-            _ => i += 1,
-        }
-    }
-    rules
-}
-
-/// The selectors of a list, trimmed, in order.
-fn selectors(list: &str) -> impl Iterator<Item = &str> {
-    list.split(',').map(str::trim).filter(|s| !s.is_empty())
+    css::stylesheet(css)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|r| matches!(r.body, Body::Declarations { .. }))
+        .collect()
 }
 
 /// Whether a selector is a `line` type selector, alone or qualified —
@@ -98,18 +37,11 @@ fn selects_line(selector: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || rest.starts_with(['[', '.', ':', '#']))
 }
 
-/// The value a declaration block gives `property`, trimmed, if it names
-/// it.
-fn declared<'a>(declarations: &'a str, property: &str) -> Option<&'a str> {
-    declarations.split(';').find_map(|d| {
-        let (name, value) = d.split_once(':')?;
-        (name.trim() == property).then(|| value.trim())
-    })
-}
-
-/// Whether a declaration block names `property`.
-fn declares(declarations: &str, property: &str) -> bool {
-    declared(declarations, property).is_some()
+/// The leading whitespace of the line `at` is on.
+fn indent_of(css: &str, at: usize) -> &str {
+    let line = css[..at].rfind('\n').map_or(0, |i| i + 1);
+    let text = &css[line..];
+    &text[..text.len() - text.trim_start().len()]
 }
 
 /// `css` with every rule that selects a `line` selecting its `path` twin
@@ -118,53 +50,50 @@ fn declares(declarations: &str, property: &str) -> bool {
 /// rule already selects a bare `path`.
 pub(crate) fn widened_for_paths(css: &str) -> Option<String> {
     let rules = rules(css);
-    if rules
-        .iter()
-        .any(|r| selectors(&css[r.selectors.clone()]).any(|s| s == "path"))
-    {
+    let list = |r: &Rule| css::selectors(&css[r.prelude.clone()]);
+    if rules.iter().any(|r| list(r).contains(&"path")) {
         return None;
     }
     let mut out = String::with_capacity(css.len() + 64);
     let mut at = 0;
-    let mut changed = false;
     let mut stroke = None;
+    let mut last = None;
     for rule in &rules {
-        let list = &css[rule.selectors.clone()];
-        let twins: Vec<String> = selectors(list)
+        let twins: Vec<String> = list(rule)
+            .into_iter()
             .filter(|s| selects_line(s))
             .map(|s| format!("path{}", &s["line".len()..]))
             .collect();
         if twins.is_empty() {
             continue;
         }
-        changed = true;
-        // The twins follow the list, before the whitespace that leads
-        // into the brace: `line, path {` and `line[…], path[…] {`.
-        let trimmed = list.trim_end();
-        out.push_str(&css[at..rule.selectors.start + trimmed.len()]);
+        let Body::Declarations { open, close, .. } = rule.body else {
+            unreachable!("only declaration blocks are kept");
+        };
+        // The twins follow the list, before what leads into the brace:
+        // `line, path {` and `line[…], path[…] {`.
+        out.push_str(&css[at..rule.prelude.end]);
         for twin in &twins {
             out.push_str(", ");
             out.push_str(twin);
         }
-        out.push_str(&list[trimmed.len()..]);
-        out.push('{');
-        let declarations = &css[rule.declarations.clone()];
+        out.push_str(&css[rule.prelude.end..=open]);
         if stroke.is_none() {
-            stroke = declared(declarations, "stroke");
+            stroke = rule.declared("stroke");
         }
-        if declares(declarations, "stroke") && !declares(declarations, "fill") {
-            let lead = declarations.len() - declarations.trim_start().len();
-            out.push_str(&declarations[..lead]);
+        let block = &css[open + 1..close];
+        if rule.declared("stroke").is_some() && rule.declared("fill").is_none() {
+            let lead = block.len() - block.trim_start().len();
+            out.push_str(&block[..lead]);
             out.push_str("fill: none; ");
-            out.push_str(&declarations[lead..]);
+            out.push_str(&block[lead..]);
         } else {
-            out.push_str(declarations);
+            out.push_str(block);
         }
-        at = rule.declarations.end;
+        at = close;
+        last = Some(rule);
     }
-    if !changed {
-        return None;
-    }
+    let last = last?;
     // The widened rule reaches the arrowhead's own `<path>` inside the
     // `<marker>` too, which was a filled triangle by SVG's default; a
     // rule of its own keeps it one, in the colour the line is stroked,
@@ -172,17 +101,9 @@ pub(crate) fn widened_for_paths(css: &str) -> Option<String> {
     // stylesheet has one already.
     out.push_str(&css[at..at + 1]);
     at += 1;
-    if !rules
-        .iter()
-        .any(|r| selectors(&css[r.selectors.clone()]).any(|s| s == "marker path"))
-    {
-        let last = rules
-            .iter()
-            .rev()
-            .find(|r| selectors(&css[r.selectors.clone()]).any(selects_line))
-            .expect("a rule was widened");
-        let list = &css[last.selectors.clone()];
-        out.push_str(&list[..list.len() - list.trim_start().len()]);
+    if !rules.iter().any(|r| list(r).contains(&"marker path")) {
+        out.push('\n');
+        out.push_str(indent_of(css, last.prelude.start));
         out.push_str(&marker_rule(stroke.unwrap_or("currentColor")));
     }
     out.push_str(&css[at..]);
@@ -258,27 +179,18 @@ pub(crate) fn marker_markup(hue: Hue, indent: &str) -> String {
 /// indentation (a rule of several lines has each indented), unless a
 /// selector already mentions `word` — in which case its author has said
 /// what the word means, and `None`. A stylesheet with no rules at all
-/// takes them on lines of their own.
+/// takes them on lines of their own; one that is not CSS is left alone.
 pub(crate) fn with_rules<S: AsRef<str>>(css: &str, word: &str, rules: &[S]) -> Option<String> {
-    let found = self::rules(css);
-    if found
-        .iter()
-        .any(|r| css[r.selectors.clone()].contains(word))
-    {
+    let found = css::stylesheet(css).ok()?;
+    if mentions(css, &found, word) {
         return None;
     }
     let mut out = String::with_capacity(css.len() + 128);
-    // Just past the last top-level `}` — a plain rule's or an at-rule
-    // block's — indented as the line that `}` is on.
-    let (head, indent, tail) = match last_block_end(css) {
-        Some(end) => {
-            let line = css[..end].rfind('\n').map_or(0, |i| i + 1);
-            let text = &css[line..end];
-            (
-                &css[..end],
-                &text[..text.len() - text.trim_start().len()],
-                &css[end..],
-            )
+    // Just past the last top-level rule, indented as the line its end is on.
+    let (head, indent, tail) = match found.last() {
+        Some(last) => {
+            let end = last.span.end;
+            (&css[..end], indent_of(css, end - 1), &css[end..])
         }
         None => (css.trim_end(), "", "\n"),
     };
@@ -292,33 +204,17 @@ pub(crate) fn with_rules<S: AsRef<str>>(css: &str, word: &str, rules: &[S]) -> O
     Some(out)
 }
 
-/// One past the last top-level `}` in `css`, at-rule blocks included;
-/// `None` when there is no block at all.
-fn last_block_end(css: &str) -> Option<usize> {
-    let mut depth = 0usize;
-    let mut end = None;
-    let mut i = 0;
-    let bytes = css.as_bytes();
-    while i < bytes.len() {
-        match bytes[i] {
-            b'/' if bytes.get(i + 1) == Some(&b'*') => {
-                i = css[i + 2..]
-                    .find("*/")
-                    .map_or(bytes.len(), |n| i + 2 + n + 2);
-                continue;
-            }
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    end = Some(i + 1);
+/// Whether any selector among `rules`, at any depth, mentions `word`.
+fn mentions(css: &str, rules: &[Rule], word: &str) -> bool {
+    rules.iter().any(|r| {
+        css[r.prelude.clone()].contains(word)
+            || match &r.body {
+                Body::Rules { rules, .. } | Body::Declarations { rules, .. } => {
+                    mentions(css, rules, word)
                 }
+                Body::Statement => false,
             }
-            _ => {}
-        }
-        i += 1;
-    }
-    end
+    })
 }
 
 /// The rules a drawing keeps for a darker page — the body of every
@@ -326,41 +222,25 @@ fn last_block_end(css: &str) -> Option<usize> {
 /// editor drawing the file in dark mode can apply them itself: resvg does
 /// not read `@media`. Empty when the stylesheet has none.
 pub(crate) fn dark_rules(css: &str) -> String {
-    let mut out = String::new();
-    let mut at = 0;
-    while let Some(i) = css[at..].find("@media") {
-        let start = at + i;
-        let Some(brace) = css[start..].find('{') else {
-            break;
-        };
-        let prelude: String = css[start + "@media".len()..start + brace]
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
-        let open = start + brace;
-        // The block's close, nesting counted.
-        let mut depth = 0usize;
-        let mut close = None;
-        for (j, b) in css[open..].bytes().enumerate() {
-            match b {
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        close = Some(open + j);
-                        break;
-                    }
-                }
-                _ => {}
+    fn gather(css: &str, rules: &[Rule], out: &mut String) {
+        for rule in rules {
+            let Body::Rules { inner, rules } = &rule.body else {
+                continue;
+            };
+            let prelude: String = css[rule.prelude.clone()]
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect();
+            if prelude == "@media(prefers-color-scheme:dark)" {
+                out.push_str(&css[inner.clone()]);
+                out.push('\n');
+            } else {
+                gather(css, rules, out);
             }
         }
-        let Some(close) = close else { break };
-        if prelude == "(prefers-color-scheme:dark)" {
-            out.push_str(css[open + 1..close].trim());
-            out.push('\n');
-        }
-        at = close + 1;
     }
+    let mut out = String::new();
+    gather(css, &css::stylesheet(css).unwrap_or_default(), &mut out);
     out
 }
 
@@ -382,11 +262,16 @@ mod tests {
         let css = "@media (prefers-color-scheme: dark) { svg { color: #eee } }\n/* a { b: c } */ line { stroke: red } text{}";
         let found: Vec<(&str, &str)> = rules(css)
             .iter()
-            .map(|r| (&css[r.selectors.clone()], &css[r.declarations.clone()]))
+            .map(|r| {
+                let Body::Declarations { open, close, .. } = r.body else {
+                    unreachable!()
+                };
+                (&css[r.prelude.clone()], &css[open + 1..close])
+            })
             .collect();
         assert_eq!(
             found,
-            vec![(" line ", " stroke: red "), (" text", "")],
+            vec![("line", " stroke: red "), ("text", "")],
             "{found:?}"
         );
     }

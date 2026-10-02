@@ -28,6 +28,7 @@
 //! the separator a dialect declares is `;`. A property or a selector that
 //! repeats is in the tree each time; a path names the first.
 
+use std::ops::Range;
 use std::sync::OnceLock;
 
 use fig::language::{
@@ -347,12 +348,7 @@ impl Parser<'_> {
             ));
             let key_end = self.trim_end(start, open);
             self.string(kv, start, key_end);
-            let name = &self.src[start..key_end];
-            let name = name
-                .split(|c: char| c.is_whitespace() || c == '(')
-                .next()
-                .unwrap_or("");
-            if at_rule && !DECLARATION_AT_RULES.contains(&name) {
+            if at_rule && holds_rule_list(&self.src[start..key_end]) {
                 // A block of rules: block, not flow — its span starts at its
                 // first rule, so no `{` is sniffed — since its members are
                 // separated by nothing a dialect could declare.
@@ -481,6 +477,149 @@ fn print_rules(rows: &[NodeRow], parent: usize, indent: &str, out: &mut String) 
             out.push_str(" }\n");
         }
     }
+}
+
+/// One rule of a stylesheet as [`stylesheet`] reads it: where each part
+/// is in the text, so a caller that must splice somewhere fig's editor
+/// does not insert — before a block's first declaration, between two
+/// rules — splices where the parser says, and never scans for itself.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rule {
+    /// The selector list, or an at-rule's name and prelude, trimmed.
+    pub prelude: Range<usize>,
+    /// The whole rule: its prelude through its `}`, or its `;`.
+    pub span: Range<usize>,
+    pub body: Body,
+}
+
+/// What a [`Rule`] holds.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Body {
+    /// An at-rule with no block: `@import url(a.css);`.
+    Statement,
+    /// A declaration block. `open` is the `{`, `close` the `}`; `rules` the
+    /// rules nested among the declarations.
+    Declarations {
+        open: usize,
+        close: usize,
+        declarations: Vec<Declaration>,
+        rules: Vec<Rule>,
+    },
+    /// An at-rule's block of rules. `inner` is its first rule through its
+    /// last, empty at the `}` for a block of none.
+    Rules {
+        inner: Range<usize>,
+        rules: Vec<Rule>,
+    },
+}
+
+/// One declaration: a property over its value, as written.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Declaration {
+    pub property: String,
+    pub value: String,
+    /// The property through the end of the value.
+    pub span: Range<usize>,
+}
+
+impl Rule {
+    /// The declarations of a declaration block; none for any other body.
+    pub fn declarations(&self) -> &[Declaration] {
+        match &self.body {
+            Body::Declarations { declarations, .. } => declarations,
+            _ => &[],
+        }
+    }
+
+    /// The value this rule's block gives `property`: the last, where it
+    /// repeats, since that is the one that applies.
+    pub fn declared(&self, property: &str) -> Option<&str> {
+        self.declarations()
+            .iter()
+            .rev()
+            .find(|d| d.property == property)
+            .map(|d| d.value.as_str())
+    }
+}
+
+/// A stylesheet's rules, in order — at-rules' blocks and nested rules
+/// held in the rule that holds them. An error is where the text stops
+/// being CSS.
+pub fn stylesheet(css: &str) -> Result<Vec<Rule>, LanguageError> {
+    let table = Css.parse(STYLESHEET, css.as_bytes())?;
+    Ok(rules_under(&table.rows, 0))
+}
+
+fn range(row: &NodeRow) -> Range<usize> {
+    row.span.map_or(0..0, |s| s.start..s.end)
+}
+
+fn rules_under(rows: &[NodeRow], parent: usize) -> Vec<Rule> {
+    members(rows, parent)
+        .filter(|&kv| parent == 0 || rows[kv + 2].kind == NodeKind::Mapping)
+        .map(|kv| {
+            let value = &rows[kv + 2];
+            let body = if value.kind != NodeKind::Mapping {
+                Body::Statement
+            } else if holds_rule_list(rows[kv + 1].text.as_deref().unwrap_or("")) {
+                Body::Rules {
+                    inner: range(value),
+                    rules: rules_under(rows, kv + 2),
+                }
+            } else {
+                let span = range(value);
+                Body::Declarations {
+                    open: span.start,
+                    close: span.end - 1,
+                    declarations: members(rows, kv + 2)
+                        .filter(|&d| rows[d + 2].kind != NodeKind::Mapping)
+                        .map(|d| Declaration {
+                            property: rows[d + 1].text.clone().unwrap_or_default(),
+                            value: rows[d + 2].text.clone().unwrap_or_default(),
+                            span: range(&rows[d]),
+                        })
+                        .collect(),
+                    rules: rules_under(rows, kv + 2),
+                }
+            };
+            Rule {
+                prelude: range(&rows[kv + 1]),
+                span: range(&rows[kv]),
+                body,
+            }
+        })
+        .collect()
+}
+
+/// Whether an at-rule named by `prelude` holds rules rather than
+/// declarations: the one test the parser makes when it reads its block.
+fn holds_rule_list(prelude: &str) -> bool {
+    let name = prelude
+        .split(|c: char| c.is_whitespace() || c == '(')
+        .next()
+        .unwrap_or("");
+    prelude.starts_with('@') && !DECLARATION_AT_RULES.contains(&name)
+}
+
+/// The selectors of a list, trimmed, split at its top-level commas — not
+/// at one inside `:is(a, b)` or `[x="a,b"]`.
+pub fn selectors(list: &str) -> Vec<&str> {
+    let p = Parser {
+        src: list,
+        b: list.as_bytes(),
+        t: NodeTable::new(),
+    };
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at <= list.len() {
+        let comma = p.scan(at, list.len(), b",").unwrap_or(list.len());
+        let s = list[at..comma].trim();
+        if !s.is_empty() {
+            out.push(s);
+        }
+        at = comma + 1;
+    }
+    out
 }
 
 /// The value a declaration list (a `style` attribute) gives `property`, as
