@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "thorn-svg"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1046,7 +1046,7 @@ dependencies = [
 
 [[package]]
 name = "thorn-svg-core"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "fig",
  "svgtypes",
@@ -1057,7 +1057,7 @@ dependencies = [
 
 [[package]]
 name = "thorn-svg-ffi"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "resvg-uniffi",
  "thiserror 2.0.20",
@@ -1465,7 +1465,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.4"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",

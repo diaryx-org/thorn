@@ -26,6 +26,13 @@ _No commits since the last tag._
 
 <!-- git-cliff:end -->
 
+## v0.2.0 — 2026-10-03
+
+### Breaking
+
+- **deps** — move to twig 4 ([`05905bf`](https://github.com/diaryx-org/thorn/commit/05905bf8dda9c6add7cfe1c76dcc19fee9d3ce9e))
+
+
 ## v0.1.4 — 2026-10-01
 
 ### Added
