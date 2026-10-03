@@ -19,9 +19,9 @@ readme = "README.md"
 
 [workspace.dependencies]
 # The tree editor under everything: parses the SVG as XML, keeps every byte it
-# is not asked to change, and owns undo. By crates.io version, as every
-# cross-repo edge in the org is; `~/diaryx/.cargo/patches.toml` is how to build
-# against a checkout. 3.8.1 is the first release with `set_node_attrs`,
+# is not asked to change, and owns undo. By crates.io version, as twig is one
+# of the org's foundations that stays there; `~/diaryx/.cargo/patches.toml` is
+# how to build against a checkout. 3.8.1 is the first release with `set_node_attrs`,
 # `move_before`/`move_after` and the `svg` dialect — the move, resize and
 # reorder gestures.
 twig-doc = "4.0.1"

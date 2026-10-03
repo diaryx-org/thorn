@@ -724,8 +724,7 @@ dependencies = [
 [[package]]
 name = "resvg-uniffi"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fb50c20dfb88231f6fbc93722a2d72ae585f21922b2616448b1eb81db0587b5"
+source = "git+https://github.com/diaryx-org/resvg-swift?branch=main#df505d1e936882f0e51f8cfc9dd5eae04b7d25df"
 dependencies = [
  "thiserror 1.0.69",
  "uniffi",
@@ -1396,8 +1395,7 @@ dependencies = [
 [[package]]
 name = "usvg-flatten"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acf9ed416dc6e438ffacd7ba8131394cf26a5c3e52c64f71b3a62759c9c3918e"
+source = "git+https://github.com/diaryx-org/resvg-swift?branch=main#df505d1e936882f0e51f8cfc9dd5eae04b7d25df"
 dependencies = [
  "gif",
  "image-webp",

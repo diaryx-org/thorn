@@ -1,5 +1,6 @@
 [package]
 name = "thorn-svg-ffi"
+publish = false
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -42,5 +43,6 @@ thiserror.workspace = true
 # inside the first. The Swift side (`ResvgCoreGraphics`, from the resvg-swift
 # package the canvas depends on) finds its `resvg_uniffi` symbols there. A
 # host that already carries resvg-uniffi in its own FFI crate (leaf-ffi does)
-# gets one copy either way, because Cargo unifies the version.
-resvg-uniffi = "0.1.4"
+# gets one copy either way, because both name the same source — git, `branch =
+# "main"`, spelled identically — and the host's Cargo.lock picks one commit.
+resvg-uniffi = { git = "https://github.com/diaryx-org/resvg-swift", branch = "main" }

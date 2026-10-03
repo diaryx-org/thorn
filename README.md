@@ -116,8 +116,7 @@ in the keychain and notary credentials in the environment; the head of
 `--no-notarize` does without the second.
 
 A pushed `v*.*.*` tag is a release:
-[`publish.yml`](.github/workflows/publish.yml) uploads the crates to
-crates.io, and [`mac-app.yml`](.github/workflows/mac-app.yml) attaches a
+[`mac-app.yml`](.github/workflows/mac-app.yml) attaches a
 signed, notarised `Thorn-<version>-aarch64.dmg` to the release and points the
 tap's `thorn-editor` cask at it
 (`brew install --cask diaryx-org/tap/thorn-editor`).
@@ -134,8 +133,11 @@ that, as `scripts/test-swift.sh` and `apps/thorn-editor/project.yml` do.
 
 ## Where it fits
 
-Depends on `twig-doc` by crates.io version, as every cross-repo edge in the
-org does; the Diaryx app will depend on it, and nothing else does. The org's
+Depends on `twig-doc` by crates.io version, and on `resvg-uniffi` from git.
+The crates are not on crates.io (0.2.0 was the last upload): the Diaryx app,
+the one consumer, names `thorn-svg-ffi` from git, `{ git =
+"https://github.com/diaryx-org/thorn", branch = "main" }`, and locks the
+commit it builds. The org's
 proposal, *A drawing editor over twig's SVG, as its own repository*, is the
 argument for this repository's existence and its boundaries.
 
