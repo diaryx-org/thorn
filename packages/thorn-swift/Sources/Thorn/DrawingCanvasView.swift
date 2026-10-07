@@ -192,7 +192,7 @@ public final class DrawingCanvasView: NSView, NSTextViewDelegate {
 #elseif canImport(UIKit)
 import UIKit
 
-public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecognizerDelegate, UIEditMenuInteractionDelegate {
+public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecognizerDelegate, UIEditMenuInteractionDelegate, UIPencilInteractionDelegate {
     public let model: CanvasModel
 
     /// How far a finger may miss a stroke or a handle, and how big a handle
@@ -221,13 +221,19 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecog
         doubleTap.numberOfTapsRequired = 2
         addGestureRecognizer(doubleTap)
 
+        // Fingers only, for both: a Pencil and the palm resting beside it
+        // are two touches, and not a pinch.
+        let fingers = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        pinch.allowedTouchTypes = fingers
         pinch.delegate = self
         addGestureRecognizer(pinch)
 
         // Two fingers dragged together pan, whatever the tool: a phone has
         // no scroll wheel and the hand tool is a tile away.
         let twoFingers = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
+        twoFingers.allowedTouchTypes = fingers
         twoFingers.minimumNumberOfTouches = 2
         twoFingers.maximumNumberOfTouches = 2
         twoFingers.delegate = self
@@ -246,6 +252,12 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecog
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(longPressed(_:)))
         addGestureRecognizer(longPress)
         addInteraction(UIEditMenuInteraction(delegate: self))
+
+        // A Pencil's double-tap, or a Pencil Pro's squeeze: the eraser and
+        // back, or the last tool, as the person set it in Settings.
+        let pencil = UIPencilInteraction()
+        pencil.delegate = self
+        addInteraction(pencil)
 
         let center = NotificationCenter.default
         center.addObserver(self, selector: #selector(keyboardWillShow(_:)), name: UIResponder.keyboardWillShowNotification, object: nil)
@@ -526,17 +538,53 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecog
     /// the pinch's or the pan's, and cancels the drag the first began.
     private var pointer: UITouch?
 
+    /// Whether a Pencil draws here and fingers do not: once a Pencil has
+    /// touched the canvas, or from the start when the person turned on
+    /// Settings' "Only Draw with Apple Pencil". Then a finger — or a palm
+    /// resting on the glass before the Pencil lands — makes no mark and
+    /// moves nothing under a tool that draws; it still selects, moves and
+    /// pans under select and the hand, and two fingers still pinch and pan
+    /// under any tool.
+    public private(set) var pencilDraws: Bool = {
+        if #available(iOS 17.5, *) { return UIPencilInteraction.prefersPencilOnlyDrawing }
+        return false
+    }()
+
+    /// Whether, under the current tool, a finger is the Pencil's to ignore.
+    private var fingersIgnored: Bool {
+        guard pencilDraws else { return false }
+        switch model.tool {
+        case .select, .hand: return false
+        default: return true
+        }
+    }
+
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard let t = touches.first else { return }
-        if pointer != nil {
-            pointer = nil
-            model.cancelPointer()
+        for t in touches {
+            if t.type == .pencil {
+                pencilDraws = true
+                // A palm that landed first and began something is the
+                // Pencil's to undo: what it began does not land.
+                if let p = pointer {
+                    guard p.type != .pencil else { continue }
+                    pointer = nil
+                    model.cancelPointer()
+                }
+            } else if pointer?.type == .pencil || fingersIgnored {
+                // A palm beside the Pencil, or a finger under a drawing tool.
+                continue
+            } else if pointer != nil {
+                // A second finger: the pinch's or the pan's.
+                pointer = nil
+                model.cancelPointer()
+                return
+            }
+            pointer = t
+            closeField(commit: true)
+            becomeFirstResponder()
+            model.beginPointer(at: t.location(in: self))
             return
         }
-        pointer = t
-        closeField(commit: true)
-        becomeFirstResponder()
-        model.beginPointer(at: t.location(in: self))
     }
 
     /// Every sample the touch coalesced since the last event, not just the
@@ -559,6 +607,45 @@ public final class DrawingCanvasView: UIView, UITextViewDelegate, UIGestureRecog
         guard let pointer, touches.contains(pointer) else { return }
         self.pointer = nil
         model.cancelPointer()
+    }
+
+    // MARK: The Pencil's double-tap and squeeze
+
+    /// The tool the double-tap or squeeze switched away from, to switch
+    /// back to.
+    private var toolBeforePencil: Tool?
+
+    @available(iOS 17.5, *)
+    public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveTap tap: UIPencilInteraction.Tap) {
+        pencilAction(UIPencilInteraction.preferredTapAction)
+    }
+
+    @available(iOS 17.5, *)
+    public func pencilInteraction(_ interaction: UIPencilInteraction, didReceiveSqueeze squeeze: UIPencilInteraction.Squeeze) {
+        guard squeeze.phase == .ended else { return }
+        pencilAction(UIPencilInteraction.preferredSqueezeAction)
+    }
+
+    /// Before iOS 17.5, the double-tap alone.
+    public func pencilInteractionDidTap(_ interaction: UIPencilInteraction) {
+        pencilAction(UIPencilInteraction.preferredTapAction)
+    }
+
+    /// What the person asked the Pencil's gesture to do: the eraser and
+    /// back, or the last tool and back. Anything else — a palette, a
+    /// shortcut — the canvas has no word for, and leaves alone.
+    private func pencilAction(_ action: UIPencilPreferredAction) {
+        let now = model.tool
+        switch action {
+        case .switchEraser:
+            model.tool = now == .eraser ? (toolBeforePencil ?? .draw) : .eraser
+        case .switchPrevious:
+            guard let before = toolBeforePencil else { return }
+            model.tool = before
+        default:
+            return
+        }
+        if model.tool != now { toolBeforePencil = now }
     }
 }
 #endif
