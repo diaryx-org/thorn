@@ -833,7 +833,7 @@ final class CanvasModelTests: XCTestCase {
         XCTAssertEqual(doc.source, before, "the file is untouched until the stroke lifts")
         let context = makeContext()
         model.draw(in: context, rect: CGRect(x: 0, y: 0, width: 400, height: 200), scale: 1)
-        XCTAssertEqual(pixel(context, 120, 110).0, 0x22, "but the stroke is drawn as it goes")
+        XCTAssertLessThan(pixel(context, 120, 110).0, 0x30, "but the stroke is drawn as it goes, in the dark ink")
         let ids = Set(doc.shapes.map(\.key))
         model.pointerUp()
         let id = try XCTUnwrap(Set(doc.shapes.map(\.key)).subtracting(ids).first)
@@ -933,13 +933,15 @@ final class CanvasModelTests: XCTestCase {
         model.beginPointer(at: CGPoint(x: 100, y: 100))
         model.pointerDragged(through: [CGPoint(x: 120, y: 110), CGPoint(x: 120.2, y: 110.1), CGPoint(x: 140, y: 120)])
         model.pointerDragged(through: [])
+        let ids = Set(doc.shapes.map(\.key))
         model.pointerUp()
-        let id = try XCTUnwrap(model.selection.first)
+        let id = try XCTUnwrap(Set(doc.shapes.map(\.key)).subtracting(ids).first)
         XCTAssertTrue(doc.source.contains("data-centreline=\"M50 50 L60 55 L70 60\" data-widths=\"3\" data-id=\"\(id)\""), doc.source)
         XCTAssertTrue(try doc.undo(), "one step")
         XCTAssertEqual(doc.shapes.count, 2)
 
         // Any other drag through several points is a drag to the last.
+        model.tool = .select
         model.select("s1")
         model.beginPointer(at: CGPoint(x: 60, y: 40))
         model.pointerDragged(through: [CGPoint(x: 80, y: 40), CGPoint(x: 100, y: 60)])

@@ -474,11 +474,10 @@ public final class CanvasModel {
         var digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
         let value = UInt64(digits, radix: 16) ?? 0
-        return CGColor(
-            red: CGFloat((value >> 16) & 0xff) / 255,
-            green: CGFloat((value >> 8) & 0xff) / 255,
-            blue: CGFloat(value & 0xff) / 255,
-            alpha: 1)
+        // In sRGB, as CSS means it and resvg draws it: `CGColor(red:…)`
+        // is the Mac's generic RGB, a lighter grey for the same numbers.
+        let components = [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff].map { CGFloat($0) / 255 } + [1]
+        return CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: components)!
     }
 
     /// The box `zoomToFit` fits to the view: the page, or, for a drawing
