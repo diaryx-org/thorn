@@ -435,6 +435,28 @@ public final class CanvasModel {
             context.setLineDash(phase: 0, lengths: [])
         }
 
+        // A stroke in flight is not in the file yet — it lands once, as
+        // it lifts — so it is drawn here as the nib's line along the
+        // centreline. Its colour is the pen's hue, or the template's ink
+        // for the sheet; a file that inks some other colour is seen in
+        // its own the moment the stroke lands.
+        if case .ink(let points) = drag, !previewed, let first = points.first {
+            let dark = document.hasDarkRules && appearance == .dark
+            let ink = hue.map { hueHex(hue: $0, dark: dark, tint: false) } ?? (dark ? "#e6e6e6" : "#222")
+            context.setStrokeColor(Self.cgColor(hex: ink))
+            context.setLineWidth(inkWidth * fit.a)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+            context.move(to: viewPoint(first))
+            for p in points.dropFirst() { context.addLine(to: viewPoint(p)) }
+            // A dot, when the pen has not moved: a round cap on nothing.
+            if points.count == 1 { context.addLine(to: viewPoint(first)) }
+            context.strokePath()
+            context.setLineCap(.butt)
+            context.setLineJoin(.miter)
+            context.setLineWidth(1)
+        }
+
         // What the eraser has passed over is outlined until it lifts.
         if case .erase(let ids) = drag {
             context.setStrokeColor(CGColor(red: 0.9, green: 0.2, blue: 0.2, alpha: 1))
@@ -445,6 +467,18 @@ public final class CanvasModel {
             }
             context.setLineDash(phase: 0, lengths: [])
         }
+    }
+
+    /// A CSS hex colour, `#rgb` or `#rrggbb`, as the template spells them.
+    static func cgColor(hex: String) -> CGColor {
+        var digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
+        let value = UInt64(digits, radix: 16) ?? 0
+        return CGColor(
+            red: CGFloat((value >> 16) & 0xff) / 255,
+            green: CGFloat((value >> 8) & 0xff) / 255,
+            blue: CGFloat(value & 0xff) / 255,
+            alpha: 1)
     }
 
     /// The box `zoomToFit` fits to the view: the page, or, for a drawing
@@ -599,7 +633,6 @@ public final class CanvasModel {
                 points.append(p)
             }
             drag = .ink(points: points)
-            preview()
             needsDisplay?()
         } else {
             pointerDragged(to: last)
@@ -629,9 +662,14 @@ public final class CanvasModel {
         case .create(let from, _):
             drag = .create(from: from, to: p)
         case .ink(var points):
+            // Drawn over the picture by `draw` until it lifts, rather than
+            // previewed: a preview re-parses the whole file, once per
+            // sample, and a Pencil sends 240 a second.
             if isNoise(p, after: points.last) { return }
             points.append(p)
             drag = .ink(points: points)
+            needsDisplay?()
+            return
         case .pan(let start, let from):
             pan = CGVector(dx: start.dx + viewPoint.x - from.x, dy: start.dy + viewPoint.y - from.y)
             needsDisplay?()
@@ -728,8 +766,9 @@ public final class CanvasModel {
             // A new note opens its label for typing at once.
             if let id = made, document.note(id: id) != nil { editNote(id: id) }
         case .ink:
+            // Not selected: the pen is kept for the next stroke, and a box
+            // around each one as it lands would only be in the way.
             if !previewed { previewed = apply() }
-            selection = previewed ? created.map { [$0] } ?? [] : []
             release()
         case .erase(let ids) where !ids.isEmpty:
             // One undo step for the whole sweep.

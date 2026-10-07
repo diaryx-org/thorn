@@ -79,11 +79,14 @@ extension Tool {
     }
 
     /// Whether one use of this tool makes one shape, after which the tool
-    /// falls back to select — unless the model is locked.
+    /// falls back to select — unless the model is locked. The pen is kept,
+    /// as Excalidraw's is: a word is written in several strokes, and a
+    /// Pencil that fell back to select after the first would drag the
+    /// stroke it had just made with the second.
     var isOneShot: Bool {
         switch self {
-        case .hand, .select, .eraser: false
-        case .rect, .diamond, .ellipse, .arrow, .line, .draw, .text, .note: true
+        case .hand, .select, .eraser, .draw: false
+        case .rect, .diamond, .ellipse, .arrow, .line, .text, .note: true
         }
     }
 
@@ -98,7 +101,7 @@ extension Tool {
 
     /// Whether this tool makes a shape a colour lands on: every create
     /// tool does.
-    var makesShape: Bool { isOneShot }
+    var makesShape: Bool { isOneShot || self == .draw }
 
     /// Whether this tool makes a box, so a corner picked with nothing
     /// selected is its to take. A note's frame is one.
