@@ -41,9 +41,9 @@ heard of survives every gesture exactly.
 
 ## Where it fits
 
-thorn is how [Diaryx](id:org/80k72t9) draws. It edits through
-[twig](id:twig/wxmq0ww)'s tree and displays through resvg-swift; a
-drawing in an entry is an image [leaf](id:leaf/6h2bs8f) shows, and
+thorn is how [Diaryx](id:dx4hxn744/80k72t9) draws. It edits through
+[twig](id:dx94n1gx2/wxmq0ww)'s tree and displays through resvg-swift; a
+drawing in an entry is an image [leaf](id:dxzdkqzcw/6h2bs8f) shows, and
 editing it opens the drawing as its own document.
 
 ## Status
