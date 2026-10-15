@@ -97,7 +97,7 @@ history:
 ## Building
 
 ```sh
-cargo xtask ci          # fmt, clippy, tests, per-crate isolation, binding drift
+ship ci                 # fmt, versions, clippy, tests, per-crate isolation, binding drift
 cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
 scripts/test-swift.sh   # the Swift package's tests, on a Mac
 cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-arrow.svg

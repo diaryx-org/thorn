@@ -2,10 +2,11 @@
 //! manifest parser will ever find, and the CI check that they agree.
 //!
 //! One such file today: the app's `MARKETING_VERSION` in
-//! `apps/thorn-editor/project.yml`. The release tooling moves every Cargo
-//! manifest and the lockfile, and knows nothing about an Xcode setting — so
-//! `.config/release.toml` names this task as the bump's `post_bump` and lists
-//! the file among `extra_version_files`, so a release commit carries it.
+//! `apps/thorn-editor/project.yml`. `ship` moves every Cargo manifest and the
+//! lockfile, and knows nothing about an Xcode setting — so `.config/ship.figl`
+//! names this task as the bump's `post_bump` and lists the file among
+//! `extra_version_files`, so a release commit carries it. `--check` is the
+//! `versions` CI job.
 
 use crate::util::{read, root};
 use anyhow::{Context, Result, bail};
@@ -72,7 +73,7 @@ pub fn run_task() -> Result<()> {
     Ok(())
 }
 
-/// The CI job: every follower states the workspace version.
+/// `--check`, the CI job: every follower states the workspace version.
 pub fn check() -> Result<()> {
     let version = workspace_version()?;
     for (path, prefix) in FOLLOWERS {
