@@ -1032,6 +1032,7 @@ dependencies = [
  "svgtypes",
  "thiserror 2.0.20",
  "twig-doc",
+ "twig-xml",
  "usvg",
 ]
 
@@ -1127,55 +1128,28 @@ dependencies = [
 
 [[package]]
 name = "twig-doc"
-version = "4.0.1"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fec21bef3a70ee790273973779f6fe06c3e799c80290744b94ff44edc5cce5"
+checksum = "0cd6cc20c4f31dd31e5e56dfa7d01f3dbdf5692695b1007e8c54640f9766193f"
 dependencies = [
- "twig-sys",
+ "twig-kit",
 ]
 
 [[package]]
-name = "twig-sys"
-version = "4.0.1"
+name = "twig-kit"
+version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b11592bb6fcb414f5113a58f39c2c2f64305069376961a5479339bb98e40b6e4"
+checksum = "1bc21949975c1e3c5ab858d0d104e9d4f4d6000e1dcfa9e46bb7dcc460bba24f"
+
+[[package]]
+name = "twig-xml"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8634fdd8e854401a1f21aef62ef80e3a87d1723ad59e810f6a633c66bf2c42c6"
 dependencies = [
- "twig-sys-linux-arm64-gnu",
- "twig-sys-linux-x64-gnu",
- "twig-sys-macos-arm64",
- "twig-sys-wasm32",
- "twig-sys-windows-x64-msvc",
+ "twig-doc",
+ "twig-kit",
 ]
-
-[[package]]
-name = "twig-sys-linux-arm64-gnu"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2180d01a6591ba271f3fb5953ace853128f6a13953c38f4deaa53ec97999ff65"
-
-[[package]]
-name = "twig-sys-linux-x64-gnu"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "526a7761e5f8d477989e74b301a87ee263de5b0e32dce1ad4229719ab2714d4e"
-
-[[package]]
-name = "twig-sys-macos-arm64"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e0690f38799f3fd9c5fcb22a4ef54f3b754c35638d25b190467a7c31cab1d4b"
-
-[[package]]
-name = "twig-sys-wasm32"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97c7d9680ac1f598863391f06f998c224e1d2f027e2937fe4f72e4407a205112"
-
-[[package]]
-name = "twig-sys-windows-x64-msvc"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab10dc47862d50b3d8115f01321ee6e86fdcd4d7d0ab2a48c2d2e66e04141133"
 
 [[package]]
 name = "unicode-bidi"

@@ -11,7 +11,7 @@ part_of: '[Tasks](tasks.md)'
 
 The composer is the second consumer and the reason the core is Rust.
 `crates/thorn-svg-wasm` over `thorn-svg-core` through `wasm-bindgen`, the
-shape leaf-wasm has, with the same surface as the FFI crate. twig-sys has a
-`wasm32` payload, so the core already compiles there.
+shape leaf-wasm has, with the same surface as the FFI crate. twig is pure
+Rust, so the core already compiles there.
 
 Nothing in the first milestone needs it; opened so the layout is stated.

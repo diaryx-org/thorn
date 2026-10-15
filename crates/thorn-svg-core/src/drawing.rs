@@ -36,7 +36,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
-use twig::{Editor, FlatNode, Format, Kind, NodeId};
+use twig::{Editor, FlatNode, Kind, NodeId};
 
 use crate::connector::{Connector, End};
 use crate::css;
@@ -396,7 +396,7 @@ impl Drawing {
     /// still opens — [`Drawing::check`] says how — because a drawing a hand
     /// wrote is still a drawing.
     pub fn open(source: &str) -> Result<Self, Error> {
-        let editor = Editor::new_str(source, Format::Svg).map_err(Error::Parse)?;
+        let editor = Editor::new_str(source, twig_xml::svg()).map_err(Error::Parse)?;
         let mut drawing = Self {
             editor,
             pen: Pen::default(),
