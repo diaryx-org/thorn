@@ -21,11 +21,12 @@
 //!   arithmetic under move and resize; [`hit`] is what is under the pointer
 //!   and the handles a selection is resized by; [`measure`] is how a host
 //!   lends the core its fonts, so a `<text>`'s box is the one it draws.
-//!   [`css`] is CSS as a fig language, so a `<style>` or a `style`
-//!   attribute is edited by splice, as twig edits the element tree.
+//!   [`css`] is CSS as a fig language (the `fig-css` crate, which leaf
+//!   shares), so a `<style>` or a `style` attribute is edited by splice, as
+//!   twig edits the element tree.
 
 pub mod connector;
-pub mod css;
+pub use fig_css as css;
 pub mod drawing;
 pub mod geometry;
 pub mod hit;

@@ -337,55 +337,35 @@ dependencies = [
 
 [[package]]
 name = "fig"
-version = "5.1.0"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba5e4742c41cebab8696a46f8ae8fbd3520242a9b79d8e6b83d979785115c8e"
+checksum = "1912585cea7b84fd1cbacdd0ee85c57b12f54cc46a917145d97a62b95c3eafab"
 dependencies = [
- "fig-sys",
+ "fig-core",
 ]
 
 [[package]]
-name = "fig-sys"
-version = "5.1.0"
+name = "fig-core"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54a644b855e046810e1b8666f9532a1a5d96659cef7de4dc1f853c96df5a89b2"
+checksum = "310da8e88299b38abe3aadfa1aecce5c46a93dc767ee38900f23e9f630e05290"
 dependencies = [
- "fig-sys-linux-arm64-gnu",
- "fig-sys-linux-x64-gnu",
- "fig-sys-macos-arm64",
- "fig-sys-wasm32",
- "fig-sys-windows-x64-msvc",
+ "fig-kit",
 ]
 
 [[package]]
-name = "fig-sys-linux-arm64-gnu"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b018c318dddd9e0060bb5a48ef23b07679bb501120fcd69c2ff4b4cbf2017536"
+name = "fig-css"
+version = "0.1.0"
+source = "git+https://github.com/diaryx-org/fig-css?branch=main#d2400882084ed83510f452ded0603cf1d05fc611"
+dependencies = [
+ "fig",
+]
 
 [[package]]
-name = "fig-sys-linux-x64-gnu"
-version = "5.1.0"
+name = "fig-kit"
+version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e698461ae61a0b9996d733fb35358e152a31b8c68c31613df076d2363078db8d"
-
-[[package]]
-name = "fig-sys-macos-arm64"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12caa64496bcfbd634e6441c9c949c6e93f9ee9057c5b6749733ea2205b03e9b"
-
-[[package]]
-name = "fig-sys-wasm32"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edcbef3f28e6a4b178eaa0b72d9a90a45ad0bede0ee4ba5db551bf3ecbc4d53a"
-
-[[package]]
-name = "fig-sys-windows-x64-msvc"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f79917781a928e32486a92197e921b6fe9184cd4ceb04901d153c360ffc7a86"
+checksum = "a0005cbc0579d07474d9a452c76f23cbf55ba6c82dd84c7e7ed5c38ace903a7a"
 
 [[package]]
 name = "flate2"
@@ -1048,6 +1028,7 @@ name = "thorn-svg-core"
 version = "0.2.0"
 dependencies = [
  "fig",
+ "fig-css",
  "svgtypes",
  "thiserror 2.0.20",
  "twig-doc",

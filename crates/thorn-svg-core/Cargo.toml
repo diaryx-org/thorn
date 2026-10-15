@@ -20,6 +20,9 @@ usvg = ["dep:usvg"]
 [dependencies]
 twig-doc.workspace = true
 svgtypes.workspace = true
-fig.workspace = true
+fig-css.workspace = true
 thiserror.workspace = true
 usvg = { workspace = true, optional = true }
+
+[dev-dependencies]
+fig.workspace = true

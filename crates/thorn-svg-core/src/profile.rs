@@ -353,6 +353,32 @@ pub fn check(drawing: &Drawing) -> Vec<Finding> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_template_stylesheet_parses_and_takes_a_rule() {
+        let open = TEMPLATE
+            .find("<style>")
+            .expect("the template has a <style>")
+            + "<style>".len();
+        let close = TEMPLATE.find("</style>").unwrap();
+        let css = &TEMPLATE[open..close];
+        let rules = crate::css::stylesheet(css).unwrap_or_else(|e| panic!("{e}"));
+        assert!(
+            rules
+                .iter()
+                .any(|r| css[r.prelude.clone()].starts_with("@media")),
+            "{rules:?}"
+        );
+        // A rule appended at the root is a selector over its block.
+        let sheet = crate::css::formats().expect("css registers").stylesheet;
+        let mut editor = fig::Editor::open(css.as_bytes(), sheet).unwrap();
+        editor
+            .set_value(&[fig::Segment::Key("circle")], "{ fill: none }")
+            .unwrap();
+        let added = editor.source().unwrap().to_string();
+        assert!(added.contains("\n    circle { fill: none }\n"), "{added}");
+        assert_eq!(added.replace("    circle { fill: none }\n", ""), css);
+    }
+
     fn rules(src: &str) -> Vec<Rule> {
         let mut rules = check(&Drawing::open(src).unwrap())
             .into_iter()
