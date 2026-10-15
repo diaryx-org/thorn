@@ -4600,7 +4600,7 @@ mod tests {
         d.set_dash("line", Some(Dash::Dotted)).unwrap();
         assert_eq!(
             style_of(&d, "line"),
-            "fill:none;stroke:#c62828;stroke-width:0.36px;stroke-linecap:round; stroke-dasharray: 1 5"
+            "fill:none;stroke:#c62828;stroke-width:0.36px;stroke-linecap:round;stroke-dasharray:1 5"
         );
         assert_eq!(d.dash("line"), Some(Dash::Dotted));
         d.set_dash("line", None).unwrap();
