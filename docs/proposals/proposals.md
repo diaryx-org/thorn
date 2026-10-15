@@ -17,7 +17,7 @@ The argument for this repository's existence is the org's proposal, *A
 drawing editor over twig's SVG, as its own repository*, and stays there.
 
 Each carries `status` in its frontmatter — `draft`, `accepted`,
-`implemented`, `deferred`, `rejected` — which `dx tasks` reads. The list
+`implemented`, `deferred`, `rejected` — which `org tasks` reads. The list
 above holds every proposal, resolved or not: the index is the spine, and
 what is unresolved is a view of it. Closing one is an edit that names the
 commit or release that resolved it, with the outcome in a **Status** section
