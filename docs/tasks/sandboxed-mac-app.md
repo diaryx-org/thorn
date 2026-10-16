@@ -36,8 +36,7 @@ What the repository does now:
 - **Apple Silicon only on the Mac** (`ARCHS[sdk=macosx*]: arm64`): an archive
   otherwise builds x86_64 too, against a staticlib that has none of it.
 - **`ci_scripts/ci_post_clone.sh`** installs XcodeGen, the Rust toolchain
-  rust-toolchain.toml names with the three Apple targets, and Zig 0.16.0
-  (twig-sys compiles from source for iOS), writes `CI_BUILD_NUMBER` as the
+  rust-toolchain.toml names with the three Apple targets, writes `CI_BUILD_NUMBER` as the
   build number, and generates the project. Package pins come from the
   committed root `Package.resolved`, which xcodebuild reads for the local
   package even with automatic resolution off.

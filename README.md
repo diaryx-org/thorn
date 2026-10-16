@@ -134,7 +134,8 @@ that, as `scripts/test-swift.sh` and `apps/thorn-editor/project.yml` do.
 
 ## Where it fits
 
-Depends on `twig-doc` by crates.io version, and on `resvg-uniffi` from git.
+Depends on `twig-doc` and `twig-xml` (SVG) by crates.io version, and on
+`resvg-uniffi` from git.
 The crates are not on crates.io (0.2.0 was the last upload): the Diaryx app,
 the one consumer, names `thorn-svg-ffi` from git, `{ git =
 "https://github.com/diaryx-org/thorn", branch = "main" }`, and locks the

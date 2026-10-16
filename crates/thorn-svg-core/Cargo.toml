@@ -19,6 +19,7 @@ usvg = ["dep:usvg"]
 
 [dependencies]
 twig-doc.workspace = true
+twig-xml.workspace = true
 svgtypes.workspace = true
 fig-css.workspace = true
 thiserror.workspace = true

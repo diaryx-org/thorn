@@ -106,9 +106,7 @@ targets:
         # ARCHS_STANDARD, still `arm64 x86_64`; the pre-build phase below builds
         # the staticlib for aarch64-apple-darwin alone, and the x86_64 link
         # fails on every `_uniffi_*` symbol. A universal build is a second Rust
-        # build and a lipo per archive, with twig compiled from Zig source for
-        # want of a prebuilt x86_64 payload; Intel Macs are not worth that
-        # here. iOS is unaffected: a device archive is arm64 already.
+        # build and a lipo per archive; Intel Macs are not worth that here. iOS is unaffected: a device archive is arm64 already.
         "ARCHS[sdk=macosx*]": arm64
         # The simulator needs no signing. The Mac needs none in Debug (below);
         # its Release build is the App Store's, and is signed.
@@ -172,9 +170,7 @@ targets:
         script: |
           set -euo pipefail
           # Xcode's build env has a minimal PATH; add the user's toolchains.
-          # ~/.local/bin is where ci_scripts/ci_post_clone.sh puts Zig on Xcode
-          # Cloud, which twig-sys compiles from source for the iOS targets.
-          export PATH="$HOME/.nix-profile/bin:$HOME/.cargo/bin:$HOME/.local/bin:/opt/homebrew/bin:$PATH"
+          export PATH="$HOME/.nix-profile/bin:$HOME/.cargo/bin:/opt/homebrew/bin:$PATH"
           cd "${PROJECT_DIR}/../.."        # repo root (workspace Cargo.toml)
 
           case "${PLATFORM_NAME}" in
