@@ -38,23 +38,16 @@ fields:
 views:
   open-tasks:
     label: Open tasks
-    group: status
-    under: '[[Tasks]]'
-    where:
-      has: status
-      not:
-        any-of:
-          - equals: { status: done }
-          - equals: { status: dropped }
+    where: "under('[[Tasks]]') && present(status) && !('done' in field('status') || 'dropped' in field('status'))"
+    key: status
   proposals:
     label: Proposals
-    group: status
-    under: '[[Proposals]]'
-    where: { has: status }
+    where: "under('[[Proposals]]') && present(status)"
+    key: status
   work:
     label: All work
-    group: status
-    where: { has: status }
+    where: "present(status)"
+    key: status
 exports:
   www:
     label: thorn on diaryx.org

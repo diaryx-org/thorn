@@ -1,11 +1,11 @@
 ---
 title: The workspace's views are not read
-part_of: '[Tasks](/docs/tasks/tasks.md)'
-status: open
+part_of: '[Closed tasks](/docs/tasks/closed/closed.md)'
+status: done
 author: adammharris
 created: 2026-10-21
 description: '`prov check` reports three findings in thorn: the views in `.config/prov.yaml` use retired keys and are not read, so `prov views open-tasks` answers that there is no such view, and every prov command in the workspace warns about them'
-updated: 2026-10-21
+updated: 2026-10-25
 ---
 
 # The workspace's views are not read
@@ -51,3 +51,9 @@ in a thorn task.
 
 `prov check` in thorn reports no findings, and `prov views open-tasks` lists
 the open tasks.
+
+## Resolution
+
+Done on 2026-10-25. The three views in `.config/prov.yaml` are written in
+CEL, as `prov check` spelled them, the way twig's were. `prov check` reports
+no findings, and `prov views open-tasks` lists the open tasks.
