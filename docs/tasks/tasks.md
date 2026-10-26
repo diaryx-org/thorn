@@ -8,7 +8,6 @@ contents:
 - '[The wasm binding, for the composer](wasm-binding.md)'
 - '[Style a shape the editor did not write, through css.rs](css-through-fig.md)'
 - '[Thorn on the App Store, through Xcode Cloud](sandboxed-mac-app.md)'
-- '[The workspace''s views are not read](/docs/tasks/views-not-read.md)'
 - '[Closed tasks](/docs/tasks/closed/closed.md)'
 part_of: '[thorn](/README.md)'
 ---

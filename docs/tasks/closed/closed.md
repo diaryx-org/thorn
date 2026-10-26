@@ -14,6 +14,7 @@ contents:
 - '[The style block a new drawing is created with](/docs/tasks/closed/style-template.md)'
 - '[The canvas view, on the Mac and on iOS](/docs/tasks/closed/swift-canvas.md)'
 - '[Uniffi 032 Needs A Resvg Release](/docs/tasks/closed/uniffi-032-needs-a-resvg-release.md)'
+- '[The workspace''s views are not read](/docs/tasks/closed/views-not-read.md)'
 ---
 
 # Closed tasks
