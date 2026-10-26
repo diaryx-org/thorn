@@ -25,8 +25,8 @@ readme = "README.md"
 # `twig-xml`, which registers it on first use. Without the default `fig`
 # feature: that is twig reading a document's frontmatter, and an SVG has
 # none, so the core links no fig language crates it would never call.
-twig-doc = { version = "6", default-features = false }
-twig-xml = "6"
+twig-doc = { version = "7", default-features = false }
+twig-xml = "7"
 # Rendering for the CLI's `render` and for a test that wants pixels. Same major
 # as leaf-raster and resvg-swift, so a host linking all three gets one copy.
 resvg = "0.46"
