@@ -8,6 +8,7 @@ contents:
 - '[Changelog](/docs/CHANGELOG.md)'
 - '[thorn on diaryx.org](/www/index.md)'
 - '[Audiences](/vocab/audiences.md)'
+- '[Archive](/archive/README.md)'
 config: .config/prov.yaml
 registry: registry.yaml
 id: qf27cd5
@@ -24,7 +25,7 @@ each end in one twig splice and one undo step.
 
 > **thorn**: a protrusion from a twig, and a sharp thing to draw with. `thorn`
 > itself is taken on crates.io, so the crates are `thorn-svg`, `thorn-svg-core`
-> and `thorn-svg-ffi`; the binary and the Swift product are `thorn` and `Thorn`.
+> and `thorn-svg-ffi`; the binaries are `thorn` (the CLI) and `Thorn` (the app).
 
 ```rust
 use thorn_svg_core::{Drawing, Order, Rect};
@@ -63,9 +64,9 @@ blank line still does ([docs/tasks/closed/delete-leaves-its-line.md](/docs/tasks
 |------|------------|
 | [`docs/profile.md`](docs/profile.md) | **What a Diaryx drawing SVG is.** The marker, `data-id` on every shape, the `data-` vocabulary, the number format that makes a re-export byte-stable. Held to by `thorn check` and the core's fixture tests. |
 | [`crates/thorn-svg-core`](crates/thorn-svg-core) | **The core.** Pure Rust over `twig-doc`: the shape model read off the element tree after every edit, the profile as code, the geometry under move and resize, and the gestures. No UI, no filesystem, no rendering. |
-| [`crates/thorn-svg-ffi`](crates/thorn-svg-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. A host links it into its one Rust staticlib. |
-| [`packages/thorn-swift`](packages/thorn-swift) | **The Swift package.** `ThornFFI` is the committed generated binding; `Thorn` is `DrawingDocument` (the gestures with Foundation types at the edges), `CanvasModel` (the canvas with no view in it: tool, selection, the pen — the words the next shape is born with — the drag in flight, the zoom and pan — a pinch's, a scroll's, ⌘+/⌘−/⌘0's — and drawing into a `CGContext` through resvg-swift: the page as a sheet on a desk in the view's light or dark appearance, the file's own dark-page rules applied for it, the picture unclipped, so a shape dragged off the edge is seen taking the page with it, and ⌘0 fits the page as it stands), `DrawingCanvasView` (AppKit / UIKit — on iOS a finger's tolerance and handles, a two-finger pan and a pinch, an iPad trackpad's scroll, every coalesced Pencil sample into the ink, drawn as it goes and written once as it lifts; once a Pencil has touched it, the Pencil draws and a finger or a resting palm does not, and its double-tap or squeeze is the eraser and back, a long-press menu of layers/group/delete/edit, and a field the keyboard pans the picture up for rather than covering) and `DrawingEditor` (SwiftUI, with the toolbar: a strip on the Mac and an iPad, a bar in thumb's reach on a phone). `Toolset.swift` is the toolbar's shape, Excalidraw's: lock, hand, select, rectangle, diamond, ellipse, arrow, line, draw, text, note, eraser, each with its keys (`R` or `2`, `Q` for the lock, Escape for select); the layering and grouping commands are a menu; under the tools, an options strip — the palette and a background, then dash and arrowheads — for the selection, or for the tool when nothing is selected. Every tool has its gesture in the core now. `Package.swift` sits at the repo root because SwiftPM needs it there. |
-| [`apps/thorn-editor`](apps/thorn-editor) | **Thorn**, the macOS + iOS drawing app (`Thorn.app`, `org.diaryx.thorn`), consuming `packages/thorn-swift`. Opens, edits and saves `.svg` through the document system — Finder's Open With, autosave, Versions, the Files app — with an icon and a marketing version the release bump moves. An xcodegen project; `App/` is the chrome only. |
+| [`crates/thorn-svg-ffi`](crates/thorn-svg-ffi) | **The UniFFI binding.** One object, `Drawing`; the core's records mirrored as value types. The Diaryx app calls it as a Rust crate; its Swift binding went with the Swift frontend into the archive. |
+| [`crates/thorn-dioxus`](crates/thorn-dioxus) | **The editor, as Dioxus components.** `Canvas` is the canvas with no view in it: tool, selection, the pen — the words the next shape is born with — the drag in flight and its preview, undone before the next so a gesture lands as one undo step, the zoom and pan — a scroll's, a pinch's, ⌘+/⌘−/⌘0's — and what is drawn over the picture. `DrawingCanvas` draws it: the page as a sheet on a desk in the light or dark appearance, the drawing's own SVG inline over the page and every shape off its edge, so a shape dragged off the page is seen taking it along, the file's dark-page rules applied for a dark one, the selection and its handles, and the field a label is typed into. `DrawingEditor` floats the toolbar over it in [unit](https://github.com/diaryx-org/unit)'s controls, Excalidraw's: lock, hand, select, rectangle, diamond, ellipse, arrow, line, draw, text, note, eraser, each with its keys (`R` or `2`, `Q` for the lock, Escape for select), the layering and grouping commands a menu; under the tools, an options strip — the palette and a background, then weight, dash, corners and arrowheads — for the selection, or for the tool when nothing is selected; the zoom at the bottom right. No renderer: the host says how large the canvas is and hands it the keys. |
+| [`apps/thorn-dioxus`](apps/thorn-dioxus) | **Thorn**, the drawing app, in Rust from `main` up: the editor in a window drawn by Dioxus's native renderer (Blitz on wgpu, no webview), as Leaf is. Opens, edits and saves `.svg` — New, Open, Save and Save As in its bar and on ⌘N, ⌘O, ⌘S and ⇧⌘S, through the system's dialogs. What the Swift app did that it does not yet is [a task](docs/tasks/what-the-dioxus-app-does-not-do-yet.md). |
 | [`apps/thorn-svg`](apps/thorn-svg) | **The CLI.** `check` holds a file to the profile, `shapes` lists them, `render` makes a PNG through resvg — the profile testable with no screen. |
 
 ## Gestures
@@ -97,47 +98,29 @@ history:
 ## Building
 
 ```sh
-ship ci                 # fmt, versions, clippy, tests, per-crate isolation, binding drift
-cargo xtask bindings    # regenerate the committed Swift binding after an FFI change
-scripts/test-swift.sh   # the Swift package's tests, on a Mac
+ship ci                 # fmt, clippy, tests, per-crate isolation
+cargo run -p thorn-dioxus-app -- drawing.svg   # Thorn, on a drawing (a new one without)
 cargo run -p thorn-svg -- check crates/thorn-svg-core/tests/fixtures/boxes-and-arrow.svg
-cargo xtask swift             # build + launch Thorn on macOS, with a copy of a fixture open
-cargo xtask swift drawing.svg # …with a drawing of your own
-cargo xtask swift --ios       # …on its own `iPhone 17 (thorn)` simulator (--device for another)
-cargo xtask package           # a signed, notarised Thorn.app in a .dmg, in target/package/
+cargo test -p thorn-dioxus                    # the canvas's gestures, with no window
 ```
 
-`cargo xtask swift` regenerates the UniFFI binding and the Xcode project when
-either is missing (`--regen` forces it, after an FFI change); the project's
-own pre-build script rebuilds the Rust staticlib for whichever destination is
-selected. `xcodegen` and Xcode are needed; a developer team is not, for the
-Mac and the simulator. `cargo xtask package` needs a Developer ID identity
-in the keychain and notary credentials in the environment; the head of
-[`xtask/src/package.rs`](xtask/src/package.rs) names them, and
-`--no-notarize` does without the second.
+Every crate and app is a member of one workspace, on Dioxus 0.8's alpha;
+the root `Cargo.toml` patches in [the Blitz fork](https://github.com/diaryx-org/blitz)
+(branch `leaf`) for all of them, as leaf and Diaryx do. On Linux Blitz needs
+fontconfig's headers (`libfontconfig1-dev`), and the Open and Save dialogs
+are the XDG desktop portal's.
 
-A pushed `v*.*.*` tag is a release:
-[`mac-app.yml`](.github/workflows/mac-app.yml) attaches a
-signed, notarised `Thorn-<version>-aarch64.dmg` to the release and points the
-tap's `thorn-editor` cask at it
-(`brew install --cask diaryx-org/tap/thorn-editor`).
-
-## Linking
-
-The Swift package builds the binding from source and expects the Rust
-staticlib to be linked by the app. An app that already links a Rust FFI crate
-of its own — the Diaryx app does — makes `thorn-svg-ffi` a Cargo dependency
-of that crate, so the scaffolding lands in the one archive it already
-force-loads; two Rust staticlibs cannot share an executable. An app with no
-Rust of its own builds `crates/thorn-svg-ffi`'s staticlib and force-loads
-that, as `scripts/test-swift.sh` and `apps/thorn-editor/project.yml` do.
+The Swift frontend — the `Thorn` Swift package, the Mac and iOS app over it,
+and the tasks that built, signed and released it — is
+[archived](archive/README.md); `v0.2.0` is the last release that built it.
 
 ## Where it fits
 
-Depends on `twig-doc` and `twig-xml` (SVG) by crates.io version, and on
-`resvg-uniffi` from git.
+Depends on `twig-doc` and `twig-xml` (SVG) by crates.io version; the binding
+on `resvg-uniffi` from git, and the editor on Dioxus and unit.
 The crates are not on crates.io (0.2.0 was the last upload): the Diaryx app,
-the one consumer, names `thorn-svg-ffi` from git, `{ git =
+the one consumer, names `thorn-svg-ffi` from git (and will name
+`thorn-dioxus` for its drawing view), `{ git =
 "https://github.com/diaryx-org/thorn", branch = "main" }`, and locks the
 commit it builds. The org's
 proposal, *A drawing editor over twig's SVG, as its own repository*, is the

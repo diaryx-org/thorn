@@ -2,12 +2,19 @@
 title: Thorn on the App Store, through Xcode Cloud
 description: The app is signed and sandboxed in Release and a post-clone script builds it on Xcode Cloud; the App Store Connect side — the app record and the workflow — is what is left
 author: adammharris
-status: in-progress
+status: dropped
 created: 2026-09-21
-updated: 2026-09-30
+updated: 2026-10-28
 part_of: '[Tasks](tasks.md)'
 ---
 # Thorn on the App Store, through Xcode Cloud
+
+**Dropped, 2026-10-28.** The Swift app this was about is archived
+(`archive/apps/thorn-editor`), for Thorn on Dioxus (`apps/thorn-dioxus`),
+which has no bundle yet ([What the Dioxus app does not do
+yet](what-the-dioxus-app-does-not-do-yet.md)). The paths below are the
+archive's. What it learned about the sandbox and the App Store record is
+what the Dioxus app's will need.
 
 **Where.** `apps/thorn-editor/project.yml`, `apps/thorn-editor/ci_scripts/`,
 and App Store Connect.
