@@ -1,0 +1,34 @@
+# thorn-dioxus — the drawing editor as Dioxus components: the canvas, its
+# toolbar and its options strip, over thorn-svg-core, with unit's buttons and
+# menus. No renderer: it is drawn by whichever the host launches with,
+# dioxus-native's Blitz in `apps/thorn-dioxus` and in Diaryx. What it needs
+# from the host is the canvas's size and the keys (`Canvas::key`), which a
+# Blitz window reads from winit and a page cannot measure from a handler.
+#
+#     cargo test -p thorn-dioxus
+[package]
+name = "thorn-dioxus"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "The thorn drawing editor as Dioxus components: the canvas over thorn-svg-core, Excalidraw's toolset, and the options strip, drawn with unit."
+
+[dependencies]
+# `usvg`: a label's box is measured by the layout resvg and Blitz both draw
+# it with (`thorn_svg_core::measure::Usvg`).
+thorn-svg-core = { workspace = true, features = ["usvg"] }
+# The picture laid out before Blitz is given it (`Canvas::picture`): the
+# drawing's stylesheet applied and its labels set as outlines, written back
+# with no `<style>`, which Blitz would otherwise take as the page's own. The
+# version resvg, the core and Blitz's SVG take.
+usvg.workspace = true
+dioxus.workspace = true
+unit.workspace = true
+
+[dev-dependencies]
+# A page rendered to HTML with no renderer, to read what the canvas draws.
+dioxus-ssr = "=0.8.0-alpha.3"

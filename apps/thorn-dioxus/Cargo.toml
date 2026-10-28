@@ -1,0 +1,43 @@
+# Thorn, the drawing app, in Rust from `main` up: the thorn-dioxus editor
+# (crates/thorn-dioxus) in a window drawn by Dioxus's native renderer
+# (dioxus-native 0.8.0-alpha.3, Blitz on wgpu, no webview), as Leaf is. It
+# opens an SVG, edits it losslessly and saves it; the system's Open and Save
+# dialogs are rfd's.
+#
+# Blitz is patched in the root Cargo.toml, where a [patch] has to be.
+#
+#     cargo run -p thorn-dioxus-app -- drawing.svg
+[package]
+# Not `thorn-dioxus`, which is the widget's name: one graph cannot hold two
+# packages by one name. The binary is the app's name.
+name = "thorn-dioxus-app"
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "Thorn"
+path = "src/main.rs"
+
+[dependencies]
+thorn-dioxus.workspace = true
+thorn-svg-core.workspace = true
+dioxus.workspace = true
+unit.workspace = true
+# Blitz on wgpu, classic vello as Leaf draws with (vello-hybrid draws no
+# bitmap glyph, so a label's emoji would be nothing); `html` for the
+# picture, which goes into the page as markup; `svg` to draw it; `autofocus`
+# so a label's field has the keys the moment it opens, as Blitz moves no
+# focus from code. No `launch` features beyond these: no devtools, no file
+# dialog of Blitz's own.
+dioxus-native = { version = "0.8.0-alpha.3", default-features = false, features = [
+    "accessibility", "net", "html", "svg", "system-fonts", "vello", "autofocus",
+    "clipboard", "woff", "apple-font-embolden",
+] }
+# The system's Open and Save dialogs: the XDG desktop portal on Linux, so
+# the dialog is the desktop's own; AppKit's panels on the Mac.
+rfd = "0.17"
+anyhow.workspace = true

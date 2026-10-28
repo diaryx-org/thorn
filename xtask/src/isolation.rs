@@ -13,7 +13,9 @@ use anyhow::Result;
 const ISOLATED: &[&[&str]] = &[
     &["-p", "thorn-svg-core"],
     &["-p", "thorn-svg-ffi"],
+    &["-p", "thorn-dioxus"],
     &["-p", "thorn-svg"],
+    &["-p", "thorn-dioxus-app"],
     &["-p", "xtask"],
 ];
 
