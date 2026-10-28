@@ -87,19 +87,27 @@ impl Measure for Usvg {
     }
 }
 
+/// The system's fonts as usvg holds them, loaded on the first call and
+/// shared by every one after: what [`Usvg`] lays a label out in, and what a
+/// host that lays the picture out through usvg too should pass it, so the
+/// two agree on a face and the fonts are read once.
 #[cfg(feature = "usvg")]
-fn parse(svg: &str) -> Option<usvg::Tree> {
+pub fn fonts() -> std::sync::Arc<usvg::fontdb::Database> {
     use std::sync::{Arc, OnceLock};
     static FONTS: OnceLock<Arc<usvg::fontdb::Database>> = OnceLock::new();
-    let fontdb = FONTS
+    FONTS
         .get_or_init(|| {
             let mut db = usvg::fontdb::Database::new();
             db.load_system_fonts();
             Arc::new(db)
         })
-        .clone();
+        .clone()
+}
+
+#[cfg(feature = "usvg")]
+fn parse(svg: &str) -> Option<usvg::Tree> {
     let options = usvg::Options {
-        fontdb,
+        fontdb: fonts(),
         ..usvg::Options::default()
     };
     usvg::Tree::from_str(svg, &options).ok()

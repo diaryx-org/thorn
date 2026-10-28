@@ -1888,6 +1888,54 @@ impl Drawing {
         out
     }
 
+    /// The drawing as a canvas paints it, never saved: the `<svg>` element
+    /// with its `viewBox` set to `view` and its `width` and `height` to
+    /// that box's size in user units, so a shape off the page's edge is
+    /// still painted, and for a `dark` page the file's own rules for one
+    /// ([`Drawing::dark_rules`]) applied in a `<style>` of their own after
+    /// its content. Every other attribute and every byte inside is the
+    /// file's; what is before and after the element (a prolog, a doctype,
+    /// a comment) is left out.
+    pub fn picture(&self, view: Bounds, dark: bool) -> String {
+        let root = self.node(self.root);
+        let f = number::fmt;
+        let mut out = String::from("<svg");
+        for (name, value) in &root.attrs {
+            if matches!(name.as_str(), "viewBox" | "width" | "height") {
+                continue;
+            }
+            out.push(' ');
+            out.push_str(name);
+            if let Some(value) = value {
+                out.push_str("=\"");
+                out.push_str(&escape(value));
+                out.push('"');
+            }
+        }
+        out.push_str(&format!(
+            " viewBox=\"{} {} {} {}\" width=\"{}\" height=\"{}\">",
+            f(view.x),
+            f(view.y),
+            f(view.width),
+            f(view.height),
+            f(view.width),
+            f(view.height),
+        ));
+        if let Some(content) = root.content_span.clone() {
+            out.push_str(&self.source[content]);
+        }
+        if dark {
+            let rules = self.dark_rules();
+            if !rules.is_empty() {
+                out.push_str("<style>");
+                out.push_str(&rules);
+                out.push_str("</style>");
+            }
+        }
+        out.push_str("</svg>");
+        out
+    }
+
     /// Whether `set_dash` on this shape would land anywhere: a stroked
     /// shape, or a group with one inside.
     pub fn takes_dash(&self, id: &str) -> bool {
@@ -3959,6 +4007,32 @@ mod tests {
         assert!(dark.contains("[data-color=\"red\"], #arrow-red { color: #ef5350 }"));
         assert!(dark.contains("[data-fill=\"green\"] { fill: #1b3d1f }"));
         assert!(!dark.contains("@media"));
+    }
+
+    #[test]
+    fn the_picture_is_the_file_over_the_box_asked_for_with_its_dark_rules() {
+        let d = Drawing::open(
+            "<?xml version=\"1.0\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\" width=\"10\" title=\"a &amp; b\">\n  <style>@media (prefers-color-scheme: dark) { svg { color: #eee } }</style>\n  <rect x=\"1\" y=\"1\" width=\"2\" height=\"2\" data-id=\"r\"/>\n</svg>\n",
+        )
+        .unwrap();
+        let view = Bounds {
+            x: -5.0,
+            y: -5.0,
+            width: 20.5,
+            height: 20.0,
+        };
+        let light = d.picture(view, false);
+        assert_eq!(
+            light,
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" title=\"a &amp; b\" viewBox=\"-5 -5 20.5 20\" width=\"20.5\" height=\"20\">\n  <style>@media (prefers-color-scheme: dark) { svg { color: #eee } }</style>\n  <rect x=\"1\" y=\"1\" width=\"2\" height=\"2\" data-id=\"r\"/>\n</svg>"
+        );
+        let dark = d.picture(view, true);
+        assert!(
+            dark.ends_with("<style>svg { color: #eee }\n</style></svg>"),
+            "{dark}"
+        );
+        // The file itself is untouched.
+        assert!(d.source().starts_with("<?xml"));
     }
 
     #[test]
