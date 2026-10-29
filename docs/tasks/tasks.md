@@ -9,6 +9,7 @@ contents:
 - '[Style a shape the editor did not write, through css.rs](css-through-fig.md)'
 - '[Thorn on the App Store, through Xcode Cloud](sandboxed-mac-app.md)'
 - '[Closed tasks](/docs/tasks/closed/closed.md)'
+- '[What the Dioxus app does not do yet](/docs/tasks/what-the-dioxus-app-does-not-do-yet.md)'
 part_of: '[thorn](/README.md)'
 ---
 # Tasks

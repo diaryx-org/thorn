@@ -4,7 +4,9 @@ resolver = "3"
 members = [
   "crates/thorn-svg-core",
   "crates/thorn-svg-ffi",
+  "crates/thorn-dioxus",
   "apps/thorn-svg",
+  "apps/thorn-dioxus",
   "xtask",
 ]
 
@@ -48,5 +50,52 @@ fig-css = { git = "https://github.com/diaryx-org/fig-css", branch = "main" }
 fig = "7.0.0"
 anyhow = "1"
 thiserror = "2"
+# The editor's components and the app's window: Dioxus 0.8's alpha, as leaf
+# and Diaryx are built on, drawn by its native renderer (Blitz) with no
+# webview. The components name only `dioxus`; the app adds the renderer.
+dioxus = { version = "0.8.0-alpha.3", default-features = false, features = [
+    "macro",
+    "html",
+    "signals",
+    "hooks",
+] }
+# diaryx-org's components for Dioxus, which work under Blitz and are read by
+# assistive tech: the toolbar's buttons, the menus, the swatches.
+unit = { git = "https://github.com/diaryx-org/unit", branch = "main" }
 # Internal crates.
 thorn-svg-core = { path = "crates/thorn-svg-core", version = "0.2.0" }
+thorn-dioxus = { path = "crates/thorn-dioxus", version = "0.2.0" }
+
+# A debug build with full debug info is several hundred megabytes; line
+# tables are enough for a panic's file and line.
+[profile.dev]
+debug = "line-tables-only"
+
+# Every dependency optimised, even in a debug build: unoptimised, Stylo,
+# parley and Vello take ten times as long to draw a frame, and the canvas
+# redraws on every pointer move. A profile here governs only builds of this
+# workspace.
+[profile.dev.package."*"]
+opt-level = 3
+
+[patch.crates-io]
+# Blitz from diaryx-org's fork, its `leaf` branch at the version
+# dioxus-native pins, as leaf, unit and Diaryx take it: its accessibility
+# tree reads ARIA's roles and states (unit's controls are read by it), a
+# removed node is forgotten by its layout parent, a press focuses what it
+# lands on, and assistive tech's click is carried out. Every Blitz crate in
+# the graph comes from the fork: the fork's crates depend on each other by
+# path, so one from crates.io beside them would be a second copy.
+blitz-dom = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+blitz-traits = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+blitz-shell = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+blitz-paint = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+blitz-net = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+blitz-html = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+stylo_taffy = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+debug_timer = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+accesskit_xplat = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
+# winit's macOS backend, patched in the fork (its patches/ PATCH.md): its
+# text input client answers what is round the caret, and keeps an
+# insertText that ends no composition — a label's accents and emoji.
+winit-appkit = { git = "https://github.com/diaryx-org/blitz", branch = "leaf" }
